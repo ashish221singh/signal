@@ -19,6 +19,3 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
-
-# frontend prototype — kept local until explicitly ready to publish
-prototypes/
