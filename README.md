@@ -28,3 +28,19 @@ Signal/
 ```
 
 Subfolders are created as each build phase starts — the API contract (spec §8) gets locked first.
+
+## Development
+
+**Prerequisites:** Node 22+ (`nvm use`), pnpm 10 (`corepack enable`), Docker.
+
+```bash
+pnpm install          # install all workspace deps
+docker compose up -d  # local Postgres on :5433
+cp .env.example .env  # local config
+pnpm --filter @signal/api dev   # API on :3000
+pnpm verify           # typecheck + lint + tests (what CI runs)
+```
+
+**Layout:** `apps/api` (Fastify backend) · `packages/contracts` (shared Zod API schemas) ·
+`apps/console` (React SPA, from Milestone 2) · `sdk-android/` (Kotlin SDK, from Milestone 3) ·
+`docs/` (spec, architecture, plans) · `design/` (design system, tokens, logo).
