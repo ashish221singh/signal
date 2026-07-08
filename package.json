@@ -13,5 +13,9 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "verify": "pnpm typecheck && pnpm lint && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^6.0.3"
   }
 }
