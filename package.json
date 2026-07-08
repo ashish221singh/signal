@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.int.test.ts'",
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",

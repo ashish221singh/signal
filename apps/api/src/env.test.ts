@@ -21,4 +21,34 @@ describe('parseEnv', () => {
   it('throws a readable error on non-numeric PORT', () => {
     expect(() => parseEnv({ PORT: 'yes' })).toThrow(/PORT/);
   });
+
+  it('defaults DATABASE_URL to the local dev connection string in development', () => {
+    const env = parseEnv({});
+    expect(env.DATABASE_URL).toBe('postgresql://signal:signal_local_dev@localhost:5433/signal');
+  });
+
+  it('defaults appKeys to the dev app key in development', () => {
+    const env = parseEnv({});
+    expect(env.appKeys).toEqual(['dev-app-key']);
+  });
+
+  it('throws in production when DATABASE_URL and SIGNAL_APP_KEYS are unset', () => {
+    expect(() => parseEnv({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL/);
+    expect(() => parseEnv({ NODE_ENV: 'production' })).toThrow(/SIGNAL_APP_KEYS/);
+  });
+
+  it('parses SIGNAL_APP_KEYS as a trimmed comma-separated list', () => {
+    const env = parseEnv({ SIGNAL_APP_KEYS: 'k1, k2' });
+    expect(env.appKeys).toEqual(['k1', 'k2']);
+  });
+
+  it('defaults SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS to 60', () => {
+    const env = parseEnv({});
+    expect(env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS).toBe(60);
+  });
+
+  it('coerces SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS from string', () => {
+    const env = parseEnv({ SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS: '120' });
+    expect(env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS).toBe(120);
+  });
 });
