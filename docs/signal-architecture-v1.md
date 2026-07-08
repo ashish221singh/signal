@@ -88,11 +88,11 @@ The Kotlin SDK living in-repo doesn't block the spec §13 option of publishing t
 ### 3.1 The eligibility hot path
 
 ```
-GET /v1/sdk/eligibility?screen_id&user_id&client_id
+GET /v1/sdk/eligibility?screen_id&user_id&client_id&rep_tenure_days
   1. Active campaign for (screen_id, client_id)   ← in-memory cache
   2. SuppressionState (user_id, campaign_id)      ← one indexed PG read (PK lookup)
   3. min_tenure_days check                        ← request context
-  4. Eligible → INSERT TriggerLog + UPSERT SuppressionState, return config
+  4. Eligible → INSERT TriggerLog + UPSERT SuppressionState, return config (incl. trigger_id)
      Not eligible → 204 empty
 ```
 
@@ -102,7 +102,7 @@ GET /v1/sdk/eligibility?screen_id&user_id&client_id
 
 **Latency budget:** p99 < 150ms server-side. The SDK enforces its own 2s timeout — if Signal is slow or down, the sheet never appears. Signal must never make the Route app worse.
 
-**Idempotency:** `/response` and `/dismiss` are idempotent, keyed on `(campaign_id, user_id, shown_at)`, because the SDK's offline outbox retries them (§6.1).
+**Idempotency:** `/response` and `/dismiss` are idempotent, keyed on trigger_id (unique constraint on responses.trigger_id), because the SDK's offline outbox retries them (§6.1).
 
 ---
 

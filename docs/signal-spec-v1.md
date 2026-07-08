@@ -1,5 +1,7 @@
 # Signal — In-App CSAT/CES Feedback System
-### Product & Technical Spec — v1
+### Product & Technical Spec — v1.1
+
+> v1.1 (2026-07-08): eligibility carries rep_tenure_days; trigger_id introduced as the response/dismiss idempotency key; one-active-campaign-per-(target,client) rule; ratings/thresholds normalized to integers.
 
 ---
 
@@ -45,6 +47,8 @@ Score = (count of positive responses) / (total responses)
 ```
 
 "Positive" is threshold-defined **per campaign** — e.g. 4★+5★ count as positive, 1–3 don't; or only 😊 counts, 😐/😞 don't. This must be configurable, not hardcoded, since different campaigns may want a stricter or looser bar.
+
+All rating values and positive thresholds are integers: star 1–5, emoji 1–3 (3 = 😊), effort 1–3 or 1–5. "Only 😊 counts" is expressed as positive_threshold = 3.
 
 ---
 
@@ -117,6 +121,7 @@ Campaign.min_tenure_days = integer (optional — gates campaign for new reps)
 **Fixed behavioral rules (not campaign-configurable, always true):**
 - Dismissed → suppressed per `ask_frequency` cooldown, for that campaign specifically
 - Submitted → never asked again for that campaign (unless a future need for periodic re-ask is explicitly added)
+- At most one active campaign may exist per (target, client) pair. The Console enforces this at publish; the backend tie-breaks deterministically (oldest active campaign wins) as defense in depth.
 
 Suppression is tracked **per (user_id, campaign_id)** — not globally across all campaigns — so a user can be asked about a different workflow in the same week even if they just answered another campaign's ask.
 
@@ -178,6 +183,7 @@ TriggerLog
 ```
 Response
 - id
+- trigger_id              (FK -> TriggerLog; idempotency key for /response)
 - campaign_id, user_id, client_id, screen_id
 - rating_value
 - chip_selected          (nullable)
@@ -258,7 +264,7 @@ Called by the SDK the moment a hook fires.
 
 **Request (query params):**
 ```
-screen_id, user_id, client_id
+screen_id, user_id, client_id, rep_tenure_days (optional int — supplied by the SDK from the app session; if absent and the campaign sets min_tenure_days, the user is not eligible)
 ```
 
 **Logic:**
@@ -271,6 +277,7 @@ screen_id, user_id, client_id
 **Response (200, eligible):**
 ```json
 {
+  "trigger_id": "tl_9f2…",
   "campaign_id": "c_123",
   "metric_type": "CSAT",
   "header": "How satisfied were you with placing this order?",
@@ -284,6 +291,8 @@ screen_id, user_id, client_id
 }
 ```
 
+`trigger_id`: server-generated ID of the TriggerLog row; the SDK must echo it in /response or /dismiss.
+
 **Response (204, not eligible):** empty body.
 
 ### 8.2 `POST /response`
@@ -292,6 +301,7 @@ Called when the user submits a rating/answer.
 **Request:**
 ```json
 {
+  "trigger_id": "tl_9f2…",
   "campaign_id": "c_123",
   "screen_id": "order_completion",
   "user_id": "u_5567",
@@ -309,6 +319,8 @@ Called when the user submits a rating/answer.
 }
 ```
 
+Note: `(campaign_id, user_id, shown_at)` is no longer the idempotency key — `trigger_id` is.
+
 **Backend actions:**
 - Insert `Response` row
 - Update `SuppressionState`: `last_action = submitted`, `next_eligible_at = null` (or per future re-ask policy)
@@ -319,6 +331,7 @@ Called when the user closes the sheet without answering.
 **Request:**
 ```json
 {
+  "trigger_id": "tl_9f2…",
   "campaign_id": "c_123",
   "screen_id": "order_completion",
   "user_id": "u_5567",
@@ -327,6 +340,8 @@ Called when the user closes the sheet without answering.
   "dismissed_at": "2026-07-07T10:12:03Z"
 }
 ```
+
+Note: `(campaign_id, user_id, shown_at)` is no longer the idempotency key — `trigger_id` is.
 
 **Backend actions:**
 - Update `SuppressionState`: `last_action = dismissed`, `next_eligible_at = now + cooldown` (per campaign's `ask_frequency`)
