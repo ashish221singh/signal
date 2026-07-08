@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -14 108 114" role="img" aria-labelledby="titleB2 descB2">
+  <title id="titleB2">Signal logo — Full-bleed S</title>
+  <desc id="descB2">A square whose entire body forms a blocky letter S, bars running edge to edge; the top-right corner dissolves in a pixel staircase into drifting square fragments, one blue.</desc>
+  <path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/>
+  <rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/>
+  <rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/>
+  <rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/>
+</svg>

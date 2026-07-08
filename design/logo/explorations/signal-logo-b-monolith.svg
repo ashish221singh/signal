@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -14 118 118" role="img" aria-labelledby="titleB descB">
+  <title id="titleB">Signal logo — Monolith</title>
+  <desc id="descB">A solid orange rounded square with an S carved out in white; the top-right corner dissolves in a pixel staircase into drifting square fragments, one blue.</desc>
+  <path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/>
+  <g fill="#FFFFFF">
+    <rect x="24" y="22" width="48" height="10"/>
+    <rect x="24" y="31" width="10" height="13"/>
+    <rect x="24" y="43" width="48" height="10"/>
+    <rect x="62" y="52" width="10" height="13"/>
+    <rect x="24" y="64" width="48" height="10"/>
+  </g>
+  <rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/>
+  <rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/>
+  <rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -18 112 118" role="img" aria-labelledby="titleC descC">
+  <title id="titleC">Signal logo — Windows</title>
+  <desc id="descC">An orange rounded square with an S carved through it as a run of small white boxes; one box has escaped outside the square in blue.</desc>
+  <rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/>
+  <g fill="#FFFFFF">
+    <rect x="23" y="17" width="10" height="10" rx="2.5"/>
+    <rect x="36" y="17" width="10" height="10" rx="2.5"/>
+    <rect x="49" y="17" width="10" height="10" rx="2.5"/>
+    <rect x="62" y="17" width="10" height="10" rx="2.5"/>
+    <rect x="23" y="30" width="10" height="10" rx="2.5"/>
+    <rect x="23" y="43" width="10" height="10" rx="2.5"/>
+    <rect x="36" y="43" width="10" height="10" rx="2.5"/>
+    <rect x="49" y="43" width="10" height="10" rx="2.5"/>
+    <rect x="62" y="43" width="10" height="10" rx="2.5"/>
+    <rect x="62" y="56" width="10" height="10" rx="2.5"/>
+    <rect x="23" y="69" width="10" height="10" rx="2.5"/>
+    <rect x="36" y="69" width="10" height="10" rx="2.5"/>
+    <rect x="49" y="69" width="10" height="10" rx="2.5"/>
+    <rect x="62" y="69" width="10" height="10" rx="2.5"/>
+  </g>
+  <rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/>
+</svg>

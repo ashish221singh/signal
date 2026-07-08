@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="titleB2s descB2s">
+  <title id="titleB2s">Signal logo — Full-bleed S, solid variant</title>
+  <desc id="descB2s">A square whose entire body forms a blocky letter S, bars running edge to edge. Solid variant without fragments, for tiny sizes and favicons.</desc>
+  <path fill="#F78200" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/>
+</svg>

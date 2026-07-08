@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal — Full-bleed S</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #F78200; --blue: #0094DD;
+    --ink: #14181D; --ink-2: #5A6472; --ink-3: #98A1AD;
+    --line: #ECEEF1; --paper: #FFFFFF; --dark: #14181D;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1080px; margin: 0 auto; padding: 96px 40px 120px; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--orange); margin-bottom: 16px; }
+  h1 { font-family: 'Space Grotesk', sans-serif; font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  header p { margin-top: 16px; font-size: 16px; line-height: 1.6; color: var(--ink-2); max-width: 640px; }
+  header { margin-bottom: 64px; }
+
+  .board { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 24px; }
+  .cell {
+    border: 1px solid var(--line); border-radius: 16px; padding: 40px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; min-height: 280px;
+  }
+  .cell-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); align-self: flex-start; }
+  .cell.hero svg.mark { height: 200px; width: auto; }
+  .cell.dark { background: var(--dark); border-color: var(--dark); }
+  .cell.dark .cell-label { color: rgba(255,255,255,0.45); }
+  .cell.dark svg.mark { height: 140px; width: auto; }
+  .cell.tint { background: #FFF6EC; border-color: #FFE8CE; }
+
+  .lockup { display: flex; align-items: center; gap: 18px; }
+  .lockup svg.mark { height: 48px; width: auto; }
+  .wordmark { font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -0.025em; color: var(--ink); line-height: 1; }
+  .cell.dark .wordmark { color: #fff; }
+
+  .ladder { display: flex; align-items: flex-end; gap: 40px; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .step svg { display: block; }
+  .step span { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+
+  .appicon {
+    width: 120px; height: 120px; border-radius: 28px;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%);
+    border: 1px solid var(--line);
+    box-shadow: 0 12px 32px rgba(20,24,29,0.10), 0 2px 6px rgba(20,24,29,0.06);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .appicon svg { height: 68px; width: auto; }
+  .appicon.filled { background: var(--orange); border: none; }
+
+  footer { border-top: 1px solid var(--line); margin-top: 64px; padding-top: 40px; font-size: 14px; color: var(--ink-2); line-height: 1.7; }
+  footer strong { color: var(--ink); }
+  @media (max-width: 760px) { .board, .row2, .row3 { grid-template-columns: 1fr; } .page { padding: 56px 20px 80px; } h1 { font-size: 32px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="eyebrow">Signal · Brand · Revision</div>
+    <h1>Full-bleed S</h1>
+    <p>The S no longer sits inside the square — it <strong>is</strong> the square. Every bar runs edge to edge;
+    the two notches are the only negative space. The top-right corner still breaks into fragments,
+    one turning blue as it leaves. A solid variant (no fragments) covers tiny sizes.</p>
+  </header>
+
+  <div class="board">
+    <div class="cell hero">
+      <span class="cell-label">Primary mark</span>
+      <svg class="mark" viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+    </div>
+    <div class="cell dark">
+      <span class="cell-label">On dark · mono + blue</span>
+      <svg class="mark" viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#FFFFFF" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#FFFFFF"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#FFFFFF" opacity="0.55"/></svg>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="cell">
+      <span class="cell-label">Lockup</span>
+      <div class="lockup">
+        <svg class="mark" viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+        <span class="wordmark">signal</span>
+      </div>
+    </div>
+    <div class="cell">
+      <span class="cell-label">Scale test · solid variant at 16</span>
+      <div class="ladder">
+        <div class="step"><svg style="height:64px" viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg><span>64</span></div>
+        <div class="step"><svg style="height:32px" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg><span>32</span></div>
+        <div class="step"><svg style="height:16px" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg><span>16</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row3">
+    <div class="cell">
+      <span class="cell-label">Solid variant</span>
+      <svg style="height:140px" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg>
+    </div>
+    <div class="cell tint">
+      <span class="cell-label">On brand tint</span>
+      <svg style="height:140px" viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+    </div>
+    <div class="cell">
+      <span class="cell-label">App icon context</span>
+      <div class="appicon">
+        <svg viewBox="-4 -14 108 114" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H64 V8 H74 V16 H84 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/><rect x="88" y="2" width="10" height="10" rx="2.5" fill="#F78200"/><rect x="76" y="-9" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-3" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <strong>What changed from Monolith:</strong> the white S is no longer carved <em>inside</em> a container —
+    the bars now run the full width of the square, so the letter and the square are one shape.
+    Negative space is reduced to the two S-notches. The breaking corner and the single blue fragment
+    (the signal leaving) carry over unchanged. The solid variant exists for 16px favicons where fragments would turn to noise.
+  </footer>
+
+</div>
+</body>
+</html>

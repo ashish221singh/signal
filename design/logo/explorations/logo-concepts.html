@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal — Logo Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #F78200;
+    --blue: #0094DD;
+    --ink: #14181D;
+    --ink-2: #5A6472;
+    --ink-3: #98A1AD;
+    --line: #ECEEF1;
+    --paper: #FFFFFF;
+    --dark: #14181D;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 96px 40px 120px; }
+
+  header { margin-bottom: 88px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--orange); margin-bottom: 16px;
+  }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  header p { margin-top: 16px; font-size: 16px; line-height: 1.6; color: var(--ink-2); max-width: 620px; }
+
+  .concept { border-top: 1px solid var(--line); padding: 64px 0 80px; }
+  .concept-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  .concept-tag {
+    font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700;
+    color: #fff; background: var(--ink); border-radius: 6px;
+    width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+    transform: translateY(-2px);
+  }
+  h2 { font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+  .rationale { font-size: 15px; line-height: 1.65; color: var(--ink-2); max-width: 640px; margin-bottom: 48px; }
+
+  .board { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; }
+  .cell {
+    border: 1px solid var(--line); border-radius: 16px; padding: 40px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+    min-height: 280px;
+  }
+  .cell-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-3); align-self: flex-start;
+  }
+  .cell.hero svg.mark { height: 168px; width: auto; }
+  .cell.dark { background: var(--dark); border-color: var(--dark); }
+  .cell.dark .cell-label { color: rgba(255,255,255,0.45); }
+  .cell.dark svg.mark { height: 120px; width: auto; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+
+  .lockup { display: flex; align-items: center; gap: 18px; }
+  .lockup svg.mark { height: 46px; width: auto; }
+  .wordmark {
+    font-family: 'Space Grotesk', sans-serif; font-size: 38px; font-weight: 600;
+    letter-spacing: -0.025em; color: var(--ink); line-height: 1;
+  }
+  .cell.dark .wordmark { color: #fff; }
+
+  .ladder { display: flex; align-items: flex-end; gap: 40px; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .step svg.mark { width: auto; display: block; }
+  .step span { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 40px; font-size: 14px; color: var(--ink-2); line-height: 1.7; }
+  footer strong { color: var(--ink); }
+
+  @media (max-width: 760px) {
+    .board, .row2 { grid-template-columns: 1fr; }
+    .page { padding: 56px 20px 80px; }
+    h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="eyebrow">Signal · Brand</div>
+    <h1>Logo concepts</h1>
+    <p>One idea, three interpretations: a square breaking into square fragments that form the letter S.
+    Orange <strong style="color:var(--orange)">#F78200</strong> leads; blue <strong style="color:var(--blue)">#0094DD</strong> marks
+    the fragment in motion — the signal leaving the system.</p>
+  </header>
+
+  <!-- ============ CONCEPT A ============ -->
+  <section class="concept">
+    <div class="concept-head"><span class="concept-tag">A</span><h2>Emit</h2></div>
+    <p class="rationale">No container — the S <em>is</em> the structure, assembled from square tiles.
+    The top-right tile breaks formation in blue, a smaller fragment trailing behind it: feedback leaving the rep's hands
+    and travelling to you. The most reductive of the three; strongest at tiny sizes.</p>
+
+    <div class="board">
+      <div class="cell hero">
+        <span class="cell-label">Primary mark</span>
+        <svg class="mark" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#F78200"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg>
+      </div>
+      <div class="cell dark">
+        <span class="cell-label">On dark · mono + blue</span>
+        <svg class="mark" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#FFFFFF"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="cell">
+        <span class="cell-label">Lockup</span>
+        <div class="lockup">
+          <svg class="mark" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#F78200"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg>
+          <span class="wordmark">signal</span>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cell-label">Scale test</span>
+        <div class="ladder">
+          <div class="step"><svg class="mark" style="height:64px" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#F78200"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg><span>64</span></div>
+          <div class="step"><svg class="mark" style="height:32px" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#F78200"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg><span>32</span></div>
+          <div class="step"><svg class="mark" style="height:16px" viewBox="0 0 128 132" xmlns="http://www.w3.org/2000/svg"><g fill="#F78200"><rect x="16" y="10" width="20" height="20" rx="4"/><rect x="40" y="10" width="20" height="20" rx="4"/><rect x="64" y="10" width="20" height="20" rx="4"/><rect x="16" y="34" width="20" height="20" rx="4"/><rect x="16" y="58" width="20" height="20" rx="4"/><rect x="40" y="58" width="20" height="20" rx="4"/><rect x="64" y="58" width="20" height="20" rx="4"/><rect x="88" y="58" width="20" height="20" rx="4"/><rect x="88" y="82" width="20" height="20" rx="4"/><rect x="16" y="106" width="20" height="20" rx="4"/><rect x="40" y="106" width="20" height="20" rx="4"/><rect x="64" y="106" width="20" height="20" rx="4"/><rect x="88" y="106" width="20" height="20" rx="4"/></g><rect x="94" y="2" width="20" height="20" rx="4" fill="#0094DD"/><rect x="119" y="12" width="7" height="7" rx="2" fill="#0094DD" opacity="0.7"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCEPT B ============ -->
+  <section class="concept">
+    <div class="concept-head"><span class="concept-tag">B</span><h2>Monolith</h2></div>
+    <p class="rationale">The most literal reading of the brief: a solid square with the S <em>carved</em> into it.
+    The top-right corner dissolves in a pixel staircase into three drifting fragments — the box breaking apart,
+    one fragment turning blue as it leaves. Strong app-icon presence; the carved S owns the shape.</p>
+
+    <div class="board">
+      <div class="cell hero">
+        <span class="cell-label">Primary mark</span>
+        <svg class="mark" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#FFFFFF"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+      </div>
+      <div class="cell dark">
+        <span class="cell-label">On dark · mono + blue</span>
+        <svg class="mark" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#FFFFFF" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#14181D"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#FFFFFF"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#FFFFFF" opacity="0.55"/></svg>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="cell">
+        <span class="cell-label">Lockup</span>
+        <div class="lockup">
+          <svg class="mark" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#FFFFFF"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg>
+          <span class="wordmark">signal</span>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cell-label">Scale test</span>
+        <div class="ladder">
+          <div class="step"><svg class="mark" style="height:64px" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#FFFFFF"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg><span>64</span></div>
+          <div class="step"><svg class="mark" style="height:32px" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#FFFFFF"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg><span>32</span></div>
+          <div class="step"><svg class="mark" style="height:16px" viewBox="-10 -14 118 118" xmlns="http://www.w3.org/2000/svg"><path fill="#F78200" d="M20 0 H60 V8 H70 V16 H80 V26 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V20 Q0 0 20 0 Z"/><g fill="#FFFFFF"><rect x="24" y="22" width="48" height="10"/><rect x="24" y="31" width="10" height="13"/><rect x="24" y="43" width="48" height="10"/><rect x="62" y="52" width="10" height="13"/><rect x="24" y="64" width="48" height="10"/></g><rect x="67" y="-5" width="9" height="9" rx="2" fill="#F78200"/><rect x="81" y="3" width="7" height="7" rx="2" fill="#0094DD"/><rect x="93" y="-9" width="5" height="5" rx="1.5" fill="#F78200" opacity="0.55"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCEPT C ============ -->
+  <section class="concept">
+    <div class="concept-head"><span class="concept-tag">C</span><h2>Windows</h2></div>
+    <p class="rationale">The box stays whole — calm and premium — and the S is carved through it as a run of
+    small square windows: many boxes inside the box. One window has broken free and floats outside in blue,
+    slightly rotated: the one piece of feedback that escaped and got heard.</p>
+
+    <div class="board">
+      <div class="cell hero">
+        <span class="cell-label">Primary mark</span>
+        <svg class="mark" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/><g fill="#FFFFFF"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg>
+      </div>
+      <div class="cell dark">
+        <span class="cell-label">On dark · mono + blue</span>
+        <svg class="mark" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#FFFFFF"/><g fill="#14181D"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="cell">
+        <span class="cell-label">Lockup</span>
+        <div class="lockup">
+          <svg class="mark" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/><g fill="#FFFFFF"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg>
+          <span class="wordmark">signal</span>
+        </div>
+      </div>
+      <div class="cell">
+        <span class="cell-label">Scale test</span>
+        <div class="ladder">
+          <div class="step"><svg class="mark" style="height:64px" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/><g fill="#FFFFFF"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg><span>64</span></div>
+          <div class="step"><svg class="mark" style="height:32px" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/><g fill="#FFFFFF"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg><span>32</span></div>
+          <div class="step"><svg class="mark" style="height:16px" viewBox="-4 -18 112 118" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="96" height="96" rx="20" fill="#F78200"/><g fill="#FFFFFF"><rect x="23" y="17" width="10" height="10" rx="2.5"/><rect x="36" y="17" width="10" height="10" rx="2.5"/><rect x="49" y="17" width="10" height="10" rx="2.5"/><rect x="62" y="17" width="10" height="10" rx="2.5"/><rect x="23" y="30" width="10" height="10" rx="2.5"/><rect x="23" y="43" width="10" height="10" rx="2.5"/><rect x="36" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="56" width="10" height="10" rx="2.5"/><rect x="49" y="43" width="10" height="10" rx="2.5"/><rect x="62" y="43" width="10" height="10" rx="2.5"/><rect x="23" y="69" width="10" height="10" rx="2.5"/><rect x="36" y="69" width="10" height="10" rx="2.5"/><rect x="49" y="69" width="10" height="10" rx="2.5"/><rect x="62" y="69" width="10" height="10" rx="2.5"/></g><rect x="84" y="-12" width="10" height="10" rx="2.5" fill="#0094DD" transform="rotate(10 89 -7)"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Reading the three:</strong> A is the most reductive and modern (mark = letter, no box).
+    B is the most literal to the brief (box carved, corner breaking). C is the calmest and most premium
+    (box intact, story told by one escaped tile). All three share the same grid DNA, the same corner radii,
+    and the same rule: <strong>exactly one blue element — the fragment in motion.</strong>
+  </footer>
+
+</div>
+</body>
+</html>
