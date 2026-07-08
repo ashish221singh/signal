@@ -1,0 +1,3 @@
+# design assets and docs are not source code — keep language stats honest
+design/** linguist-documentation
+docs/** linguist-documentation
