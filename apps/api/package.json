@@ -11,6 +11,7 @@
     "seed": "tsx src/scripts/seed-dev.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "@signal/contracts": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.0.0",
