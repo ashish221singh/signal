@@ -72,6 +72,34 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
       return reply.send(result.campaign);
     });
 
+    // POST /:id/publish — flip a complete, non-overlapping draft to active (Task 12).
+    // Completeness failures return 422 `incomplete` with a top-level `missing: [...]`;
+    // an active (target, client) collision returns 409 `overlap` with a top-level
+    // `conflict: { id, header }` (both carried ALONGSIDE the standard error envelope).
+    app.post<{ Params: { id: string } }>('/:id/publish', async (request, reply) => {
+      const result = await service.publish(request.params.id);
+      if (result.ok) return reply.send(result.campaign);
+      if (result.reason === 'not_found') {
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'campaign not found' } });
+      }
+      if (result.reason === 'incomplete') {
+        return reply.code(422).send({
+          error: { code: 'incomplete', message: 'campaign is missing required fields to publish' },
+          missing: result.missing,
+        });
+      }
+      // overlap (M2-D8): one active campaign per (target, client).
+      return reply.code(409).send({
+        error: {
+          code: 'overlap',
+          message: 'another active campaign already targets an overlapping client',
+        },
+        conflict: result.conflict,
+      });
+    });
+
     // GET / — list projection; archived excluded unless ?include=archived (M2-D6).
     app.get<{ Querystring: { include?: string } }>('/', async (request, reply) => {
       const includeArchived = request.query.include === 'archived';

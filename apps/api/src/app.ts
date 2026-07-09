@@ -16,6 +16,17 @@ import { clientRoutes } from './routes/console/clients.js';
 import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
 
+/**
+ * Expose the SDK campaign cache on the Fastify instance so its `refresh()` is
+ * reachable deterministically (the cross-milestone publish→eligibility test, and
+ * Task 18's refresh endpoint) without waiting on the 60s auto-refresh timer.
+ */
+declare module 'fastify' {
+  interface FastifyInstance {
+    campaignCache: CampaignCache;
+  }
+}
+
 export interface AppDeps {
   db?: Db;
   clock?: Clock;
@@ -40,6 +51,12 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   const cache = new CampaignCache(makeDbCampaignLoader(resolvedDb));
   await cache.refresh();
   cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'campaign cache refresh failed'));
+
+  // Expose the SDK campaign cache on the app so a deterministic `refresh()` is
+  // reachable without waiting on the 60s timer. Used by the cross-milestone
+  // publish→eligibility integration test now, and by Task 18's refresh endpoint
+  // later. The eligibility hot path is unchanged — it still reads the same cache.
+  app.decorate('campaignCache', cache);
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
 

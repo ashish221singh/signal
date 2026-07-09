@@ -4,7 +4,7 @@ import type {
   CampaignListItem,
   CampaignUpdate,
 } from '@signal/contracts';
-import { count, desc, eq, ne } from 'drizzle-orm';
+import { and, count, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import { campaigns, responses, targetRegistry } from '../db/schema.js';
@@ -26,6 +26,39 @@ export const SEMANTIC_FIELDS = [
 export type UpdateResult =
   | { ok: true; campaign: Campaign }
   | { ok: false; reason: 'not_found' | 'semantic_locked' };
+
+/**
+ * The six columns + non-empty `client_ids` that the DB CHECK
+ * (`campaigns_active_complete`) requires before a campaign may go `active`.
+ * Mirrored in code (M2-D5) so publish can list the *missing* fields in a 422
+ * rather than surfacing a raw CHECK violation. Wire (snake_case) names.
+ */
+export type MissingField =
+  | 'target_id'
+  | 'metric_type'
+  | 'rating_type'
+  | 'rating_scale_max'
+  | 'header_text'
+  | 'positive_threshold'
+  | 'client_ids';
+
+/** The active campaign a publish would collide with (M2-D8 / M1-D3). */
+export interface OverlapConflict {
+  id: string;
+  header: string | null;
+}
+
+/**
+ * Discriminated outcome of `publish` so the route can map to
+ * 200 / 404 / 422 (incomplete) / 409 (overlap). Extends the `UpdateResult`
+ * style with the two publish-specific failure reasons, each carrying the extra
+ * payload the route surfaces alongside the standard error envelope.
+ */
+export type PublishResult =
+  | { ok: true; campaign: Campaign }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'incomplete'; missing: MissingField[] }
+  | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
 
 /**
  * Console-side campaign service (M2, Task 10). Distinct from the SDK-side
@@ -60,6 +93,23 @@ export function toCampaign(r: CampaignRow): Campaign {
     created_at: r.createdAt,
     updated_at: r.updatedAt,
   };
+}
+
+/**
+ * Collect the wire (snake_case) names of the completeness fields a row is
+ * missing, mirroring the `campaigns_active_complete` DB CHECK (M2-D5). Empty
+ * array ⇒ the row is publishable.
+ */
+export function missingRequiredFields(r: CampaignRow): MissingField[] {
+  const missing: MissingField[] = [];
+  if (r.targetId === null) missing.push('target_id');
+  if (r.metricType === null) missing.push('metric_type');
+  if (r.ratingType === null) missing.push('rating_type');
+  if (r.ratingScaleMax === null) missing.push('rating_scale_max');
+  if (r.headerText === null) missing.push('header_text');
+  if (r.positiveThreshold === null) missing.push('positive_threshold');
+  if (r.clientIds.length === 0) missing.push('client_ids');
+  return missing;
 }
 
 export class CampaignService {
@@ -142,6 +192,72 @@ export class CampaignService {
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Publish a draft (M2, Task 12): validate completeness in code, reject an
+   * overlapping active campaign, then flip `status = 'active'`.
+   *
+   * - Unknown id → `{ ok: false, reason: 'not_found' }`.
+   * - Missing any of the six required content columns or an empty `client_ids`
+   *   (mirrors the `campaigns_active_complete` CHECK, M2-D5) →
+   *   `{ ok: false, reason: 'incomplete', missing: [...] }` (wire field names).
+   * - An existing ACTIVE campaign on the same `target_id` sharing ≥1 client
+   *   (M2-D8, the other half of M1-D3) →
+   *   `{ ok: false, reason: 'overlap', conflict: { id, header } }` (first match).
+   * - Otherwise stamp `updatedAt` and set `status = 'active'`.
+   *
+   * NOTE (M2-D7): publish is NEVER gated on the target's `integration_status`.
+   * A `not_sent` target still publishes fine — integration status is an
+   * operational health signal, not a publish precondition.
+   */
+  async publish(id: string): Promise<PublishResult> {
+    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+    if (!row) return { ok: false, reason: 'not_found' };
+
+    const missing = missingRequiredFields(row);
+    if (missing.length > 0) return { ok: false, reason: 'incomplete', missing };
+
+    // `targetId` is guaranteed non-null here (completeness passed above).
+    const conflict = await this.findActiveOverlap(id, row.targetId as string, row.clientIds);
+    if (conflict) return { ok: false, reason: 'overlap', conflict };
+
+    const [updated] = await this.db
+      .update(campaigns)
+      .set({ status: 'active', updatedAt: this.clock.now() })
+      .where(eq(campaigns.id, id))
+      .returning();
+    if (!updated) return { ok: false, reason: 'not_found' };
+    return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Find an ACTIVE campaign on `targetId` whose `client_ids` intersects
+   * `clientIds`, excluding `excludeId` (the campaign being published/resumed).
+   * Returns the first match's `{ id, header }` or null. Task 13's resume reuses
+   * this. Uses the Postgres jsonb `?|` operator (client_ids ?| text[]) — the
+   * param is bound, never string-concatenated. `[]` short-circuits (no overlap).
+   */
+  private async findActiveOverlap(
+    excludeId: string,
+    targetId: string,
+    clientIds: string[],
+  ): Promise<OverlapConflict | null> {
+    if (clientIds.length === 0) return null;
+    const [conflict] = await this.db
+      .select({ id: campaigns.id, header: campaigns.headerText })
+      .from(campaigns)
+      .where(
+        and(
+          eq(campaigns.status, 'active'),
+          eq(campaigns.targetId, targetId),
+          ne(campaigns.id, excludeId),
+          sql`${campaigns.clientIds} ?| ${sql.param(clientIds)}::text[]`,
+        ),
+      )
+      .orderBy(campaigns.createdAt)
+      .limit(1);
+    return conflict ?? null;
   }
 
   /**

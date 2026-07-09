@@ -21,7 +21,10 @@ class FixedClock implements Clock {
   }
 }
 
-async function seedTarget(db: Db): Promise<string> {
+async function seedTarget(
+  db: Db,
+  overrides: Partial<typeof s.targetRegistry.$inferInsert> = {},
+): Promise<string> {
   const [row] = await db
     .insert(s.targetRegistry)
     .values({
@@ -29,6 +32,7 @@ async function seedTarget(db: Db): Promise<string> {
       screenId: 'alpha',
       triggerMechanism: 'action',
       integrationStatus: 'confirmed_live',
+      ...overrides,
     })
     .returning();
   if (!row) throw new Error('target seed returned no row');
@@ -428,5 +432,269 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
     });
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('not_found');
+  });
+});
+
+describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+  const clock = new FixedClock(new Date('2030-01-01T00:00:00.000Z'));
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  /** The complete set of builder fields required to publish (mirrors the DB CHECK). */
+  function completePayload(targetId: string, clientIds: string[] = ['cl_A']) {
+    return {
+      target_id: targetId,
+      client_ids: clientIds,
+      metric_type: 'CSAT' as const,
+      rating_type: 'star' as const,
+      rating_scale_max: 5,
+      header_text: 'How was your delivery?',
+      positive_threshold: 4,
+      ask_frequency: 'after_7_days' as const,
+    };
+  }
+
+  /** Create a draft via the API, patch it with `patch`, return its id. */
+  async function draftWith(patch: Record<string, unknown>): Promise<string> {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id as string;
+    await app.inject({
+      method: 'PATCH',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+      payload: patch,
+    });
+    return id;
+  }
+
+  async function getCampaign(id: string) {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+    });
+    return res.json();
+  }
+
+  it('publish requires a cookie → 401', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/publish`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('unknown id → 404 not_found', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  // Scenario 1 — CROSS-MILESTONE: a Console-published campaign fires through the
+  // M1 SDK eligibility engine after the campaign cache is refreshed.
+  it('scenario 1: a fully-specified draft publishes → 200 active AND appears via /v1/sdk/eligibility', async () => {
+    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const id = await draftWith(completePayload(targetId));
+
+    const pub = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pub.statusCode).toBe(200);
+    const body = pub.json();
+    expect(campaignSchema.safeParse(body).success).toBe(true);
+    expect(body.status).toBe('active');
+
+    // Refresh the M1 SDK cache so the newly-active campaign is visible on the hot path.
+    await app.campaignCache.refresh();
+
+    const elig = await app.inject({
+      method: 'GET',
+      url: '/v1/sdk/eligibility',
+      headers: { 'x-signal-app-key': 'test-app-key' },
+      query: {
+        screen_id: 'order_completion',
+        client_id: 'cl_A',
+        user_id: 'fresh-user-scenario-1',
+        rep_tenure_days: '365',
+      },
+    });
+    expect(elig.statusCode).toBe(200);
+    const cfg = elig.json();
+    expect(cfg.header).toBe('How was your delivery?');
+    expect(cfg.campaign_id).toBe(id);
+    expect(cfg.trigger_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  // Scenario 2 — incomplete draft (missing header_text) → 422 incomplete.
+  it('scenario 2: publishing a draft missing header_text → 422 incomplete listing header_text; stays draft', async () => {
+    const targetId = await seedTarget(t.db);
+    const { header_text: _omit, ...noHeader } = completePayload(targetId);
+    const id = await draftWith(noHeader);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json();
+    expect(body.error.code).toBe('incomplete');
+    expect(body.missing).toContain('header_text');
+
+    expect((await getCampaign(id)).status).toBe('draft');
+  });
+
+  it('scenario 2b: an empty draft → 422 incomplete listing every required field', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id;
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('incomplete');
+    expect(new Set(res.json().missing)).toEqual(
+      new Set([
+        'target_id',
+        'metric_type',
+        'rating_type',
+        'rating_scale_max',
+        'header_text',
+        'positive_threshold',
+        'client_ids',
+      ]),
+    );
+    expect((await getCampaign(id)).status).toBe('draft');
+  });
+
+  // Scenario 3 — overlap 409 against an existing active campaign.
+  it('scenario 3: publishing over an active (target, client) → 409 overlap naming the conflict; stays draft', async () => {
+    const targetId = await seedTarget(t.db);
+    // Campaign A: already active on (target, cl_A).
+    const idA = await draftWith(completePayload(targetId, ['cl_A']));
+    const pubA = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idA}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pubA.statusCode).toBe(200);
+
+    // Campaign B: draft on the same target with an overlapping client.
+    const idB = await draftWith(completePayload(targetId, ['cl_A', 'cl_C']));
+    const pubB = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idB}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pubB.statusCode).toBe(409);
+    const body = pubB.json();
+    expect(body.error.code).toBe('overlap');
+    expect(body.conflict.id).toBe(idA);
+    expect(body.conflict.header).toBe('How was your delivery?');
+
+    expect((await getCampaign(idB)).status).toBe('draft');
+  });
+
+  // Scenario 4 — overlap ignores non-active statuses and non-intersecting clients.
+  it('scenario 4a: overlap ignores active campaigns whose clients do not intersect → 200', async () => {
+    const targetId = await seedTarget(t.db);
+    const idA = await draftWith(completePayload(targetId, ['cl_A']));
+    await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idA}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    // B on the same target but disjoint clients → allowed.
+    const idB = await draftWith(completePayload(targetId, ['cl_B']));
+    const pubB = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idB}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pubB.statusCode).toBe(200);
+    expect(pubB.json().status).toBe('active');
+  });
+
+  it('scenario 4b: overlap ignores draft/paused/archived same-target campaigns → 200', async () => {
+    const targetId = await seedTarget(t.db);
+    // Seed a PAUSED campaign directly on (target, cl_A) — must be ignored.
+    await t.db.insert(s.campaigns).values({
+      targetId,
+      clientIds: ['cl_A'],
+      metricType: 'CSAT',
+      ratingType: 'star',
+      ratingScaleMax: 5,
+      headerText: 'Paused one',
+      positiveThreshold: 4,
+      status: 'paused',
+      createdBy: USER_ID,
+    });
+    // Seed an ARCHIVED campaign on the same overlapping client — must be ignored.
+    await t.db.insert(s.campaigns).values({
+      targetId,
+      clientIds: ['cl_A'],
+      headerText: 'Archived one',
+      status: 'archived',
+      createdBy: USER_ID,
+    });
+    const id = await draftWith(completePayload(targetId, ['cl_A']));
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('active');
+  });
+
+  // Scenario 5 — publish is NEVER blocked by the target's integration_status (M2-D7).
+  it('scenario 5: a complete draft on a not_sent target publishes → 200 active', async () => {
+    const targetId = await seedTarget(t.db, {
+      screenId: 'not_sent_screen',
+      integrationStatus: 'not_sent',
+    });
+    const id = await draftWith(completePayload(targetId));
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('active');
   });
 });
