@@ -98,10 +98,12 @@ class TrackEventTest {
 
     private class FakeSheetPresenter : SheetPresenter {
         var showCount = 0
+        var lastScreenId: String? = null
         var lastConfig: EligibilityConfig? = null
 
-        override fun show(config: EligibilityConfig) {
+        override fun show(screenId: String, config: EligibilityConfig) {
             showCount++
+            lastScreenId = screenId
             lastConfig = config
         }
     }

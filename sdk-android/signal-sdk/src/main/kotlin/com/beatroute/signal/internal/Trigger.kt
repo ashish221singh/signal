@@ -22,5 +22,5 @@ internal suspend fun runTrigger(s: SignalState, screenId: String) {
     val repTenure = s.sessionProvider.repTenureDays()
     // 204 / error -> null -> show nothing.
     val config = s.eligibility.check(screenId, userId, clientId, repTenure) ?: return
-    s.sheetPresenter.show(config)
+    s.sheetPresenter.show(screenId, config)
 }

@@ -1,13 +1,18 @@
 package com.beatroute.signal
 
+import android.app.Application
 import android.content.Context
 import android.util.Log
+import com.beatroute.signal.internal.ActivityTracker
 import com.beatroute.signal.internal.DwellTimer
 import com.beatroute.signal.internal.EligibilityClient
 import com.beatroute.signal.internal.FeedbackClient
 import com.beatroute.signal.internal.LocalSuppressionCache
-import com.beatroute.signal.internal.NoOpSheetPresenter
+import com.beatroute.signal.internal.SignalSheetPresenter
 import com.beatroute.signal.internal.SignalState
+import com.beatroute.signal.internal.UploadClient
+import com.beatroute.signal.internal.outbox.OutboxDatabase
+import com.beatroute.signal.internal.outbox.OutboxDependencies
 import com.beatroute.signal.internal.runTrigger
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +39,12 @@ object Signal {
     internal var state: SignalState? = null
 
     /**
+     * The activity tracker registered on the host [Application] (production wiring). Held
+     * so a re-init / [resetForTest] can unregister it and avoid stacking callbacks.
+     */
+    private var activityTracker: ActivityTracker? = null
+
+    /**
      * Initialize the SDK. Idempotent: calling again cancels the previous scope and
      * rebuilds state, so a host may safely re-init on identity change.
      *
@@ -52,8 +63,12 @@ object Signal {
         baseUrlOverride: String? = null,
         appKeyOverride: String? = null,
     ) {
-        // Idempotent re-init: tear down the previous supervised scope first.
+        // Idempotent re-init: tear down the previous supervised scope + tracker first.
         state?.scope?.cancel()
+        (context.applicationContext as? Application)?.let { app ->
+            activityTracker?.let { app.unregisterActivityLifecycleCallbacks(it) }
+        }
+        activityTracker = null
 
         val baseUrl = (baseUrlOverride ?: environment.baseUrl).toHttpUrl()
         val appKey = appKeyOverride ?: environment.appKey
@@ -74,18 +89,41 @@ object Signal {
             state?.let { runTrigger(it, screenId) }
         }
 
+        // Precious outbox wiring (M3-D7): the worker pulls its collaborators from the
+        // process-global holder, so populate it here.
+        val outboxDb = OutboxDatabase.create(appContext)
+        OutboxDependencies.dao = outboxDb.outboxDao()
+        OutboxDependencies.feedback = FeedbackClient(baseUrl, appKey)
+
+        val suppressionCache = LocalSuppressionCache.create(appContext)
+        val uploader = UploadClient(baseUrl, appKey)
+        val clock: () -> Long = System::currentTimeMillis
+
+        // Find the host's current FragmentManager without leaking an Activity.
+        val tracker = ActivityTracker()
+        (appContext as? Application)?.registerActivityLifecycleCallbacks(tracker)
+        activityTracker = tracker
+
         state = SignalState(
             applicationContext = appContext,
             baseUrl = baseUrl,
             appKey = appKey,
             sessionProvider = sessionProvider,
             eligibility = EligibilityClient(baseUrl, appKey),
-            suppressionCache = LocalSuppressionCache.create(appContext),
-            sheetPresenter = NoOpSheetPresenter,
+            suppressionCache = suppressionCache,
+            sheetPresenter = SignalSheetPresenter(
+                context = appContext,
+                sessionProvider = sessionProvider,
+                suppressionCache = suppressionCache,
+                clock = clock,
+                scope = scope,
+                imageUploader = uploader,
+                host = tracker,
+            ),
             feedbackClient = FeedbackClient(baseUrl, appKey),
             scope = scope,
             dwellTimer = dwellTimer,
-            clock = System::currentTimeMillis,
+            clock = clock,
         )
     }
 
@@ -125,6 +163,12 @@ object Signal {
     /** Test-only teardown: cancel the scope and drop state so tests stay isolated. */
     internal fun resetForTest() {
         state?.scope?.cancel()
+        (state?.applicationContext as? Application)?.let { app ->
+            activityTracker?.let { app.unregisterActivityLifecycleCallbacks(it) }
+        }
+        activityTracker = null
+        OutboxDependencies.dao = null
+        OutboxDependencies.feedback = null
         state = null
     }
 }

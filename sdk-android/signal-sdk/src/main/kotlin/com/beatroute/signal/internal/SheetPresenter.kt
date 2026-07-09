@@ -7,15 +7,15 @@ package com.beatroute.signal.internal
  * tests. The real, fragment-showing presenter is wired in Task G.3.
  */
 internal interface SheetPresenter {
-    fun show(config: EligibilityConfig)
+    fun show(screenId: String, config: EligibilityConfig)
 }
 
 /**
- * Placeholder presenter used until the real fragment-showing presenter lands.
+ * Placeholder presenter, kept as a harmless fallback for tests that don't need the
+ * real fragment-showing presenter. Production wiring uses [SignalSheetPresenter].
  */
-// TODO(G.3): replace with the real fragment-showing presenter.
 internal object NoOpSheetPresenter : SheetPresenter {
-    override fun show(config: EligibilityConfig) {}
+    override fun show(screenId: String, config: EligibilityConfig) {}
 }
 
 /**

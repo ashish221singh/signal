@@ -3,6 +3,7 @@ package com.beatroute.signal.ui
 import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.ContextThemeWrapper
@@ -31,6 +32,7 @@ import com.beatroute.signal.internal.SignalJson
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import java.time.Instant
 import kotlinx.coroutines.launch
 
 /**
@@ -431,11 +433,11 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
     /**
      * Assemble a [ResponseBody] for a submission.
      *
-     * device_os / app_version / timestamps are placeholders here: the real
-     * Build.VERSION / package versionName / clock fill lands in Task G.3 when the
-     * presenter wires the outbox. [shownAtMillis] is captured at view creation;
-     * responded_at is captured now. Both are emitted as epoch-millis strings for
-     * now — G.3 will normalise to the wire format (ISO-8601).
+     * device_os / app_version / timestamps are filled here (Task G.3): the running
+     * Android release, the host app's versionName, and ISO-8601 timestamps.
+     * [shownAtMillis] is captured at view creation; responded_at is captured now.
+     * `rep_tenure_days` is left null — the presenter patches it from the host
+     * [com.beatroute.signal.SessionProvider], which the fragment can't see.
      */
     private fun assembleResponse(
         score: Int,
@@ -450,13 +452,19 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
             chipSelected = chip,
             otherText = text,
             otherImageUrl = imageUrl,
-            deviceOs = "android", // placeholder; real Build.VERSION fill in G.3
-            appVersion = "", // placeholder; real versionName fill in G.3
-            repTenureDays = null,
-            shownAt = shownAtMillis.toString(), // placeholder format; G.3 normalises
-            respondedAt = System.currentTimeMillis().toString(),
+            deviceOs = "Android " + Build.VERSION.RELEASE,
+            appVersion = hostAppVersion(),
+            repTenureDays = null, // presenter patches this from the SessionProvider.
+            shownAt = Instant.ofEpochMilli(shownAtMillis).toString(),
+            respondedAt = Instant.ofEpochMilli(System.currentTimeMillis()).toString(),
         )
     }
+
+    /** The host app's versionName, or "" when it can't be resolved (never crashes). */
+    private fun hostAppVersion(): String = runCatching {
+        val ctx = requireContext()
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: ""
+    }.getOrDefault("")
 
     /** Fire a Play Store review intent for the host app's package. */
     private fun openPlayStoreReview() {
