@@ -289,6 +289,26 @@ class SheetScaffoldTest {
     }
 
     @Test
+    fun `Other submit carries the pending otherImageUrl (F2)`() {
+        val fragment = showFragment(configJson(otherRequiresText = false))
+        val submitted = mutableListOf<ResponseBody>()
+        fragment.onSubmit = { submitted.add(it) }
+
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+        fragment.dialog!!.findViewById<Button>(R.id.signal_negative_other).performClick()
+        shadowOf(getMainLooper()).idle()
+
+        // Seed a pending attachment (as a completed upload would) then submit.
+        fragment.setOtherImageUrlForTest("https://cdn.example/feedback/x.jpg")
+        fragment.dialog!!.findViewById<Button>(R.id.signal_other_submit).performClick()
+        shadowOf(getMainLooper()).idle()
+
+        assertEquals(1, submitted.size)
+        assertEquals("https://cdn.example/feedback/x.jpg", submitted.single().otherImageUrl)
+    }
+
+    @Test
     fun `cancelling the sheet fires onDismiss once and never onSubmit`() {
         val fragment = showFragment(configJson(positiveThreshold = 4))
         var dismissCount = 0

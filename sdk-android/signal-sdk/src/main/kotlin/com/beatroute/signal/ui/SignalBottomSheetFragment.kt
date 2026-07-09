@@ -11,20 +11,27 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.lifecycleScope
 import androidx.transition.TransitionManager
 import com.beatroute.signal.R
 import com.google.android.material.transition.MaterialFade
 import com.beatroute.signal.databinding.SignalSheetBinding
 import com.beatroute.signal.internal.EligibilityConfig
+import com.beatroute.signal.internal.ImageUploader
 import com.beatroute.signal.internal.ResponseBody
+import com.beatroute.signal.internal.processImage
 import com.beatroute.signal.internal.SignalJson
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import kotlinx.coroutines.launch
 
 /**
  * The Signal feedback bottom sheet (Task E.1 scaffold).
@@ -71,6 +78,35 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
     internal var onPickImage: (() -> Unit)? = null
 
     /**
+     * The uploader used to push a picked+downscaled image to storage (Task F.2). Set by the
+     * G.3 presenter; may be null (e.g. in current tests / when uploads aren't configured), in
+     * which case the OTHER branch simply submits without an attachment.
+     */
+    internal var imageUploader: ImageUploader? = null
+
+    /**
+     * The `object_url` of an image the rep attached in the OTHER branch, or null. Assembled
+     * into [ResponseBody.otherImageUrl] on the OTHER-submit path. The image is optional, so a
+     * pick/process/upload failure simply leaves this null.
+     */
+    private var otherImageUrl: String? = null
+
+    /** Test hook: seed a pending attachment url so the OTHER submit path can be exercised. */
+    internal fun setOtherImageUrlForTest(url: String?) {
+        otherImageUrl = url
+    }
+
+    /**
+     * Registered in [onCreate] (before the fragment reaches STARTED) so the OTHER branch can
+     * launch the system photo picker. The picked [Uri] is processed and uploaded off the main
+     * thread; the resulting url is stored in [otherImageUrl].
+     */
+    private var pickImageLauncher: ActivityResultLauncher<PickVisualMediaRequest>? = null
+
+    /** The "Add photo" button of the currently-rendered OTHER view, for async state updates. */
+    private var addPhotoButton: Button? = null
+
+    /**
      * The score that routed the flow into the NEGATIVE branch, captured when
      * [onRatingSelected] fires below the positive threshold. Reused when the user
      * submits a chip or free-text so the assembled [ResponseBody] carries the
@@ -93,6 +129,14 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
      * (shape + colors + drag-handle tint via `bottomSheetStyle`).
      */
     override fun getTheme(): Int = R.style.Theme_Signal_BottomSheetDialog
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Registration must happen before STARTED; onCreate is the safe point. Images only.
+        pickImageLauncher = registerForActivityResult(PickVisualMedia()) { uri ->
+            if (uri != null) onImagePicked(uri)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -265,9 +309,28 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
         val text = view.findViewById<EditText>(R.id.signal_other_text)
         val submit = view.findViewById<Button>(R.id.signal_other_submit)
         val addPhoto = view.findViewById<Button>(R.id.signal_add_photo)
+        // Keep a handle so the async pick->process->upload callback can reflect state onto the
+        // affordance (progress / attached / failed) even after this render() returns.
+        addPhotoButton = addPhoto
 
         addPhoto.visibility = if (config.otherAllowsImage) View.VISIBLE else View.GONE
-        addPhoto.setOnClickListener { onPickImage?.invoke() }
+        addPhoto.setOnClickListener {
+            // Preserve the E.4 contract (the add-photo test asserts this fires) AND launch the
+            // real system photo picker so a rep can actually attach an image.
+            onPickImage?.invoke()
+            if (otherImageUrl == null) {
+                pickImageLauncher?.launch(
+                    PickVisualMediaRequest.Builder()
+                        .setMediaType(PickVisualMedia.ImageOnly)
+                        .build(),
+                )
+            } else {
+                // Second tap while an image is attached acts as a "remove" affordance.
+                clearAttachedImage()
+            }
+        }
+        // Reflect any already-attached image (e.g. after a config-change re-render).
+        renderAttachmentState()
 
         if (config.otherRequiresText) {
             submit.isEnabled = !text.text.isNullOrBlank()
@@ -278,12 +341,73 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
 
         submit.setOnClickListener {
             onSubmit?.invoke(
-                assembleResponse(negativeScore, chip = null, text = text.text?.toString()),
+                assembleResponse(
+                    negativeScore,
+                    chip = null,
+                    text = text.text?.toString(),
+                    imageUrl = otherImageUrl,
+                ),
             )
             dismissAllowingStateLoss()
         }
 
         container.addView(view)
+    }
+
+    /**
+     * A [Uri] came back from the photo picker. Process it (downscale + guardrails, F.1) then
+     * upload via [imageUploader] (F.2) off the main thread, storing the returned `object_url`
+     * in [otherImageUrl]. Everything is guarded: the image is optional, so any failure just
+     * leaves the sheet submittable without an attachment and never crashes the host.
+     */
+    private fun onImagePicked(uri: Uri) {
+        val uploader = imageUploader ?: return
+        val ctx = context ?: return
+        val declaredType = ctx.contentResolver.getType(uri)
+        setUploadingUi(true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val url = try {
+                val processed = processImage(ctx, uri, declaredType)
+                if (processed != null) {
+                    uploader.upload(processed.bytes, processed.contentType)
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            }
+            otherImageUrl = url
+            setUploadingUi(false)
+            renderAttachmentState()
+        }
+    }
+
+    /** Show a lightweight "uploading…" state on the add-photo affordance. */
+    private fun setUploadingUi(uploading: Boolean) {
+        val button = addPhotoButton ?: return
+        if (uploading) {
+            button.isEnabled = false
+            button.text = getString(R.string.signal_photo_uploading)
+        } else {
+            button.isEnabled = true
+        }
+    }
+
+    /** Reflect [otherImageUrl] onto the add-photo affordance (attached vs. add). */
+    private fun renderAttachmentState() {
+        val button = addPhotoButton ?: return
+        button.isEnabled = true
+        button.text = if (otherImageUrl != null) {
+            getString(R.string.signal_photo_attached)
+        } else {
+            getString(R.string.signal_add_photo)
+        }
+    }
+
+    /** Clear an attached image (the "remove" affordance). */
+    private fun clearAttachedImage() {
+        otherImageUrl = null
+        renderAttachmentState()
     }
 
     /**
@@ -313,14 +437,19 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
      * responded_at is captured now. Both are emitted as epoch-millis strings for
      * now — G.3 will normalise to the wire format (ISO-8601).
      */
-    private fun assembleResponse(score: Int, chip: String?, text: String?): ResponseBody {
+    private fun assembleResponse(
+        score: Int,
+        chip: String?,
+        text: String?,
+        imageUrl: String? = null,
+    ): ResponseBody {
         val config = requireNotNull(config)
         return ResponseBody(
             triggerId = config.triggerId,
             ratingValue = score,
             chipSelected = chip,
             otherText = text,
-            otherImageUrl = null,
+            otherImageUrl = imageUrl,
             deviceOs = "android", // placeholder; real Build.VERSION fill in G.3
             appVersion = "", // placeholder; real versionName fill in G.3
             repTenureDays = null,
@@ -363,6 +492,7 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        addPhotoButton = null
         _binding = null
     }
 

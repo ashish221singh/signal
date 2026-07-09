@@ -16,4 +16,6 @@
   <string name="signal_submit">Submit</string>
   <string name="signal_other_hint">Tell us more</string>
   <string name="signal_add_photo">Add photo</string>
+  <string name="signal_photo_uploading">Uploading photo…</string>
+  <string name="signal_photo_attached">Photo attached · tap to remove</string>
 </resources>
