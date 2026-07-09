@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Large-screen (sw600dp) variant of the Signal sheet (Task E.5, responsive).
+  Identical to the base layout except the content column is width-capped at
+  signal_sheet_max_width and centred, so on tablets / large phones the sheet
+  does not stretch edge-to-edge. The root keeps the id signal_sheet_root (so
+  ViewBinding agrees across configurations) and carries the bottom-insets
+  padding; the inner column carries the background + width cap. Bottom insets
+  and the scrollable content region behave exactly as in the base layout.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/signal_sheet_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/signal_bg"
+    android:paddingBottom="@dimen/signal_space_4">
+
+    <LinearLayout
+        android:layout_width="@dimen/signal_sheet_max_width"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/signal_space_4"
+        android:paddingEnd="@dimen/signal_space_4">
+
+        <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+            android:id="@+id/signal_drag_handle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:minHeight="@dimen/signal_space_10">
+
+            <TextView
+                android:id="@+id/signal_header"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="@dimen/signal_text_body"
+                android:textStyle="bold"
+                android:textColor="@color/signal_ink"
+                tools:ignore="UnusedAttribute" />
+
+            <ImageButton
+                android:id="@+id/signal_close"
+                android:layout_width="@dimen/signal_touch_target"
+                android:layout_height="@dimen/signal_touch_target"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/signal_close_content_description"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@color/signal_ink_secondary" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/signal_content_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="@dimen/signal_sheet_scroll_max_height"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <FrameLayout
+                android:id="@+id/signal_state_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/signal_touch_target" />
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</FrameLayout>

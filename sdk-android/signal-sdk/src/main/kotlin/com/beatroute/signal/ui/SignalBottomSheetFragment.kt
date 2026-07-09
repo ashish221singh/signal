@@ -4,14 +4,20 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
+import androidx.transition.TransitionManager
 import com.beatroute.signal.R
+import com.google.android.material.transition.MaterialFade
 import com.beatroute.signal.databinding.SignalSheetBinding
 import com.beatroute.signal.internal.EligibilityConfig
 import com.beatroute.signal.internal.ResponseBody
@@ -108,6 +114,8 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
             return
         }
 
+        applyWindowInsets(view)
+
         shownAtMillis = System.currentTimeMillis()
         binding.signalHeader.text = config.header
         // The close "x" is a user-driven dismiss (not a submit): fire onDismiss
@@ -121,14 +129,59 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
     }
 
     /**
+     * The bottom padding baked into the layout (base) — captured on first insets
+     * pass so IME/nav-bar insets are added on top of it rather than replacing it.
+     */
+    private var baseBottomPadding: Int = -1
+
+    /**
+     * Keyboard- and gesture-nav-aware bottom padding (Task E.5): pad the sheet
+     * root's bottom by max(imeInset, navBarInset) on top of the layout's base
+     * padding, so neither the soft keyboard nor the gesture-nav bar can cover the
+     * Submit button. The insets are NOT consumed so children still see them.
+     */
+    private fun applyWindowInsets(root: View) {
+        if (baseBottomPadding < 0) baseBottomPadding = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val nav = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+            v.updatePadding(bottom = baseBottomPadding + maxOf(ime, nav))
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    /**
+     * True when the system animator duration scale is 0 (the user disabled
+     * animations in Developer options / "Remove animations" accessibility). Used
+     * to skip the state-transition motion so we respect reduced-motion prefs.
+     */
+    private fun reducedMotion(): Boolean {
+        val resolver = context?.contentResolver ?: return true
+        val scale = Settings.Global.getFloat(
+            resolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        )
+        return scale == 0f
+    }
+
+    /**
      * Swap the content shown in the state container for [state].
      *
      * RATING and POSITIVE are wired here (Task E.3). NEGATIVE / OTHER content
      * arrives in Task E.4; for now they render nothing (no crash).
+     *
+     * A subtle [MaterialFade] cross-fades the container on each swap (Task E.5),
+     * skipped entirely when [reducedMotion] is true.
      */
     internal fun render(state: State) {
         currentState = state
         val container = binding.signalStateContainer
+        if (!reducedMotion()) {
+            // Subtle fade so RATING -> POSITIVE/NEGATIVE/OTHER swaps feel smooth.
+            TransitionManager.beginDelayedTransition(container, MaterialFade())
+        }
         container.removeAllViews()
         val config = config ?: return
 

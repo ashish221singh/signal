@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Signal bottom-sheet scaffold (Task E.1).
-  Drag handle + header row (title + close affordance) + state container that
-  later tasks (E.2+) inflate rating / positive / negative / other views into.
+  Signal bottom-sheet scaffold (Task E.1) + E.5 polish.
+  Drag handle + header row (title + close affordance) + a scrollable content
+  region holding the state container that later tasks (E.2+) inflate the
+  rating / positive / negative / other views into.
+
+  E.5: the state container is wrapped in a NestedScrollView capped at
+  signal_sheet_scroll_max_height so long chip lists / a keyboard-shrunk sheet
+  scroll instead of clipping. Bottom insets (IME + nav bar) are applied in code
+  via ViewCompat.setOnApplyWindowInsetsListener on signal_sheet_root. On large
+  screens the sheet is width-capped (see layout-sw600dp variant). All surfaces
+  use @color token aliases so values-night resolves the dark paper.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/signal_sheet_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -35,8 +44,7 @@
             android:textSize="@dimen/signal_text_body"
             android:textStyle="bold"
             android:textColor="@color/signal_ink"
-            tools:ignore="UnusedAttribute"
-            xmlns:tools="http://schemas.android.com/tools" />
+            tools:ignore="UnusedAttribute" />
 
         <ImageButton
             android:id="@+id/signal_close"
@@ -48,10 +56,24 @@
             android:tint="@color/signal_ink_secondary" />
     </LinearLayout>
 
-    <!-- State container: RATING / POSITIVE / NEGATIVE / OTHER content lands here. -->
-    <FrameLayout
-        android:id="@+id/signal_state_container"
+    <!--
+      Scrollable content region (E.5): caps height and lets long content /
+      the keyboard-shrunk sheet scroll instead of clipping the Submit button.
+      fillViewport keeps short content top-aligned rather than centred.
+    -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/signal_content_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="@dimen/signal_touch_target" />
+        android:maxHeight="@dimen/signal_sheet_scroll_max_height"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <!-- State container: RATING / POSITIVE / NEGATIVE / OTHER content lands here. -->
+        <FrameLayout
+            android:id="@+id/signal_state_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/signal_touch_target" />
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

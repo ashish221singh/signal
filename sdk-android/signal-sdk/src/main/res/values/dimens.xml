@@ -39,6 +39,10 @@
   <dimen name="signal_rating_segment_height">44dp</dimen> <!-- effort segment height -->
   <dimen name="signal_rating_elevation">2dp</dimen> <!-- tile / segment shadow -->
 
+  <!-- Sheet polish (Task E.5): scrollable content cap + large-screen width cap -->
+  <dimen name="signal_sheet_scroll_max_height">420dp</dimen> <!-- content scroll cap -->
+  <dimen name="signal_sheet_max_width">560dp</dimen>         <!-- sw600dp width cap -->
+
   <!-- Negative branch (Task E.4): chips + Other text/photo sub-branch -->
   <dimen name="signal_chip_stroke">1dp</dimen>       <!-- chip ring width -->
   <dimen name="signal_chip_min_height">32dp</dimen>  <!-- pill height -->
