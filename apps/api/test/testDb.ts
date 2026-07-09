@@ -20,7 +20,7 @@ export async function startTestDb(): Promise<{
     db,
     truncateAll: async () => {
       await db.execute(sql`
-        truncate responses, trigger_log, suppression_state, campaigns, target_registry, clients
+        truncate responses, trigger_log, suppression_state, campaigns, target_registry, clients, console_users
         restart identity cascade
       `);
     },

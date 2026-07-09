@@ -30,6 +30,7 @@ export const askFrequencyEnum = pgEnum('ask_frequency', [
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused']);
 export const lastActionEnum = pgEnum('last_action', ['dismissed', 'submitted']);
 export const clientStatusEnum = pgEnum('client_status', ['active', 'inactive']);
+export const consoleUserRoleEnum = pgEnum('console_user_role', ['admin', 'editor']);
 
 export const targetRegistry = pgTable('target_registry', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -136,4 +137,13 @@ export const clients = pgTable('clients', {
   name: text('name').notNull(),
   status: clientStatusEnum('status').notNull(),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const consoleUsers = pgTable('console_users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  name: text('name').notNull(),
+  role: consoleUserRoleEnum('role').notNull().default('admin'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

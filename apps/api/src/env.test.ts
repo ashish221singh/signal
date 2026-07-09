@@ -41,4 +41,28 @@ describe('parseEnv', () => {
     const env = parseEnv({ SIGNAL_APP_KEYS: 'k1, k2' });
     expect(env.appKeys).toEqual(['k1', 'k2']);
   });
+
+  it('defaults SESSION_SECRET to the dev constant in development', () => {
+    const env = parseEnv({});
+    expect(env.SESSION_SECRET).toBe('dev-session-secret-not-for-prod');
+  });
+
+  it('exposes an explicitly provided SESSION_SECRET', () => {
+    const env = parseEnv({ SESSION_SECRET: 'a-sufficiently-long-secret' });
+    expect(env.SESSION_SECRET).toBe('a-sufficiently-long-secret');
+  });
+
+  it('rejects an explicitly provided SESSION_SECRET shorter than 16 chars', () => {
+    expect(() => parseEnv({ SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
+  });
+
+  it('throws in production when SESSION_SECRET is unset', () => {
+    expect(() =>
+      parseEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+        SIGNAL_APP_KEYS: 'k1',
+      }),
+    ).toThrow(/SESSION_SECRET/);
+  });
 });

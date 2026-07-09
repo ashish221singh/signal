@@ -8,6 +8,13 @@
       "when": 1783562694026,
       "tag": "0000_noisy_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783565426241,
+      "tag": "0001_slimy_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }
