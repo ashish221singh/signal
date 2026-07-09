@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Signal POSITIVE state (Task E.3).
+  A thank-you message plus an optional "Rate us" button. The button is shown
+  by the fragment only when on_positive_action == "play_store_review"; it is
+  GONE by default here so the "none" action leaves no button behind.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/signal_positive_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="@dimen/signal_space_4"
+    android:paddingBottom="@dimen/signal_space_2">
+
+    <TextView
+        android:id="@+id/signal_positive_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/signal_positive_thanks"
+        android:textSize="@dimen/signal_text_h3"
+        android:textStyle="bold"
+        android:textColor="@color/signal_ink" />
+
+    <Button
+        android:id="@+id/signal_positive_rate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/signal_space_4"
+        android:minHeight="@dimen/signal_touch_target"
+        android:text="@string/signal_positive_rate_us"
+        android:textColor="@color/signal_action_ink"
+        android:backgroundTint="@color/signal_action"
+        android:visibility="gone" />
+</LinearLayout>

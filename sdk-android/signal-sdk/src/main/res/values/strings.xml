@@ -5,4 +5,8 @@
 
   <!-- Content description for a rating element: "Rate 4 of 5" (Task E.2). -->
   <string name="signal_rate_n_of_m">Rate %1$d of %2$d</string>
+
+  <!-- POSITIVE state (Task E.3): thank-you message + optional Play Store prompt. -->
+  <string name="signal_positive_thanks">Thanks for the feedback!</string>
+  <string name="signal_positive_rate_us">Rate us</string>
 </resources>
