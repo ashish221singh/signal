@@ -26,16 +26,25 @@ internal sealed interface SendResult {
     data object Drop : SendResult
 }
 
+/**
+ * Send seam for precious-path bodies. Extracted so the outbox worker can depend on an
+ * interface (and tests can supply a fake) rather than the concrete OkHttp-backed client.
+ */
+internal interface FeedbackSender {
+    suspend fun postResponse(body: ResponseBody): SendResult
+    suspend fun postDismiss(body: DismissBody): SendResult
+}
+
 internal class FeedbackClient(
     private val baseUrl: HttpUrl,
     private val appKey: String,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .callTimeout(10, TimeUnit.SECONDS).build(),
-) {
-    suspend fun postResponse(body: ResponseBody): SendResult =
+) : FeedbackSender {
+    override suspend fun postResponse(body: ResponseBody): SendResult =
         post("v1/sdk/response", SignalJson.encodeToString(body))
 
-    suspend fun postDismiss(body: DismissBody): SendResult =
+    override suspend fun postDismiss(body: DismissBody): SendResult =
         post("v1/sdk/dismiss", SignalJson.encodeToString(body))
 
     private suspend fun post(pathSegments: String, json: String): SendResult =
