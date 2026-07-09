@@ -9,7 +9,10 @@ import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
 import type { Env } from './env.js';
 import { appKeyAuth } from './plugins/appKeyAuth.js';
+import { sessionGuard } from './plugins/sessionGuard.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
+import { clientRoutes } from './routes/console/clients.js';
+import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
 
 export interface AppDeps {
@@ -77,6 +80,20 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // Console auth (login/logout/me) — NOT behind the session guard; login must be
   // reachable without a session. The guarded console subtree arrives in Task 7.
   await app.register(consoleAuthRoutes({ db: resolvedDb }), { prefix: '/v1/console/auth' });
+
+  // Guarded console subtree (M2, Task 7): the fp-wrapped session guard runs on
+  // every request into this encapsulated scope, so the sibling read routes below
+  // are protected. This is a SEPARATE register from `/v1/console/auth` above —
+  // login/logout/me stay reachable without a cookie.
+  await app.register(
+    async (consoleApi) => {
+      await consoleApi.register(sessionGuard);
+      await consoleApi.register(targetRoutes({ db: resolvedDb }), { prefix: '/targets' });
+      await consoleApi.register(clientRoutes({ db: resolvedDb }), { prefix: '/clients' });
+      // campaigns + reporting mounted here in later tasks
+    },
+    { prefix: '/v1/console' },
+  );
 
   await app.register(
     async (sdk) => {
