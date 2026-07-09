@@ -11,6 +11,7 @@ import type { Env } from './env.js';
 import { appKeyAuth } from './plugins/appKeyAuth.js';
 import { sessionGuard } from './plugins/sessionGuard.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
+import { campaignRoutes } from './routes/console/campaigns.js';
 import { clientRoutes } from './routes/console/clients.js';
 import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
@@ -90,7 +91,10 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       await consoleApi.register(sessionGuard);
       await consoleApi.register(targetRoutes({ db: resolvedDb }), { prefix: '/targets' });
       await consoleApi.register(clientRoutes({ db: resolvedDb }), { prefix: '/clients' });
-      // campaigns + reporting mounted here in later tasks
+      await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
+        prefix: '/campaigns',
+      });
+      // reporting mounted here in later tasks
     },
     { prefix: '/v1/console' },
   );
