@@ -35,7 +35,7 @@ describe('EligibilityService (real Postgres)', () => {
     await t.truncateAll();
     clock = new FakeClock(new Date('2026-07-08T10:00:00Z'));
     cache = new CampaignCache(makeDbCampaignLoader(t.db));
-    service = new EligibilityService(t.db, cache, clock, { noCooldownDebounceSeconds: 60 });
+    service = new EligibilityService(t.db, cache, clock);
   });
 
   async function seedCampaign(overrides: Partial<typeof s.campaigns.$inferInsert> = {}) {
@@ -68,7 +68,7 @@ describe('EligibilityService (real Postgres)', () => {
         headerText: 'How was it?',
         positiveThreshold: 4,
         chipsOnNegative: ['Slow'],
-        askFrequency: 'once_per_week',
+        askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
         ...overrides,
@@ -101,7 +101,7 @@ describe('EligibilityService (real Postgres)', () => {
     expect(await service.check(q)).toBeNull();
   });
 
-  it('weekly cooldown: still suppressed at +167h, eligible at +169h', async () => {
+  it('7-day cooldown: still suppressed at +167h, eligible at +169h', async () => {
     await seedCampaign();
     await service.check(q);
     clock.advanceHours(167);
@@ -116,23 +116,6 @@ describe('EligibilityService (real Postgres)', () => {
     expect(await service.check({ ...q, repTenureDays: 90 })).not.toBeNull();
     await t.db.delete(s.suppressionState);
     expect(await service.check({ ...q, userId: 'u_2' })).toBeNull();
-  });
-
-  it('daily cap 2 on no_cooldown: third show within 24h → null; window rolls → eligible', async () => {
-    await seedCampaign({ askFrequency: 'no_cooldown', dailyCap: 2 });
-    expect(await service.check(q)).not.toBeNull();
-    clock.advanceHours(1);
-    expect(await service.check(q)).not.toBeNull();
-    clock.advanceHours(1);
-    expect(await service.check(q)).toBeNull(); // cap hit
-    clock.advanceHours(23); // first show now >24h old
-    expect(await service.check(q)).not.toBeNull();
-  });
-
-  it('no_cooldown debounce: immediate second call → null (M1-D6)', async () => {
-    await seedCampaign({ askFrequency: 'no_cooldown' });
-    expect(await service.check(q)).not.toBeNull();
-    expect(await service.check(q)).toBeNull();
   });
 
   it('THE RACE: two concurrent checks → exactly one config, one TriggerLog row (M1-D9)', async () => {

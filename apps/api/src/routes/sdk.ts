@@ -10,7 +10,6 @@ export function sdkRoutes(deps: {
   db: Db;
   clock: Clock;
   eligibility: EligibilityService;
-  noCooldownDebounceSeconds: number;
 }): FastifyPluginAsync {
   return async (app) => {
     app.get('/eligibility', async (request, reply) => {
@@ -56,9 +55,7 @@ export function sdkRoutes(deps: {
           error: { code: 'invalid_body', message: parsed.error.issues[0]?.message ?? 'invalid' },
         });
       }
-      const result = await recordDismiss(deps.db, deps.clock, parsed.data, {
-        noCooldownDebounceSeconds: deps.noCooldownDebounceSeconds,
-      });
+      const result = await recordDismiss(deps.db, deps.clock, parsed.data);
       if (result === 'unknown_trigger')
         return reply
           .code(404)

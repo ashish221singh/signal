@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const metricTypeSchema = z.enum(['CSAT', 'CES']);
 export const ratingTypeSchema = z.enum(['star', 'emoji', 'effort_scale']);
-export const askFrequencySchema = z.enum(['once_per_week', 'once_per_day', 'no_cooldown']);
+export const askFrequencySchema = z.enum(['after_7_days', 'after_30_days', 'after_60_days']);
 export const onPositiveActionSchema = z.enum(['none', 'play_store_review']);
 export const campaignStatusSchema = z.enum(['draft', 'active', 'paused']);
 export const triggerMechanismSchema = z.enum(['action', 'dwell']);

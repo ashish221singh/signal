@@ -11,8 +11,7 @@ export interface CachedCampaign {
   otherRequiresText: boolean;
   otherAllowsImage: boolean;
   onPositiveAction: 'none' | 'play_store_review';
-  askFrequency: 'once_per_week' | 'once_per_day' | 'no_cooldown';
-  dailyCap: number | null;
+  askFrequency: 'after_7_days' | 'after_30_days' | 'after_60_days';
   minTenureDays: number | null;
   createdAt: Date;
 }

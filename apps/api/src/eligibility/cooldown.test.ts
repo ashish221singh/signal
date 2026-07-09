@@ -2,17 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { cooldownEndsAt } from './cooldown.js';
 
 const now = new Date('2026-07-08T10:00:00Z');
-const HOUR = 3_600_000;
+const DAY = 86_400_000;
 
 describe('cooldownEndsAt', () => {
-  it('once_per_day = now + 24h (rolling, not calendar)', () => {
-    expect(cooldownEndsAt('once_per_day', now, 60).getTime()).toBe(now.getTime() + 24 * HOUR);
+  it('after_7_days = now + 7 days', () => {
+    expect(cooldownEndsAt('after_7_days', now).getTime()).toBe(now.getTime() + 7 * DAY);
   });
-  it('once_per_week = now + 168h', () => {
-    expect(cooldownEndsAt('once_per_week', now, 60).getTime()).toBe(now.getTime() + 168 * HOUR);
+  it('after_30_days = now + 30 days', () => {
+    expect(cooldownEndsAt('after_30_days', now).getTime()).toBe(now.getTime() + 30 * DAY);
   });
-  it('no_cooldown = now + debounce seconds (M1-D6)', () => {
-    expect(cooldownEndsAt('no_cooldown', now, 60).getTime()).toBe(now.getTime() + 60_000);
-    expect(cooldownEndsAt('no_cooldown', now, 2).getTime()).toBe(now.getTime() + 2_000);
+  it('after_60_days = now + 60 days', () => {
+    expect(cooldownEndsAt('after_60_days', now).getTime()).toBe(now.getTime() + 60 * DAY);
   });
 });

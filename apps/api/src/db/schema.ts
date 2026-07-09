@@ -23,9 +23,9 @@ export const metricTypeEnum = pgEnum('metric_type', ['CSAT', 'CES']);
 export const ratingTypeEnum = pgEnum('rating_type', ['star', 'emoji', 'effort_scale']);
 export const onPositiveActionEnum = pgEnum('on_positive_action', ['none', 'play_store_review']);
 export const askFrequencyEnum = pgEnum('ask_frequency', [
-  'once_per_week',
-  'once_per_day',
-  'no_cooldown',
+  'after_7_days',
+  'after_30_days',
+  'after_60_days',
 ]);
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused']);
 export const lastActionEnum = pgEnum('last_action', ['dismissed', 'submitted']);
@@ -57,7 +57,6 @@ export const campaigns = pgTable(
     otherAllowsImage: boolean('other_allows_image').notNull().default(false),
     onPositiveAction: onPositiveActionEnum('on_positive_action').notNull().default('none'),
     askFrequency: askFrequencyEnum('ask_frequency').notNull(),
-    dailyCap: integer('daily_cap'),
     minTenureDays: integer('min_tenure_days'),
     status: campaignStatusEnum('status').notNull().default('draft'),
     createdBy: text('created_by').notNull(),

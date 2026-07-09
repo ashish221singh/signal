@@ -1,5 +1,5 @@
 import type { EligibilityConfig } from '@signal/contracts';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { CampaignCache } from '../campaigns/cache.js';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
@@ -20,7 +20,6 @@ export class EligibilityService {
     private readonly db: Db,
     private readonly cache: CampaignCache,
     private readonly clock: Clock,
-    private readonly opts: { noCooldownDebounceSeconds: number },
   ) {}
 
   async check(input: EligibilityQueryInput): Promise<EligibilityConfig | null> {
@@ -39,38 +38,17 @@ export class EligibilityService {
         ),
       );
 
-    let showsInLast24h = 0;
-    if (campaign.dailyCap !== null) {
-      const windowStart = new Date(now.getTime() - 24 * 3_600_000);
-      const [row] = await this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(triggerLog)
-        .where(
-          and(
-            eq(triggerLog.campaignId, campaign.id),
-            eq(triggerLog.userId, input.userId),
-            gt(triggerLog.shownAt, windowStart),
-          ),
-        );
-      showsInLast24h = row?.count ?? 0;
-    }
-
     const decision = decide({
-      campaign: { minTenureDays: campaign.minTenureDays, dailyCap: campaign.dailyCap },
+      campaign: { minTenureDays: campaign.minTenureDays },
       suppression: suppression
         ? { nextEligibleAt: suppression.nextEligibleAt, lastAction: suppression.lastAction }
         : undefined,
       repTenureDays: input.repTenureDays,
-      showsInLast24h,
       now,
     });
     if (!decision.eligible) return null;
 
-    const nextEligibleAt = cooldownEndsAt(
-      campaign.askFrequency,
-      now,
-      this.opts.noCooldownDebounceSeconds,
-    );
+    const nextEligibleAt = cooldownEndsAt(campaign.askFrequency, now);
 
     return await this.db.transaction(async (tx) => {
       const claimed = await claimShow(

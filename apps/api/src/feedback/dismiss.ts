@@ -12,7 +12,6 @@ export async function recordDismiss(
   db: Db,
   clock: Clock,
   body: DismissBody,
-  opts: { noCooldownDebounceSeconds: number },
 ): Promise<DismissResult> {
   const [trigger] = await db.select().from(triggerLog).where(eq(triggerLog.id, body.trigger_id));
   if (!trigger) return 'unknown_trigger';
@@ -24,7 +23,7 @@ export async function recordDismiss(
     .update(suppressionState)
     .set({
       lastAction: 'dismissed',
-      nextEligibleAt: cooldownEndsAt(campaign.askFrequency, now, opts.noCooldownDebounceSeconds),
+      nextEligibleAt: cooldownEndsAt(campaign.askFrequency, now),
     })
     .where(
       and(

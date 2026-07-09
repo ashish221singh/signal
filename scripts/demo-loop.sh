@@ -7,9 +7,7 @@
 # for each passing step and `ALL SCENARIOS PASSED` at the end. On the first
 # mismatch it prints `❌ <label> (expected X got Y)` and exits non-zero.
 #
-# Requirements: bash, curl, jq. A freshly-seeded DB (re-run `seed` between runs)
-# and the server started with SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS=2 so the
-# no_cooldown debounce is 2s (needed for the daily-cap scenario).
+# Requirements: bash, curl, jq. A freshly-seeded DB (re-run `seed` between runs).
 #
 # Env:
 #   BASE  base URL of the API server (default http://localhost:3000)
@@ -127,7 +125,7 @@ dismiss_body_2="$(jq -nc \
 status="$(post_json "/v1/sdk/dismiss" "$dismiss_body_2")"
 expect_status 204 "$status" "8b. dismiss u_demo_2 trigger → 204"
 status="$(get_eligibility "screen_id=order_completion&user_id=u_demo_2&client_id=cl_A&rep_tenure_days=200")"
-expect_status 204 "$status" "8c. eligibility u_demo_2 after dismiss → 204 (weekly cooldown)"
+expect_status 204 "$status" "8c. eligibility u_demo_2 after dismiss → 204 (7-day cooldown)"
 
 # ── Scenario 9: validation (emoji bounds 1..3) ───────────────────────────────
 status="$(get_eligibility "screen_id=new_customer_creation&user_id=u_demo_3&client_id=cl_A&rep_tenure_days=200")"
@@ -163,17 +161,7 @@ expect_status 200 "$status" "10b. u_demo_4/cl_B tenure 120 → 200 (no suppressi
 status="$(get_eligibility "screen_id=new_customer_creation&user_id=u_demo_5&client_id=cl_B")"
 expect_status 204 "$status" "10c. u_demo_5/cl_B no tenure param → 204 (fail-closed)"
 
-# ── Scenario 11: daily cap (no_cooldown, cap 2, 2s debounce) ─────────────────
-status="$(get_eligibility "screen_id=goal_monitoring_page&user_id=u_demo_6&client_id=cl_A")"
-expect_status 200 "$status" "11a. u_demo_6/cl_A goal_monitoring_page → 200 (1st)"
-sleep 3
-status="$(get_eligibility "screen_id=goal_monitoring_page&user_id=u_demo_6&client_id=cl_A")"
-expect_status 200 "$status" "11b. u_demo_6/cl_A goal_monitoring_page → 200 (2nd)"
-sleep 3
-status="$(get_eligibility "screen_id=goal_monitoring_page&user_id=u_demo_6&client_id=cl_A")"
-expect_status 204 "$status" "11c. u_demo_6/cl_A goal_monitoring_page → 204 (daily_cap 2 reached)"
-
-# ── Scenario 12: race (two parallel eligibility calls) ───────────────────────
+# ── Scenario 11: race (two parallel eligibility calls) ───────────────────────
 race_q="screen_id=order_completion&user_id=u_demo_7&client_id=cl_A&rep_tenure_days=200"
 s_a="$TMPDIR_DEMO/race_a_status"; b_a="$TMPDIR_DEMO/race_a_body"
 s_b="$TMPDIR_DEMO/race_b_status"; b_b="$TMPDIR_DEMO/race_b_body"
@@ -194,9 +182,9 @@ if { [[ "$status_a" == "200" && "$status_b" == "204" ]] || \
   ok=1
 fi
 if [[ "$ok" == "1" ]]; then
-  echo "✅ 12. race u_demo_7 → exactly one 200 and one 204 (got $status_a / $status_b)"
+  echo "✅ 11. race u_demo_7 → exactly one 200 and one 204 (got $status_a / $status_b)"
 else
-  echo "❌ 12. race u_demo_7 (expected one 200 + one 204 got $status_a / $status_b)"
+  echo "❌ 11. race u_demo_7 (expected one 200 + one 204 got $status_a / $status_b)"
   exit 1
 fi
 

@@ -1,6 +1,7 @@
 # Signal — In-App CSAT/CES Feedback System
-### Product & Technical Spec — v1.1
+### Product & Technical Spec — v1.2
 
+> v1.2 (2026-07-09): cooldown options remodeled to after_7_days | after_30_days | after_60_days (replacing once_per_week | once_per_day | no_cooldown); daily_cap removed (a 7-day minimum makes a per-24h cap unreachable); the no-cooldown debounce is gone (the ≥7-day cooldown protects the double-trigger race for free).
 > v1.1 (2026-07-08): eligibility carries rep_tenure_days; trigger_id introduced as the response/dismiss idempotency key; one-active-campaign-per-(target,client) rule; ratings/thresholds normalized to integers.
 
 ---
@@ -110,13 +111,14 @@ prompt                + optional image attach
 
 ## 6. Suppression & Frequency Rules
 
-Per-campaign, not a single global rule (real-world variation confirmed from prior campaign planning: order-placement asks weekly with a cap of 1; new-customer asks daily with no cooldown for reps under 3 months tenure; end-of-day checkout asks weekly capped at 1/day/rep).
+Per-campaign, not a single global rule (real-world variation confirmed from prior campaign planning: a high-touch order-placement survey re-asks after 7 days; lower-frequency surveys re-ask after 30 or 60 days; some campaigns additionally gate to reps past a tenure threshold).
 
 ```
-Campaign.ask_frequency   = once_per_week | once_per_day | no_cooldown
-Campaign.daily_cap       = integer (optional)
+Campaign.ask_frequency   = after_7_days | after_30_days | after_60_days
 Campaign.min_tenure_days = integer (optional — gates campaign for new reps)
 ```
+
+Cooldowns are rolling windows measured from `last_shown_at`: `after_7_days` = 168h, `after_30_days` = 720h, `after_60_days` = 1440h. The minimum 7-day window also makes the double-trigger race harmless (a provisional suppression row is always ≥7 days out), so no separate debounce is needed.
 
 **Fixed behavioral rules (not campaign-configurable, always true):**
 - Dismissed → suppressed per `ask_frequency` cooldown, for that campaign specifically
@@ -155,8 +157,7 @@ Campaign
 - other_requires_text   (boolean, default true)
 - other_allows_image    (boolean)
 - on_positive_action    (none | play_store_review)
-- ask_frequency         (once_per_week | once_per_day | no_cooldown)
-- daily_cap             (int, optional)
+- ask_frequency         (after_7_days | after_30_days | after_60_days)
 - min_tenure_days       (int, optional)
 - status                (draft | active | paused)
 - created_by, created_at, updated_at

@@ -1,5 +1,5 @@
 {
-  "id": "af615843-b57f-409b-ae7c-b8e5cd90ab40",
+  "id": "4f962bf0-e39e-433c-b88a-f2de060fabfa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -93,12 +93,6 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
-        },
-        "daily_cap": {
-          "name": "daily_cap",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         },
         "min_tenure_days": {
           "name": "min_tenure_days",
@@ -592,7 +586,7 @@
     "public.ask_frequency": {
       "name": "ask_frequency",
       "schema": "public",
-      "values": ["once_per_week", "once_per_day", "no_cooldown"]
+      "values": ["after_7_days", "after_30_days", "after_60_days"]
     },
     "public.campaign_status": {
       "name": "campaign_status",

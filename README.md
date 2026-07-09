@@ -55,7 +55,7 @@ suppressed → correctly re-eligible or never again — against real Postgres:
 ```bash
 docker compose up -d
 pnpm --filter @signal/api db:migrate && pnpm --filter @signal/api seed
-SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS=2 pnpm --filter @signal/api dev &
+pnpm --filter @signal/api dev &
 ./scripts/demo-loop.sh   # prints ALL SCENARIOS PASSED
 ```
 

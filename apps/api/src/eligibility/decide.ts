@@ -1,10 +1,9 @@
 export interface DecisionInput {
-  campaign: { minTenureDays: number | null; dailyCap: number | null };
+  campaign: { minTenureDays: number | null };
   suppression:
     | { nextEligibleAt: Date | null; lastAction: 'dismissed' | 'submitted' | null }
     | undefined;
   repTenureDays: number | undefined;
-  showsInLast24h: number;
   now: Date;
 }
 
@@ -12,11 +11,11 @@ export type Decision =
   | { eligible: true }
   | {
       eligible: false;
-      reason: 'suppressed' | 'never_reask' | 'under_tenure' | 'tenure_unknown' | 'daily_cap';
+      reason: 'suppressed' | 'never_reask' | 'under_tenure' | 'tenure_unknown';
     };
 
 export function decide(input: DecisionInput): Decision {
-  const { campaign, suppression, repTenureDays, showsInLast24h, now } = input;
+  const { campaign, suppression, repTenureDays, now } = input;
 
   if (suppression) {
     if (suppression.nextEligibleAt === null) {
@@ -33,9 +32,6 @@ export function decide(input: DecisionInput): Decision {
     if (repTenureDays < campaign.minTenureDays) {
       return { eligible: false, reason: 'under_tenure' };
     }
-  }
-  if (campaign.dailyCap !== null && showsInLast24h >= campaign.dailyCap) {
-    return { eligible: false, reason: 'daily_cap' };
   }
 
   return { eligible: true };

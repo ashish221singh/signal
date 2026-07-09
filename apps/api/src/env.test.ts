@@ -41,14 +41,4 @@ describe('parseEnv', () => {
     const env = parseEnv({ SIGNAL_APP_KEYS: 'k1, k2' });
     expect(env.appKeys).toEqual(['k1', 'k2']);
   });
-
-  it('defaults SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS to 60', () => {
-    const env = parseEnv({});
-    expect(env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS).toBe(60);
-  });
-
-  it('coerces SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS from string', () => {
-    const env = parseEnv({ SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS: '120' });
-    expect(env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS).toBe(120);
-  });
 });

@@ -5,14 +5,13 @@ const now = new Date('2026-07-08T10:00:00Z');
 const past = new Date('2026-07-08T09:00:00Z');
 const future = new Date('2026-07-08T11:00:00Z');
 
-const campaign = { minTenureDays: null as number | null, dailyCap: null as number | null };
+const campaign = { minTenureDays: null as number | null };
 
 function input(overrides: Partial<DecisionInput>): DecisionInput {
   return {
     campaign,
     suppression: undefined,
     repTenureDays: undefined,
-    showsInLast24h: 0,
     now,
     ...overrides,
   };
@@ -75,19 +74,5 @@ describe('decide', () => {
   });
   it('no tenure gate + unknown tenure → eligible', () => {
     expect(decide(input({}))).toEqual({ eligible: true });
-  });
-  it('daily cap reached → not eligible', () => {
-    expect(decide(input({ campaign: { ...campaign, dailyCap: 2 }, showsInLast24h: 2 }))).toEqual({
-      eligible: false,
-      reason: 'daily_cap',
-    });
-  });
-  it('under daily cap → eligible', () => {
-    expect(decide(input({ campaign: { ...campaign, dailyCap: 2 }, showsInLast24h: 1 }))).toEqual({
-      eligible: true,
-    });
-  });
-  it('no daily cap → shows count ignored', () => {
-    expect(decide(input({ showsInLast24h: 500 }))).toEqual({ eligible: true });
   });
 });

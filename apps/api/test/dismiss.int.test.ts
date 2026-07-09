@@ -21,8 +21,6 @@ class FakeClock implements Clock {
   }
 }
 
-const DEBOUNCE = 60;
-
 describe('recordDismiss (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let clock: FakeClock;
@@ -41,7 +39,7 @@ describe('recordDismiss (real Postgres)', () => {
     clock = new FakeClock(new Date('2026-07-08T10:00:00Z'));
     cache = new CampaignCache(makeDbCampaignLoader(t.db));
     // Same clock instance flows into both the service and dismiss so "server now" is the fake time.
-    service = new EligibilityService(t.db, cache, clock, { noCooldownDebounceSeconds: DEBOUNCE });
+    service = new EligibilityService(t.db, cache, clock);
   });
 
   async function seedCampaign(overrides: Partial<typeof s.campaigns.$inferInsert> = {}) {
@@ -74,7 +72,7 @@ describe('recordDismiss (real Postgres)', () => {
         headerText: 'How was it?',
         positiveThreshold: 4,
         chipsOnNegative: ['Slow'],
-        askFrequency: 'once_per_week',
+        askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
         ...overrides,
@@ -116,15 +114,11 @@ describe('recordDismiss (real Postgres)', () => {
     const triggerId = await grantTrigger();
     const serverNow = clock.now();
 
-    expect(
-      await recordDismiss(t.db, clock, dismissBody(triggerId), {
-        noCooldownDebounceSeconds: DEBOUNCE,
-      }),
-    ).toBe('ok');
+    expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
     const row = await suppRow(campaign.id);
     expect(row.lastAction).toBe('dismissed');
-    // weekly campaign → +168h from server now.
+    // after_7_days campaign → +168h from server now.
     expect(row.nextEligibleAt).toEqual(new Date(serverNow.getTime() + 168 * 3_600_000));
 
     // Prove via the service: still suppressed at +167h, eligible at +169h.
@@ -139,19 +133,11 @@ describe('recordDismiss (real Postgres)', () => {
     const triggerId = await grantTrigger();
     const firstNow = clock.now();
 
-    expect(
-      await recordDismiss(t.db, clock, dismissBody(triggerId), {
-        noCooldownDebounceSeconds: DEBOUNCE,
-      }),
-    ).toBe('ok');
+    expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
     // Advance the clock before the second call.
     clock.advanceHours(3);
-    expect(
-      await recordDismiss(t.db, clock, dismissBody(triggerId), {
-        noCooldownDebounceSeconds: DEBOUNCE,
-      }),
-    ).toBe('ok');
+    expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
     const row = await suppRow(campaign.id);
     // Anchored to the FIRST dismiss (+168h), NOT the second (which would be +171h).
@@ -162,11 +148,7 @@ describe('recordDismiss (real Postgres)', () => {
   it('unknown trigger → unknown_trigger', async () => {
     await seedCampaign();
     const random = '00000000-0000-4000-8000-000000000000';
-    expect(
-      await recordDismiss(t.db, clock, dismissBody(random), {
-        noCooldownDebounceSeconds: DEBOUNCE,
-      }),
-    ).toBe('unknown_trigger');
+    expect(await recordDismiss(t.db, clock, dismissBody(random))).toBe('unknown_trigger');
   });
 
   it('submitted wins: dismiss after a recorded response is a no-op', async () => {
@@ -191,11 +173,7 @@ describe('recordDismiss (real Postgres)', () => {
 
     // Now dismiss the same trigger → returns 'ok' but matches no rows (guard: last_action IS NULL).
     clock.advanceHours(1);
-    expect(
-      await recordDismiss(t.db, clock, dismissBody(triggerId), {
-        noCooldownDebounceSeconds: DEBOUNCE,
-      }),
-    ).toBe('ok');
+    expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
     const after = await suppRow(campaign.id);
     expect(after.lastAction).toBe('submitted');

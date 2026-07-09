@@ -39,7 +39,7 @@ async function seedStarCampaign(db: Db) {
     headerText: 'How was it?',
     positiveThreshold: 4,
     chipsOnNegative: ['Slow'],
-    askFrequency: 'once_per_week',
+    askFrequency: 'after_7_days',
     status: 'active',
     createdBy: 'test',
   });
@@ -73,7 +73,7 @@ async function seedEmojiCampaign(db: Db) {
     headerText: 'Emoji?',
     positiveThreshold: 3,
     chipsOnNegative: ['Bad'],
-    askFrequency: 'no_cooldown',
+    askFrequency: 'after_7_days',
     status: 'active',
     createdBy: 'test',
   });

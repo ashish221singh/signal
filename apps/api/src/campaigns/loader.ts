@@ -24,7 +24,6 @@ export function makeDbCampaignLoader(db: Db): CampaignLoader {
       otherAllowsImage: c.otherAllowsImage,
       onPositiveAction: c.onPositiveAction,
       askFrequency: c.askFrequency,
-      dailyCap: c.dailyCap,
       minTenureDays: c.minTenureDays,
       createdAt: c.createdAt,
     }));

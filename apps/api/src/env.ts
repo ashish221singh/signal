@@ -9,7 +9,6 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.url().optional(),
   SIGNAL_APP_KEYS: z.string().optional(),
-  SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 export type Env = Omit<z.infer<typeof envSchema>, 'DATABASE_URL' | 'SIGNAL_APP_KEYS'> & {

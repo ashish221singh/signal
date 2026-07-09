@@ -192,7 +192,7 @@ Uploaded directly from the SDK to a **pre-signed URL** fetched from the backend;
 
 Weighted by what breaks the product. The two must-never-be-wrong behaviors: **eligibility logic** (false triggers are the exact bug the spec exists to avoid) and **suppression math** (re-asking a rep who said no destroys trust).
 
-- **Unit (Vitest):** every branch of eligibility + cooldown — tenure gates, daily caps, each `ask_frequency`, dismissed/submitted transitions, timezone edges around "once per day."
+- **Unit (Vitest):** every branch of eligibility + cooldown — tenure gates, each `ask_frequency` (after_7/30/60_days), dismissed/submitted transitions.
 - **Integration (Testcontainers):** real Fastify app against real Postgres, full loop: eligibility → trigger log → response → suppression updated → re-ask → 204.
 - **Contract tests come free:** backend and console compile against `packages/contracts`; the SDK's JSON parsing is tested against fixture files generated from those same Zod schemas — three codebases, one source of truth.
 - **SDK (JUnit + Robolectric):** dwell-timer cancellation, outbox retry/idempotency, each bottom-sheet state rendered from config fixtures.

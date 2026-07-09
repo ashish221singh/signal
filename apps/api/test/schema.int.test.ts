@@ -33,7 +33,7 @@ describe('schema', () => {
         headerText: 'How was it?',
         positiveThreshold: 4,
         chipsOnNegative: ['Slow'],
-        askFrequency: 'once_per_week',
+        askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
       })
@@ -73,7 +73,7 @@ describe('schema', () => {
         headerText: 'h',
         positiveThreshold: 4,
         chipsOnNegative: [],
-        askFrequency: 'no_cooldown',
+        askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
       })

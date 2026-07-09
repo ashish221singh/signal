@@ -91,7 +91,7 @@ async function main(): Promise<void> {
       .insert(schema.campaigns)
       .values([
         {
-          // Star / weekly — the flagship CSAT campaign with a play-store nudge.
+          // Star / 7-day cooldown — the flagship CSAT campaign with a play-store nudge.
           targetId: targetId('order_completion'),
           clientIds: ['cl_A', 'cl_B'],
           metricType: 'CSAT',
@@ -101,12 +101,12 @@ async function main(): Promise<void> {
           positiveThreshold: 4,
           chipsOnNegative: ['Slow to load', 'Items hard to find', 'Sync failed'],
           onPositiveAction: 'play_store_review',
-          askFrequency: 'once_per_week',
+          askFrequency: 'after_7_days',
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
         {
-          // Emoji / daily — occupies new_customer_creation x cl_A.
+          // Emoji / 7-day cooldown — occupies new_customer_creation x cl_A.
           targetId: targetId('new_customer_creation'),
           clientIds: ['cl_A'],
           metricType: 'CSAT',
@@ -115,12 +115,12 @@ async function main(): Promise<void> {
           headerText: 'How was creating this customer?',
           positiveThreshold: 3,
           chipsOnNegative: ['Confusing form', 'Missing fields', 'Too slow'],
-          askFrequency: 'once_per_day',
+          askFrequency: 'after_7_days',
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
         {
-          // Effort(3) / no_cooldown with a daily cap — CES on a dwell target.
+          // Effort(3) / 30-day cooldown — CES on a dwell target.
           targetId: targetId('goal_monitoring_page'),
           clientIds: ['cl_A'],
           metricType: 'CES',
@@ -129,13 +129,12 @@ async function main(): Promise<void> {
           headerText: 'How easy was reaching your goal view?',
           positiveThreshold: 2,
           chipsOnNegative: ['Hard to navigate', 'Data unclear', 'Took too long'],
-          askFrequency: 'no_cooldown',
-          dailyCap: 2,
+          askFrequency: 'after_30_days',
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
         {
-          // Star / weekly with a tenure gate — cl_B on new_customer_creation
+          // Star / 7-day cooldown with a tenure gate — cl_B on new_customer_creation
           // (cl_A is already taken there by the emoji campaign, so one active
           // campaign per (target, client) is respected).
           targetId: targetId('new_customer_creation'),
@@ -147,7 +146,7 @@ async function main(): Promise<void> {
           positiveThreshold: 4,
           chipsOnNegative: ['Slow to load', 'Items hard to find', 'Sync failed'],
           minTenureDays: 90,
-          askFrequency: 'once_per_week',
+          askFrequency: 'after_7_days',
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },

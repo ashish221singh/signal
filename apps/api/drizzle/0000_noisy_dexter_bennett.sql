@@ -1,4 +1,4 @@
-CREATE TYPE "public"."ask_frequency" AS ENUM('once_per_week', 'once_per_day', 'no_cooldown');--> statement-breakpoint
+CREATE TYPE "public"."ask_frequency" AS ENUM('after_7_days', 'after_30_days', 'after_60_days');--> statement-breakpoint
 CREATE TYPE "public"."campaign_status" AS ENUM('draft', 'active', 'paused');--> statement-breakpoint
 CREATE TYPE "public"."client_status" AS ENUM('active', 'inactive');--> statement-breakpoint
 CREATE TYPE "public"."integration_status" AS ENUM('not_sent', 'sent_to_engineering', 'confirmed_live');--> statement-breakpoint
@@ -21,7 +21,6 @@ CREATE TABLE "campaigns" (
 	"other_allows_image" boolean DEFAULT false NOT NULL,
 	"on_positive_action" "on_positive_action" DEFAULT 'none' NOT NULL,
 	"ask_frequency" "ask_frequency" NOT NULL,
-	"daily_cap" integer,
 	"min_tenure_days" integer,
 	"status" "campaign_status" DEFAULT 'draft' NOT NULL,
 	"created_by" text NOT NULL,

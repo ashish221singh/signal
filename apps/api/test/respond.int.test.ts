@@ -37,7 +37,7 @@ describe('recordResponse (real Postgres)', () => {
     await t.truncateAll();
     clock = new FakeClock(new Date('2026-07-08T10:00:00Z'));
     cache = new CampaignCache(makeDbCampaignLoader(t.db));
-    service = new EligibilityService(t.db, cache, clock, { noCooldownDebounceSeconds: 60 });
+    service = new EligibilityService(t.db, cache, clock);
   });
 
   async function seedCampaign(overrides: Partial<typeof s.campaigns.$inferInsert> = {}) {
@@ -70,7 +70,7 @@ describe('recordResponse (real Postgres)', () => {
         headerText: 'How was it?',
         positiveThreshold: 4,
         chipsOnNegative: ['Slow'],
-        askFrequency: 'once_per_week',
+        askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
         ...overrides,

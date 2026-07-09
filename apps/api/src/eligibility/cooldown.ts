@@ -3,19 +3,14 @@ import type { z } from 'zod';
 
 type AskFrequency = z.infer<typeof askFrequencySchema>;
 
-const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
 
-export function cooldownEndsAt(
-  frequency: AskFrequency,
-  from: Date,
-  noCooldownDebounceSeconds: number,
-): Date {
-  switch (frequency) {
-    case 'once_per_day':
-      return new Date(from.getTime() + 24 * HOUR_MS);
-    case 'once_per_week':
-      return new Date(from.getTime() + 168 * HOUR_MS);
-    case 'no_cooldown':
-      return new Date(from.getTime() + noCooldownDebounceSeconds * 1000);
-  }
+const COOLDOWN_DAYS: Record<AskFrequency, number> = {
+  after_7_days: 7,
+  after_30_days: 30,
+  after_60_days: 60,
+};
+
+export function cooldownEndsAt(frequency: AskFrequency, from: Date): Date {
+  return new Date(from.getTime() + COOLDOWN_DAYS[frequency] * DAY_MS);
 }

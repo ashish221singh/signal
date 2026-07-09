@@ -34,9 +34,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   await cache.refresh();
   cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'campaign cache refresh failed'));
 
-  const eligibility = new EligibilityService(resolvedDb, cache, clock, {
-    noCooldownDebounceSeconds: env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS,
-  });
+  const eligibility = new EligibilityService(resolvedDb, cache, clock);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     request.log.error(error);
@@ -63,7 +61,6 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
           db: resolvedDb,
           clock,
           eligibility,
-          noCooldownDebounceSeconds: env.SIGNAL_NO_COOLDOWN_DEBOUNCE_SECONDS,
         }),
       );
     },
