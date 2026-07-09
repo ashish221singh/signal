@@ -2,4 +2,7 @@
 <resources>
   <!-- Content description for the bottom-sheet close affordance. -->
   <string name="signal_close_content_description">Close</string>
+
+  <!-- Content description for a rating element: "Rate 4 of 5" (Task E.2). -->
+  <string name="signal_rate_n_of_m">Rate %1$d of %2$d</string>
 </resources>

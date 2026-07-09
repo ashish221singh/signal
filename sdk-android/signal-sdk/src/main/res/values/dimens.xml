@@ -29,4 +29,13 @@
 
   <!-- Minimum touch target -->
   <dimen name="signal_touch_target">48dp</dimen>
+
+  <!-- Rating widget (Task E.2) -->
+  <dimen name="signal_radius_emoji">15dp</dimen>   <!-- emoji tile corner -->
+  <dimen name="signal_radius_segment">12dp</dimen> <!-- effort segment corner -->
+  <dimen name="signal_rating_star">35dp</dimen>    <!-- star glyph size -->
+  <dimen name="signal_rating_emoji_tile">50dp</dimen>   <!-- emoji tile square -->
+  <dimen name="signal_rating_emoji_glyph">25sp</dimen>  <!-- emoji glyph size -->
+  <dimen name="signal_rating_segment_height">44dp</dimen> <!-- effort segment height -->
+  <dimen name="signal_rating_elevation">2dp</dimen> <!-- tile / segment shadow -->
 </resources>
