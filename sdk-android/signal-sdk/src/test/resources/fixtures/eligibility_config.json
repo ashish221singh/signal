@@ -1,0 +1,14 @@
+{
+  "trigger_id": "11111111-1111-4111-8111-111111111111",
+  "campaign_id": "22222222-2222-4222-8222-222222222222",
+  "metric_type": "CSAT",
+  "header": "How was your delivery?",
+  "rating_type": "star",
+  "rating_scale_max": 5,
+  "positive_threshold": 4,
+  "chips_on_negative": ["Too slow", "Wrong item"],
+  "other_requires_text": true,
+  "other_allows_image": true,
+  "on_positive_action": "play_store_review",
+  "skip_enabled": true
+}
