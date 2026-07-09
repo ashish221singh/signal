@@ -2,6 +2,7 @@ package com.beatroute.signal
 
 import android.content.Context
 import android.util.Log
+import com.beatroute.signal.internal.DwellTimer
 import com.beatroute.signal.internal.EligibilityClient
 import com.beatroute.signal.internal.FeedbackClient
 import com.beatroute.signal.internal.LocalSuppressionCache
@@ -66,6 +67,13 @@ object Signal {
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + handler)
 
+        // The lambda reads the `state` holder lazily; by the time a dwell delay
+        // elapses, `state` is assigned — so no circular-init dependency on the
+        // SignalState being built here.
+        val dwellTimer = DwellTimer(scope) { screenId ->
+            state?.let { runTrigger(it, screenId) }
+        }
+
         state = SignalState(
             applicationContext = appContext,
             baseUrl = baseUrl,
@@ -76,6 +84,7 @@ object Signal {
             sheetPresenter = NoOpSheetPresenter,
             feedbackClient = FeedbackClient(baseUrl, appKey),
             scope = scope,
+            dwellTimer = dwellTimer,
             clock = System::currentTimeMillis,
         )
     }
@@ -93,23 +102,21 @@ object Signal {
     }
 
     /**
-     * Screen-enter hook — starts dwell tracking for [screenId].
-     * No-op before [init]. Flow logic lands in Phase D.
+     * Screen-enter hook — starts dwell tracking for [screenId]. Dwelling past the
+     * threshold without leaving runs the shared trigger flow. No-op before [init].
      */
     fun onScreenEnter(screenId: String) {
-        @Suppress("UNUSED_VARIABLE")
-        val s = state ?: return
-        // Phase D: dwell timer start.
+        val s = state ?: return // no-op before init
+        s.dwellTimer.enter(screenId)
     }
 
     /**
-     * Screen-exit hook — stops dwell tracking for [screenId].
-     * No-op before [init]. Flow logic lands in Phase D.
+     * Screen-exit hook — stops dwell tracking for [screenId], cancelling the timer
+     * before it can fire. No-op before [init].
      */
     fun onScreenExit(screenId: String) {
-        @Suppress("UNUSED_VARIABLE")
-        val s = state ?: return
-        // Phase D: dwell timer stop + trigger evaluation.
+        val s = state ?: return // no-op before init
+        s.dwellTimer.exit(screenId)
     }
 
     /** Same-module visibility for tests: has the SDK been initialized? */

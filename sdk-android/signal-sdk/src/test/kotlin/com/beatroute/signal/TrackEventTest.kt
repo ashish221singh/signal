@@ -114,6 +114,7 @@ class TrackEventTest {
         session: SessionProvider = FakeSession(),
     ): SignalState {
         val ctx = RuntimeEnvironment.getApplication()
+        val scope = CoroutineScope(StandardTestDispatcher(scheduler))
         return SignalState(
             applicationContext = ctx,
             baseUrl = "http://localhost/".toHttpUrl(),
@@ -125,7 +126,8 @@ class TrackEventTest {
             feedbackClient = com.beatroute.signal.internal.FeedbackClient(
                 "http://localhost/".toHttpUrl(), "test-app-key",
             ),
-            scope = CoroutineScope(StandardTestDispatcher(scheduler)),
+            scope = scope,
+            dwellTimer = com.beatroute.signal.internal.DwellTimer(scope) { },
             clock = { fixedNow },
         )
     }
