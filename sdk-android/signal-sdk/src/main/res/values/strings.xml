@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Content description for the bottom-sheet close affordance. -->
+  <string name="signal_close_content_description">Close</string>
+</resources>

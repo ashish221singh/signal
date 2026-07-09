@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Signal bottom-sheet scaffold (Task E.1).
+  Drag handle + header row (title + close affordance) + state container that
+  later tasks (E.2+) inflate rating / positive / negative / other views into.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/signal_sheet_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/signal_bg"
+    android:paddingStart="@dimen/signal_space_4"
+    android:paddingEnd="@dimen/signal_space_4"
+    android:paddingBottom="@dimen/signal_space_4">
+
+    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+        android:id="@+id/signal_drag_handle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <!-- Header row: title on the left, close "x" affordance on the right. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:minHeight="@dimen/signal_space_10">
+
+        <TextView
+            android:id="@+id/signal_header"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="@dimen/signal_text_body"
+            android:textStyle="bold"
+            android:textColor="@color/signal_ink"
+            tools:ignore="UnusedAttribute"
+            xmlns:tools="http://schemas.android.com/tools" />
+
+        <ImageButton
+            android:id="@+id/signal_close"
+            android:layout_width="@dimen/signal_touch_target"
+            android:layout_height="@dimen/signal_touch_target"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/signal_close_content_description"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="@color/signal_ink_secondary" />
+    </LinearLayout>
+
+    <!-- State container: RATING / POSITIVE / NEGATIVE / OTHER content lands here. -->
+    <FrameLayout
+        android:id="@+id/signal_state_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/signal_touch_target" />
+</LinearLayout>

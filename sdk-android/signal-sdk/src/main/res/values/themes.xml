@@ -41,4 +41,17 @@
     <!-- drag-handle tint -->
     <item name="colorOnSurfaceVariant">@color/signal_ink_tertiary</item>
   </style>
+
+  <!-- ============================================================= -->
+  <!-- Dialog theme returned from SignalBottomSheetFragment.getTheme; -->
+  <!-- carries the Signal look via bottomSheetStyle + Signal colors.  -->
+  <!-- ============================================================= -->
+  <style name="Theme.Signal.BottomSheetDialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
+    <item name="colorPrimary">@color/signal_orange_500</item>
+    <item name="colorOnPrimary">@color/signal_action_ink</item>
+    <item name="colorSurface">@color/signal_bg</item>
+    <item name="colorOnSurface">@color/signal_ink</item>
+    <item name="colorOnSurfaceVariant">@color/signal_ink_tertiary</item>
+    <item name="bottomSheetStyle">@style/Widget.Signal.BottomSheet</item>
+  </style>
 </resources>
