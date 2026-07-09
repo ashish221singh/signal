@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { campaignOverviewSchema, dashboardSummarySchema } from '../index.js';
+import {
+  campaignOverviewSchema,
+  clientBreakdownSchema,
+  dashboardSummarySchema,
+  reasonsSchema,
+  responseFeedQuerySchema,
+  responseFeedSchema,
+  trendSchema,
+} from '../index.js';
 
 describe('campaignOverviewSchema', () => {
   const overview = {
@@ -86,6 +94,162 @@ describe('dashboardSummarySchema', () => {
       dashboardSummarySchema.safeParse({
         ...summary,
         attention: [{ campaign_id: cid, header: null, reason: 'nope' }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+const CID = '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e';
+
+describe('reasonsSchema', () => {
+  const reasons = {
+    campaign_id: CID,
+    total_chip_responses: 10,
+    chips: [
+      { chip: 'Too slow', count: 6, share: 0.6 },
+      { chip: 'Confusing', count: 4, share: 0.4 },
+    ],
+  };
+
+  it('parses a fully-populated reasons breakdown', () => {
+    expect(reasonsSchema.safeParse(reasons).success).toBe(true);
+  });
+
+  it('accepts an empty chips array with zero total', () => {
+    expect(
+      reasonsSchema.safeParse({ campaign_id: CID, total_chip_responses: 0, chips: [] }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a non-integer chip count', () => {
+    expect(
+      reasonsSchema.safeParse({
+        ...reasons,
+        chips: [{ chip: 'Too slow', count: 6.5, share: 0.6 }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('clientBreakdownSchema', () => {
+  const breakdown = {
+    campaign_id: CID,
+    clients: [
+      {
+        client_id: 'acme',
+        triggers: 20,
+        responses: 6,
+        response_rate: 0.3,
+        positive_score: 0.5,
+      },
+    ],
+  };
+
+  it('parses a fully-populated client breakdown', () => {
+    expect(clientBreakdownSchema.safeParse(breakdown).success).toBe(true);
+  });
+
+  it('accepts null rate/score (zero triggers/responses)', () => {
+    expect(
+      clientBreakdownSchema.safeParse({
+        campaign_id: CID,
+        clients: [
+          {
+            client_id: 'acme',
+            triggers: 0,
+            responses: 0,
+            response_rate: null,
+            positive_score: null,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a missing response_rate field', () => {
+    expect(
+      clientBreakdownSchema.safeParse({
+        campaign_id: CID,
+        clients: [{ client_id: 'acme', triggers: 20, responses: 6, positive_score: 0.5 }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('responseFeedSchema', () => {
+  const item = {
+    id: CID,
+    rating_value: 4,
+    chip_selected: 'Too slow',
+    other_text: null,
+    other_image_url: null,
+    location: { lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' },
+    client_id: 'acme',
+    device_os: 'android',
+    app_version: '1.2.3',
+    shown_at: '2026-07-08T10:00:00Z',
+    responded_at: '2026-07-08T10:00:05Z',
+  };
+  const feed = { items: [item], next_cursor: 'abc' };
+
+  it('parses a fully-populated feed page', () => {
+    expect(responseFeedSchema.safeParse(feed).success).toBe(true);
+  });
+
+  it('accepts null location / cursor / optional nullable fields', () => {
+    expect(
+      responseFeedSchema.safeParse({
+        items: [{ ...item, chip_selected: null, location: null }],
+        next_cursor: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a non-integer rating_value', () => {
+    expect(
+      responseFeedSchema.safeParse({ items: [{ ...item, rating_value: 4.5 }], next_cursor: null })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('responseFeedQuerySchema', () => {
+  it('coerces query strings and applies the default limit', () => {
+    const parsed = responseFeedQuerySchema.safeParse({ min_rating: '2', max_rating: '5' });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.min_rating).toBe(2);
+      expect(parsed.data.limit).toBe(50);
+    }
+  });
+
+  it('rejects an out-of-range rating', () => {
+    expect(responseFeedQuerySchema.safeParse({ min_rating: '6' }).success).toBe(false);
+  });
+
+  it('rejects a limit above the max', () => {
+    expect(responseFeedQuerySchema.safeParse({ limit: '201' }).success).toBe(false);
+  });
+});
+
+describe('trendSchema', () => {
+  const trend = {
+    campaign_id: CID,
+    points: [
+      { date: '2026-07-08', responses: 6, positive_score: 0.5 },
+      { date: '2026-07-09', responses: 0, positive_score: null },
+    ],
+  };
+
+  it('parses a fully-populated trend', () => {
+    expect(trendSchema.safeParse(trend).success).toBe(true);
+  });
+
+  it('rejects a non-integer responses count', () => {
+    expect(
+      trendSchema.safeParse({
+        campaign_id: CID,
+        points: [{ date: '2026-07-08', responses: 6.5, positive_score: 0.5 }],
       }).success,
     ).toBe(false);
   });

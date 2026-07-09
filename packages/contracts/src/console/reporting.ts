@@ -73,3 +73,104 @@ export const dashboardSummarySchema = z.object({
   campaigns: z.array(campaignHealthSchema),
 });
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>;
+
+/**
+ * GET /v1/console/campaigns/:id/reasons response shape (M4, Reasons tab).
+ * Aggregates chip selections for a campaign. `share` is `count /
+ * total_chip_responses`, and is `0` when `total_chip_responses` is 0.
+ */
+export const reasonsSchema = z.object({
+  campaign_id: z.uuid(),
+  total_chip_responses: z.int(),
+  chips: z.array(
+    z.object({
+      chip: z.string(),
+      count: z.int(),
+      share: z.number(), // count / total_chip_responses; 0 when total is 0
+    }),
+  ),
+});
+export type Reasons = z.infer<typeof reasonsSchema>;
+
+/**
+ * GET /v1/console/campaigns/:id/clients response shape (M4, Clients tab).
+ * Per-client engagement. Rates/scores stay null-safe (M2-D15):
+ * `response_rate` is null with zero triggers, `positive_score` with zero
+ * responses (or no positive_threshold).
+ */
+export const clientBreakdownSchema = z.object({
+  campaign_id: z.uuid(),
+  clients: z.array(
+    z.object({
+      client_id: z.string(),
+      triggers: z.int(),
+      responses: z.int(),
+      response_rate: z.number().nullable(),
+      positive_score: z.number().nullable(),
+    }),
+  ),
+});
+export type ClientBreakdown = z.infer<typeof clientBreakdownSchema>;
+
+/**
+ * One row of the Responses feed (M4, Responses tab). `location` is null when
+ * the response carried no geo; `chip_selected`, `other_text` and
+ * `other_image_url` are null when the corresponding input was not provided.
+ */
+export const responseFeedItemSchema = z.object({
+  id: z.uuid(),
+  rating_value: z.int(),
+  chip_selected: z.string().nullable(),
+  other_text: z.string().nullable(),
+  other_image_url: z.string().nullable(),
+  location: z
+    .object({
+      lat: z.number(),
+      lng: z.number(),
+      state: z.string().optional(),
+      country: z.string().optional(),
+    })
+    .nullable(),
+  client_id: z.string(),
+  device_os: z.string(),
+  app_version: z.string(),
+  shown_at: z.string(),
+  responded_at: z.string(),
+});
+export type ResponseFeedItem = z.infer<typeof responseFeedItemSchema>;
+
+/** GET /v1/console/campaigns/:id/responses response shape (cursor-paginated). */
+export const responseFeedSchema = z.object({
+  items: z.array(responseFeedItemSchema),
+  next_cursor: z.string().nullable(),
+});
+export type ResponseFeed = z.infer<typeof responseFeedSchema>;
+
+/**
+ * Query params for the Responses feed. Values arrive as query strings so they
+ * are coerced; `limit` defaults to 50 and is capped at 200.
+ */
+export const responseFeedQuerySchema = z.object({
+  min_rating: z.coerce.number().int().min(1).max(5).optional(),
+  max_rating: z.coerce.number().int().min(1).max(5).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type ResponseFeedQuery = z.infer<typeof responseFeedQuerySchema>;
+
+/**
+ * GET /v1/console/campaigns/:id/trend response shape (M4, 30-day trend).
+ * One point per UTC day; `positive_score` is null when a day had zero
+ * responses (or the campaign has no positive_threshold).
+ */
+export const trendSchema = z.object({
+  campaign_id: z.uuid(),
+  points: z.array(
+    z.object({
+      date: z.string(), // YYYY-MM-DD (UTC)
+      responses: z.int(),
+      positive_score: z.number().nullable(),
+    }),
+  ),
+});
+export type Trend = z.infer<typeof trendSchema>;
