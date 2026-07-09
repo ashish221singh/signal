@@ -1,4 +1,8 @@
-import { type Target, targetCreateSchema } from '@signal/contracts';
+import {
+  type Target,
+  targetCreateSchema,
+  targetIntegrationStatusUpdateSchema,
+} from '@signal/contracts';
 import { asc } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Db } from '../../db/client.js';
@@ -38,6 +42,29 @@ export function targetRoutes(deps: { db: Db }): FastifyPluginAsync {
         });
       }
       return reply.code(201).send(result.target);
+    });
+
+    // PATCH /:id/integration-status — transition integration_status (Task 15,
+    // M2-D17). 422 invalid_body on a bad body; 404 not_found; 422
+    // illegal_transition for a move not in the transition table; 200 otherwise.
+    app.patch<{ Params: { id: string } }>('/:id/integration-status', async (request, reply) => {
+      const parsed = targetIntegrationStatusUpdateSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(422)
+          .send({ error: { code: 'invalid_body', message: 'invalid integration status' } });
+      }
+      const result = await service.setIntegrationStatus(request.params.id, parsed.data.to);
+      if (result.ok) return reply.send(result.target);
+      if (result.reason === 'not_found') {
+        return reply.code(404).send({ error: { code: 'not_found', message: 'target not found' } });
+      }
+      return reply.code(422).send({
+        error: {
+          code: 'illegal_transition',
+          message: 'that integration-status transition is not allowed',
+        },
+      });
     });
 
     app.get('/', async () => {

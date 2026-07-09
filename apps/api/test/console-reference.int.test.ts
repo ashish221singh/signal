@@ -174,6 +174,155 @@ describe('/v1/console reference read routes (real Postgres)', () => {
     });
   });
 
+  describe('PATCH /v1/console/targets/:id/integration-status', () => {
+    // Seed one target at a known integration_status and return its id.
+    async function seedTargetAt(
+      db: Db,
+      integrationStatus: 'not_sent' | 'sent_to_engineering' | 'confirmed_live',
+    ): Promise<string> {
+      const [row] = await db
+        .insert(s.targetRegistry)
+        .values({
+          name: `Target ${integrationStatus}`,
+          screenId: `target_${integrationStatus}`,
+          triggerMechanism: 'action',
+          integrationStatus,
+        })
+        .returning();
+      if (!row) throw new Error('seed failed');
+      return row.id;
+    }
+
+    async function statusOf(db: Db, id: string): Promise<string | undefined> {
+      const rows = await db.select().from(s.targetRegistry);
+      return rows.find((r) => r.id === id)?.integrationStatus;
+    }
+
+    it('without a cookie → 401', async () => {
+      const id = await seedTargetAt(t.db, 'not_sent');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        payload: { to: 'sent_to_engineering' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('not_sent → sent_to_engineering → 200 and persists', async () => {
+      const id = await seedTargetAt(t.db, 'not_sent');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'sent_to_engineering' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(targetSchema.safeParse(body).success).toBe(true);
+      expect(body.integration_status).toBe('sent_to_engineering');
+      expect(await statusOf(t.db, id)).toBe('sent_to_engineering');
+    });
+
+    it('confirmed_live from any state → 200 (from not_sent)', async () => {
+      const id = await seedTargetAt(t.db, 'not_sent');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'confirmed_live' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().integration_status).toBe('confirmed_live');
+      expect(await statusOf(t.db, id)).toBe('confirmed_live');
+    });
+
+    it('confirmed_live from any state → 200 (from sent_to_engineering)', async () => {
+      const id = await seedTargetAt(t.db, 'sent_to_engineering');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'confirmed_live' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().integration_status).toBe('confirmed_live');
+    });
+
+    it('confirmed_live → confirmed_live is an idempotent no-op → 200 (any → confirmed_live, M2-D17)', async () => {
+      const id = await seedTargetAt(t.db, 'confirmed_live');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'confirmed_live' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().integration_status).toBe('confirmed_live');
+      expect(await statusOf(t.db, id)).toBe('confirmed_live');
+    });
+
+    it('illegal confirmed_live → not_sent → 422 illegal_transition, DB unchanged', async () => {
+      const id = await seedTargetAt(t.db, 'confirmed_live');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'not_sent' },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error.code).toBe('illegal_transition');
+      expect(await statusOf(t.db, id)).toBe('confirmed_live');
+    });
+
+    it('illegal sent_to_engineering → not_sent → 422 illegal_transition, DB unchanged', async () => {
+      const id = await seedTargetAt(t.db, 'sent_to_engineering');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'not_sent' },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error.code).toBe('illegal_transition');
+      expect(await statusOf(t.db, id)).toBe('sent_to_engineering');
+    });
+
+    it('same-state no-op not_sent → not_sent → 422 illegal_transition', async () => {
+      const id = await seedTargetAt(t.db, 'not_sent');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'not_sent' },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error.code).toBe('illegal_transition');
+    });
+
+    it('unknown target id → 404 not_found', async () => {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/v1/console/targets/3f0e6f2e-6f2e-4e2e-8e2e-000000000000/integration-status',
+        headers: { cookie: cookieHeader },
+        payload: { to: 'confirmed_live' },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe('not_found');
+    });
+
+    it('bad body (unknown status) → 422 invalid_body', async () => {
+      const id = await seedTargetAt(t.db, 'not_sent');
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/v1/console/targets/${id}/integration-status`,
+        headers: { cookie: cookieHeader },
+        payload: { to: 'bogus' },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error.code).toBe('invalid_body');
+    });
+  });
+
   describe('GET /v1/console/clients', () => {
     it('without a cookie → 401', async () => {
       const res = await app.inject({ method: 'GET', url: '/v1/console/clients' });

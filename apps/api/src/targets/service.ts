@@ -1,4 +1,5 @@
-import type { Target, TargetCreate } from '@signal/contracts';
+import type { IntegrationStatus, Target, TargetCreate } from '@signal/contracts';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { targetRegistry } from '../db/schema.js';
 import { slugify } from './slug.js';
@@ -26,6 +27,36 @@ function toTarget(r: TargetRow): Target {
 export type CreateTargetResult =
   | { ok: true; target: Target }
   | { ok: false; reason: 'slug_conflict' | 'invalid_body' };
+
+/**
+ * Discriminated outcome of `setIntegrationStatus` so the route maps to
+ * 200 / 404 / 422:
+ * - `not_found`: no target with that id.
+ * - `illegal_transition`: the `from → to` move is not in the M2-D17 table.
+ */
+export type SetIntegrationStatusResult =
+  | { ok: true; target: Target }
+  | { ok: false; reason: 'not_found' | 'illegal_transition' };
+
+/**
+ * Legal integration-status transitions (M2-D17). A move is legal iff `to` is
+ * listed under its `from`. Encoded as an explicit table (not scattered
+ * conditionals) so the rule reads at a glance:
+ * - `not_sent → sent_to_engineering` — the "mark as sent to engineering" action.
+ * - `* → confirmed_live` — manual confirm from ANY state (M2-D17), which makes a
+ *   `confirmed_live → confirmed_live` re-confirm an idempotent no-op (200).
+ * Everything else — the other same-state no-ops (`not_sent → not_sent`,
+ * `sent_to_engineering → sent_to_engineering`) and any backward move — is illegal.
+ */
+const LEGAL_TRANSITIONS: Record<IntegrationStatus, readonly IntegrationStatus[]> = {
+  not_sent: ['sent_to_engineering', 'confirmed_live'],
+  sent_to_engineering: ['confirmed_live'],
+  confirmed_live: ['confirmed_live'],
+};
+
+function isLegalTransition(from: IntegrationStatus, to: IntegrationStatus): boolean {
+  return LEGAL_TRANSITIONS[from].includes(to);
+}
 
 /**
  * Console-side target service (M2, Task 14). Backs the guarded
@@ -59,6 +90,36 @@ export class TargetService {
 
     if (!row) {
       return { ok: false, reason: 'slug_conflict' };
+    }
+    return { ok: true, target: toTarget(row) };
+  }
+
+  /**
+   * Transition a target's `integration_status` (Task 15, M2-D17). Loads the
+   * target (404 → `not_found`), validates the move against `LEGAL_TRANSITIONS`
+   * (illegal → `illegal_transition`, no write), then persists and returns the
+   * updated target. No `updatedAt` on `target_registry` — nothing else changes.
+   */
+  async setIntegrationStatus(
+    id: string,
+    to: IntegrationStatus,
+  ): Promise<SetIntegrationStatusResult> {
+    const [current] = await this.db.select().from(targetRegistry).where(eq(targetRegistry.id, id));
+    if (!current) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    if (!isLegalTransition(current.integrationStatus, to)) {
+      return { ok: false, reason: 'illegal_transition' };
+    }
+
+    const [row] = await this.db
+      .update(targetRegistry)
+      .set({ integrationStatus: to })
+      .where(eq(targetRegistry.id, id))
+      .returning();
+    if (!row) {
+      return { ok: false, reason: 'not_found' };
     }
     return { ok: true, target: toTarget(row) };
   }

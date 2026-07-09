@@ -32,3 +32,13 @@ export const targetCreateSchema = z.object({
   trigger_mechanism: triggerMechanismSchema,
 });
 export type TargetCreate = z.infer<typeof targetCreateSchema>;
+
+/**
+ * Integration-status transition body (M2, Task 15). The PM supplies only the
+ * desired target state; the legal-transition rule (M2-D17) is enforced
+ * server-side. Reuses `integrationStatusSchema` for the `to` value.
+ */
+export const targetIntegrationStatusUpdateSchema = z.object({
+  to: integrationStatusSchema,
+});
+export type TargetIntegrationStatusUpdate = z.infer<typeof targetIntegrationStatusUpdateSchema>;
