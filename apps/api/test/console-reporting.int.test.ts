@@ -4,6 +4,7 @@ import {
   clientBreakdownSchema,
   dashboardSummarySchema,
   reasonsSchema,
+  responseFeedSchema,
 } from '@signal/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
@@ -704,5 +705,185 @@ describe('GET /v1/console/campaigns/:id/clients (real Postgres)', () => {
     expect(zero.responses).toBe(0);
     expect(zero.response_rate).toBeNull(); // zero triggers → null (not 0)
     expect(zero.positive_score).toBeNull();
+  });
+});
+
+describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+
+  /** Insert a trigger + a response with a controlled respondedAt and optional extras. */
+  async function seedResponseAt(
+    db: Db,
+    campaignId: string,
+    ratingValue: number,
+    respondedAt: Date,
+    extra: Partial<typeof s.responses.$inferInsert> = {},
+  ): Promise<string> {
+    const triggerId = await seedTrigger(db, campaignId);
+    const [row] = await db
+      .insert(s.responses)
+      .values({
+        triggerId,
+        campaignId,
+        userId: 'u',
+        clientId: 'cl_A',
+        screenId: 'alpha',
+        ratingValue,
+        deviceOs: 'Android',
+        appVersion: '1',
+        shownAt: respondedAt,
+        respondedAt,
+        ...extra,
+      })
+      .returning();
+    if (!row) throw new Error('response seed returned no row');
+    return row.id;
+  }
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('without a cookie → 401', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/responses`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('unknown id → 404 campaign_not_found', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/responses`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('campaign_not_found');
+  });
+
+  it('a bad range (min_rating>5) → 422 invalid_query', async () => {
+    const id = await seedActiveCampaign(t.db);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses?min_rating=9`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('invalid_query');
+  });
+
+  it('returns all items newest-first with next_cursor null', async () => {
+    const id = await seedActiveCampaign(t.db);
+    // Ratings 1..5 at strictly increasing respondedAt so newest-first ordering
+    // is deterministic (rating 5 is newest).
+    const base = new Date('2026-07-01T00:00:00.000Z').getTime();
+    for (let r = 1; r <= 5; r++) {
+      await seedResponseAt(t.db, id, r, new Date(base + r * 60_000));
+    }
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(responseFeedSchema.safeParse(body).success).toBe(true);
+    expect(body.next_cursor).toBeNull();
+    expect(body.items.map((i: { rating_value: number }) => i.rating_value)).toEqual([
+      5, 4, 3, 2, 1,
+    ]);
+  });
+
+  it('filters by inclusive min_rating/max_rating', async () => {
+    const id = await seedActiveCampaign(t.db);
+    const base = new Date('2026-07-01T00:00:00.000Z').getTime();
+    for (let r = 1; r <= 5; r++) {
+      await seedResponseAt(t.db, id, r, new Date(base + r * 60_000));
+    }
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses?min_rating=1&max_rating=2`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.items.map((i: { rating_value: number }) => i.rating_value)).toEqual([2, 1]);
+  });
+
+  it('paginates via cursor with no overlap and continued ordering', async () => {
+    const id = await seedActiveCampaign(t.db);
+    const base = new Date('2026-07-01T00:00:00.000Z').getTime();
+    for (let r = 1; r <= 5; r++) {
+      await seedResponseAt(t.db, id, r, new Date(base + r * 60_000));
+    }
+
+    const first = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses?limit=2`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(first.statusCode).toBe(200);
+    const page1 = first.json();
+    expect(page1.items).toHaveLength(2);
+    expect(page1.items.map((i: { rating_value: number }) => i.rating_value)).toEqual([5, 4]);
+    expect(page1.next_cursor).not.toBeNull();
+
+    const second = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses?limit=2&cursor=${encodeURIComponent(page1.next_cursor)}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(second.statusCode).toBe(200);
+    const page2 = second.json();
+    expect(page2.items.map((i: { rating_value: number }) => i.rating_value)).toEqual([3, 2]);
+
+    // No overlap between pages, ids continue in order.
+    const ids1 = page1.items.map((i: { id: string }) => i.id);
+    const ids2 = page2.items.map((i: { id: string }) => i.id);
+    expect(ids1.some((x: string) => ids2.includes(x))).toBe(false);
+  });
+
+  it('surfaces chip/other/location/client fields on an item', async () => {
+    const id = await seedActiveCampaign(t.db);
+    await seedResponseAt(t.db, id, 3, new Date('2026-07-01T00:00:00.000Z'), {
+      chipSelected: 'slow',
+      otherText: 'it was laggy',
+      otherImageUrl: 'https://cdn.example/x.jpg',
+      location: { lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' },
+      clientId: 'cl_A',
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/responses`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(responseFeedSchema.safeParse(body).success).toBe(true);
+    const [item] = body.items;
+    expect(item.chip_selected).toBe('slow');
+    expect(item.other_text).toBe('it was laggy');
+    expect(item.other_image_url).toBe('https://cdn.example/x.jpg');
+    expect(item.location).toEqual({ lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' });
+    expect(item.client_id).toBe('cl_A');
   });
 });

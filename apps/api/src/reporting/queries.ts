@@ -5,8 +5,9 @@ import type {
   ClientBreakdown,
   DashboardSummary,
   Reasons,
+  ResponseFeedItem,
 } from '@signal/contracts';
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { campaigns, responses, targetRegistry, triggerLog } from '../db/schema.js';
 
@@ -191,6 +192,88 @@ export async function campaignClientBreakdown(
   }
 
   return { campaign_id: campaignId, clients };
+}
+
+/**
+ * Cursor codec for the Responses feed (M4, Task 4). A cursor packs the last
+ * item's `(responded_at, id)` tuple so the next page can resume with a strict
+ * `<` tuple comparison — stable even when several responses share a timestamp.
+ */
+function encodeCursor(respondedAt: Date, id: string): string {
+  return Buffer.from(`${respondedAt.toISOString()}|${id}`).toString('base64url');
+}
+function decodeCursor(c: string): { ts: Date; id: string } | null {
+  try {
+    const [ts, id] = Buffer.from(c, 'base64url').toString().split('|');
+    if (!ts || !id) return null;
+    return { ts: new Date(ts), id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Responses drill-down feed (M4, Task 4). Cursor-paginated, newest-first
+ * (`responded_at desc, id desc`), optionally filtered by an inclusive
+ * `min_rating`/`max_rating` band. Returns `null` if the campaign does not exist
+ * (the route turns that into a 404, M4-D12).
+ *
+ * Pagination (M4-D4): we over-fetch `limit + 1` rows; if the extra row exists,
+ * the last item of the page is encoded into `next_cursor`. The cursor resumes
+ * via a tuple comparison `(responded_at, id) < (ts, id)`, so pages never
+ * overlap even when timestamps collide. Timestamps are bound as ISO strings
+ * cast to `::timestamptz` because postgres.js can't bind a raw `Date` inside a
+ * `sql` fragment.
+ */
+export async function campaignResponses(
+  db: Db,
+  campaignId: string,
+  opts: { minRating?: number; maxRating?: number; cursor?: string; limit: number },
+): Promise<{ items: ResponseFeedItem[]; next_cursor: string | null } | null> {
+  const [campaign] = await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId));
+  if (!campaign) return null;
+
+  const conds = [eq(responses.campaignId, campaignId)];
+  if (opts.minRating !== undefined) conds.push(gte(responses.ratingValue, opts.minRating));
+  if (opts.maxRating !== undefined) conds.push(lte(responses.ratingValue, opts.maxRating));
+
+  const cur = opts.cursor ? decodeCursor(opts.cursor) : null;
+  if (cur) {
+    conds.push(
+      sql`(${responses.respondedAt}, ${responses.id}) < (${cur.ts.toISOString()}::timestamptz, ${cur.id}::uuid)`,
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(responses)
+    .where(and(...conds))
+    .orderBy(desc(responses.respondedAt), desc(responses.id))
+    .limit(opts.limit + 1);
+
+  const page = rows.slice(0, opts.limit);
+  const last = page[page.length - 1];
+  const next = rows.length > opts.limit && last ? encodeCursor(last.respondedAt, last.id) : null;
+
+  return {
+    items: page.map((r) => ({
+      id: r.id,
+      rating_value: r.ratingValue,
+      chip_selected: r.chipSelected,
+      other_text: r.otherText,
+      other_image_url: r.otherImageUrl,
+      location: r.location,
+      client_id: r.clientId,
+      device_os: r.deviceOs,
+      app_version: r.appVersion,
+      shown_at: r.shownAt.toISOString(),
+      responded_at: r.respondedAt.toISOString(),
+    })),
+    next_cursor: next,
+  };
 }
 
 /**

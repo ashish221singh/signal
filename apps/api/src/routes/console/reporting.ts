@@ -1,3 +1,4 @@
+import { responseFeedQuerySchema } from '@signal/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import { type Clock, systemClock } from '../../clock.js';
 import type { Db } from '../../db/client.js';
@@ -5,6 +6,7 @@ import {
   campaignClientBreakdown,
   campaignOverview,
   campaignReasons,
+  campaignResponses,
   dashboardSummary,
 } from '../../reporting/queries.js';
 
@@ -56,6 +58,30 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
           .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
       }
       return reply.send(breakdown);
+    });
+
+    // GET /campaigns/:id/responses — cursor-paginated, newest-first response
+    // drill-down for the Responses tab (M4, Task 4), filterable by an inclusive
+    // score band. Bad query → 422 invalid_query; unknown campaign → 404 (M4-D12).
+    app.get<{ Params: { id: string } }>('/campaigns/:id/responses', async (request, reply) => {
+      const parsed = responseFeedQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(422).send({
+          error: { code: 'invalid_query', message: parsed.error.issues[0]?.message ?? 'invalid' },
+        });
+      }
+      const feed = await campaignResponses(deps.db, request.params.id, {
+        minRating: parsed.data.min_rating,
+        maxRating: parsed.data.max_rating,
+        cursor: parsed.data.cursor,
+        limit: parsed.data.limit,
+      });
+      if (!feed) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
+      }
+      return reply.send(feed);
     });
 
     // GET /dashboard — the console landing summary. KPIs over active campaigns
