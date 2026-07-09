@@ -1,18 +1,24 @@
 package com.beatroute.signal.ui
 
+import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
+import androidx.core.widget.doAfterTextChanged
 import com.beatroute.signal.R
 import com.beatroute.signal.databinding.SignalSheetBinding
 import com.beatroute.signal.internal.EligibilityConfig
 import com.beatroute.signal.internal.ResponseBody
 import com.beatroute.signal.internal.SignalJson
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 
 /**
  * The Signal feedback bottom sheet (Task E.1 scaffold).
@@ -48,8 +54,26 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
      */
     internal var onSubmit: ((ResponseBody) -> Unit)? = null
 
-    /** Invoked when the sheet is dismissed without submitting (wired fully in E.4). */
+    /** Invoked when the sheet is dismissed without submitting (drag / scrim / back / close). */
     internal var onDismiss: (() -> Unit)? = null
+
+    /**
+     * Invoked when the user taps "Add photo" in the OTHER sub-branch. Phase F wires
+     * this to the real image picker / downscale / upload flow; here it is a stub so
+     * the affordance is functional and testable without the picker existing yet.
+     */
+    internal var onPickImage: (() -> Unit)? = null
+
+    /**
+     * The score that routed the flow into the NEGATIVE branch, captured when
+     * [onRatingSelected] fires below the positive threshold. Reused when the user
+     * submits a chip or free-text so the assembled [ResponseBody] carries the
+     * original rating.
+     */
+    private var negativeScore: Int = 0
+
+    /** Guards [onDismiss] so it fires at most once even if multiple paths race. */
+    private var dismissFired: Boolean = false
 
     /**
      * When the sheet was shown, used as [ResponseBody.shownAt]. A real monotonic /
@@ -86,7 +110,12 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
 
         shownAtMillis = System.currentTimeMillis()
         binding.signalHeader.text = config.header
-        binding.signalClose.setOnClickListener { dismissAllowingStateLoss() }
+        // The close "x" is a user-driven dismiss (not a submit): fire onDismiss
+        // exactly once, then dismiss. Guarded so submit paths never route here.
+        binding.signalClose.setOnClickListener {
+            fireDismissOnce()
+            dismissAllowingStateLoss()
+        }
 
         render(State.RATING)
     }
@@ -127,9 +156,81 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
                 container.addView(view)
             }
 
-            // NEGATIVE / OTHER: Task E.4 inflates the concrete content here.
-            State.NEGATIVE, State.OTHER -> Unit
+            State.NEGATIVE -> renderNegative(container, config)
+
+            State.OTHER -> renderOther(container, config)
         }
+    }
+
+    /**
+     * NEGATIVE branch: one single-select chip per [EligibilityConfig.chipsOnNegative],
+     * an "Other" affordance that routes to the OTHER sub-branch, and a Submit button
+     * that assembles a chip response (or a null chip if none was selected) and
+     * dismisses without firing the dismiss callback.
+     */
+    private fun renderNegative(container: ViewGroup, config: EligibilityConfig) {
+        val view = layoutInflater.inflate(R.layout.signal_state_negative, container, false)
+        val chips = view.findViewById<ChipGroup>(R.id.signal_negative_chips)
+        // Wrap the context in the Signal chip style so each Chip inflates with the
+        // pill look (bg/text/stroke selectors) without a per-view style attr.
+        val chipContext = ContextThemeWrapper(chips.context, R.style.Widget_Signal_Chip)
+        config.chipsOnNegative.forEach { label ->
+            val chip = Chip(chipContext).apply {
+                text = label
+                isCheckable = true
+            }
+            chips.addView(chip)
+        }
+
+        view.findViewById<Button>(R.id.signal_negative_other).setOnClickListener {
+            render(State.OTHER)
+        }
+
+        view.findViewById<Button>(R.id.signal_negative_submit).setOnClickListener {
+            val checkedId = chips.checkedChipId
+            val chipText = if (checkedId != View.NO_ID) {
+                chips.findViewById<Chip>(checkedId)?.text?.toString()
+            } else {
+                null
+            }
+            onSubmit?.invoke(assembleResponse(negativeScore, chip = chipText, text = null))
+            dismissAllowingStateLoss()
+        }
+
+        container.addView(view)
+    }
+
+    /**
+     * OTHER sub-branch: a free-text field, an "Add photo" affordance shown only when
+     * [EligibilityConfig.otherAllowsImage], and a Submit button. When
+     * [EligibilityConfig.otherRequiresText] the Submit button stays disabled until
+     * the text is non-empty. Submit assembles a free-text response and dismisses
+     * without firing the dismiss callback.
+     */
+    private fun renderOther(container: ViewGroup, config: EligibilityConfig) {
+        val view = layoutInflater.inflate(R.layout.signal_state_other, container, false)
+        val text = view.findViewById<EditText>(R.id.signal_other_text)
+        val submit = view.findViewById<Button>(R.id.signal_other_submit)
+        val addPhoto = view.findViewById<Button>(R.id.signal_add_photo)
+
+        addPhoto.visibility = if (config.otherAllowsImage) View.VISIBLE else View.GONE
+        addPhoto.setOnClickListener { onPickImage?.invoke() }
+
+        if (config.otherRequiresText) {
+            submit.isEnabled = !text.text.isNullOrBlank()
+            text.doAfterTextChanged { editable ->
+                submit.isEnabled = !editable.isNullOrBlank()
+            }
+        }
+
+        submit.setOnClickListener {
+            onSubmit?.invoke(
+                assembleResponse(negativeScore, chip = null, text = text.text?.toString()),
+            )
+            dismissAllowingStateLoss()
+        }
+
+        container.addView(view)
     }
 
     /**
@@ -144,7 +245,8 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
             render(State.POSITIVE)
             onSubmit?.invoke(assembleResponse(score, chip = null, text = null))
         } else {
-            // Task E.4 completes the NEGATIVE content; keep this non-crashing.
+            // Remember the score so a chip/free-text submit carries the original rating.
+            negativeScore = score
             render(State.NEGATIVE)
         }
     }
@@ -181,6 +283,24 @@ internal class SignalBottomSheetFragment : BottomSheetDialogFragment() {
             Uri.parse("market://details?id=" + requireContext().packageName),
         ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         startActivity(intent)
+    }
+
+    /**
+     * Covers every user-driven, non-submit dismissal that routes through the dialog:
+     * drag-to-dismiss, scrim tap, and the system back button all reach [onCancel].
+     * A submit-driven [dismissAllowingStateLoss] does NOT call [onCancel], so
+     * `onSubmit` and `onDismiss` never both fire for one interaction.
+     */
+    override fun onCancel(dialog: DialogInterface) {
+        fireDismissOnce()
+        super.onCancel(dialog)
+    }
+
+    /** Invoke [onDismiss] at most once across all dismiss paths (close / cancel). */
+    private fun fireDismissOnce() {
+        if (dismissFired) return
+        dismissFired = true
+        onDismiss?.invoke()
     }
 
     private fun decodeConfig(): EligibilityConfig? {

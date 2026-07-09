@@ -11,4 +11,5 @@
   <dimen name="signal_text_sm">13sp</dimen>
   <dimen name="signal_text_caption">12sp</dimen>
   <dimen name="signal_text_overline">11sp</dimen>
+  <dimen name="signal_text_chip">11.5sp</dimen> <!-- negative-branch chip (Task E.4) -->
 </resources>

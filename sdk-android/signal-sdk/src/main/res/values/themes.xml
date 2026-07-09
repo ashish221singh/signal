@@ -43,6 +43,21 @@
   </style>
 
   <!-- ============================================================= -->
+  <!-- Negative-branch chip (Task E.4): single-select pill, white bg + -->
+  <!-- subtle ring by default; orange fill + ring + ink when checked.  -->
+  <!-- ============================================================= -->
+  <style name="Widget.Signal.Chip" parent="Widget.Material3.Chip.Filter">
+    <item name="chipBackgroundColor">@color/signal_chip_bg</item>
+    <item name="android:textColor">@color/signal_chip_text</item>
+    <item name="chipStrokeColor">@color/signal_chip_stroke</item>
+    <item name="chipStrokeWidth">@dimen/signal_chip_stroke</item>
+    <item name="chipCornerRadius">@dimen/signal_radius_chip</item>
+    <item name="android:textSize">@dimen/signal_text_chip</item>
+    <item name="checkedIconEnabled">false</item>
+    <item name="chipMinHeight">@dimen/signal_chip_min_height</item>
+  </style>
+
+  <!-- ============================================================= -->
   <!-- Dialog theme returned from SignalBottomSheetFragment.getTheme; -->
   <!-- carries the Signal look via bottomSheetStyle + Signal colors.  -->
   <!-- ============================================================= -->

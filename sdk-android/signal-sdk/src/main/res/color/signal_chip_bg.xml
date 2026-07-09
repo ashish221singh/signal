@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chip background tint (Task E.4). Selected chips fill with signal_orange_50;
+  the default state is the plain sheet background (white).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/signal_orange_50" android:state_checked="true" />
+    <item android:color="@color/signal_bg" />
+</selector>

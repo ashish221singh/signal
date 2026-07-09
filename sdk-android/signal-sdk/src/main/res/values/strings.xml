@@ -9,4 +9,11 @@
   <!-- POSITIVE state (Task E.3): thank-you message + optional Play Store prompt. -->
   <string name="signal_positive_thanks">Thanks for the feedback!</string>
   <string name="signal_positive_rate_us">Rate us</string>
+
+  <!-- NEGATIVE state (Task E.4): chips, Other sub-branch, submit, add photo. -->
+  <string name="signal_negative_prompt">What went wrong?</string>
+  <string name="signal_negative_other">Other</string>
+  <string name="signal_submit">Submit</string>
+  <string name="signal_other_hint">Tell us more</string>
+  <string name="signal_add_photo">Add photo</string>
 </resources>

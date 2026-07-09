@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chip stroke/ring color (Task E.4). Selected chips get a signal_orange_400 ring;
+  default chips get a subtle line so the pill reads against the white sheet.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/signal_orange_400" android:state_checked="true" />
+    <item android:color="@color/signal_line" />
+</selector>

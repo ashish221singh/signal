@@ -2,13 +2,17 @@ package com.beatroute.signal.ui
 
 import android.content.Intent
 import android.os.Looper.getMainLooper
+import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.beatroute.signal.R
 import com.beatroute.signal.internal.ResponseBody
 import com.google.android.material.bottomsheet.BottomSheetDragHandleView
+import com.google.android.material.chip.ChipGroup
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -63,7 +67,12 @@ class SheetScaffoldTest {
     private fun configJson(
         onPositiveAction: String = "play_store_review",
         positiveThreshold: Int = 4,
-    ): String = """
+        chipsOnNegative: List<String> = listOf("Too slow", "Wrong item"),
+        otherRequiresText: Boolean = true,
+        otherAllowsImage: Boolean = true,
+    ): String {
+        val chips = chipsOnNegative.joinToString(", ") { "\"$it\"" }
+        return """
         {
           "trigger_id": "11111111-1111-4111-8111-111111111111",
           "campaign_id": "22222222-2222-4222-8222-222222222222",
@@ -72,13 +81,14 @@ class SheetScaffoldTest {
           "rating_type": "star",
           "rating_scale_max": 5,
           "positive_threshold": $positiveThreshold,
-          "chips_on_negative": ["Too slow", "Wrong item"],
-          "other_requires_text": true,
-          "other_allows_image": true,
+          "chips_on_negative": [$chips],
+          "other_requires_text": $otherRequiresText,
+          "other_allows_image": $otherAllowsImage,
           "on_positive_action": "$onPositiveAction",
           "skip_enabled": true
         }
     """.trimIndent()
+    }
 
     private fun showFragment(json: String = configJson): SignalBottomSheetFragment {
         val activity = Robolectric.buildActivity(HostActivity::class.java)
@@ -180,5 +190,119 @@ class SheetScaffoldTest {
         assertEquals(5, body.ratingValue)
         assertNull(body.chipSelected)
         assertNull(body.otherText)
+    }
+
+    // --- E.4: NEGATIVE branch ------------------------------------------------
+
+    @Test
+    fun `negative score transitions to NEGATIVE and renders one chip per config entry`() {
+        val fragment = showFragment(
+            configJson(chipsOnNegative = listOf("Too slow", "Wrong item")),
+        )
+
+        // Score 2 (< threshold 4) branches into NEGATIVE.
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+
+        assertEquals(SignalBottomSheetFragment.State.NEGATIVE, fragment.currentState)
+        val chips = fragment.dialog?.findViewById<ChipGroup>(R.id.signal_negative_chips)
+        assertNotNull("chip group should be inflated", chips)
+        assertEquals("one chip per config entry", 2, chips!!.childCount)
+    }
+
+    @Test
+    fun `selecting a chip then submitting enqueues chip and negative rating`() {
+        val fragment = showFragment(
+            configJson(chipsOnNegative = listOf("Too slow", "Wrong item")),
+        )
+        val submitted = mutableListOf<ResponseBody>()
+        fragment.onSubmit = { submitted.add(it) }
+
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+
+        val chips = fragment.dialog!!.findViewById<ChipGroup>(R.id.signal_negative_chips)
+        // Select the first chip ("Too slow").
+        chips.getChildAt(0).performClick()
+        shadowOf(getMainLooper()).idle()
+
+        val submit = fragment.dialog!!.findViewById<Button>(R.id.signal_negative_submit)
+        submit.performClick()
+        shadowOf(getMainLooper()).idle()
+
+        assertEquals("onSubmit should fire exactly once", 1, submitted.size)
+        val body = submitted.single()
+        assertEquals("Too slow", body.chipSelected)
+        assertEquals(2, body.ratingValue)
+        assertNull(body.otherText)
+    }
+
+    @Test
+    fun `Other sub-branch shows text field and gates submit on non-empty text`() {
+        val fragment = showFragment(configJson(otherRequiresText = true))
+
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+
+        val other = fragment.dialog!!.findViewById<Button>(R.id.signal_negative_other)
+        other.performClick()
+        shadowOf(getMainLooper()).idle()
+
+        assertEquals(SignalBottomSheetFragment.State.OTHER, fragment.currentState)
+        val text = fragment.dialog!!.findViewById<EditText>(R.id.signal_other_text)
+        assertNotNull("text field should be present", text)
+
+        val submit = fragment.dialog!!.findViewById<Button>(R.id.signal_other_submit)
+        assertFalse("submit disabled until text is entered", submit.isEnabled)
+
+        text.setText("too slow")
+        shadowOf(getMainLooper()).idle()
+        assertTrue("submit enabled once text is non-empty", submit.isEnabled)
+    }
+
+    @Test
+    fun `add photo affordance visibility follows other_allows_image and fires pick callback`() {
+        // Visible + tappable when other_allows_image = true.
+        val fragment = showFragment(configJson(otherAllowsImage = true))
+        var picked = false
+        fragment.onPickImage = { picked = true }
+
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+        fragment.dialog!!.findViewById<Button>(R.id.signal_negative_other).performClick()
+        shadowOf(getMainLooper()).idle()
+
+        val addPhoto = fragment.dialog!!.findViewById<Button>(R.id.signal_add_photo)
+        assertEquals("add photo visible when images allowed", View.VISIBLE, addPhoto.visibility)
+        addPhoto.performClick()
+        shadowOf(getMainLooper()).idle()
+        assertTrue("tapping add photo fires the pick callback", picked)
+
+        // GONE when other_allows_image = false.
+        val hiddenFragment = showFragment(configJson(otherAllowsImage = false))
+        hiddenFragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+        hiddenFragment.dialog!!.findViewById<Button>(R.id.signal_negative_other).performClick()
+        shadowOf(getMainLooper()).idle()
+        val hiddenAddPhoto = hiddenFragment.dialog!!.findViewById<Button>(R.id.signal_add_photo)
+        assertEquals("add photo gone when images disallowed", View.GONE, hiddenAddPhoto.visibility)
+    }
+
+    @Test
+    fun `cancelling the sheet fires onDismiss once and never onSubmit`() {
+        val fragment = showFragment(configJson(positiveThreshold = 4))
+        var dismissCount = 0
+        var submitCount = 0
+        fragment.onDismiss = { dismissCount++ }
+        fragment.onSubmit = { submitCount++ }
+
+        // Drive into NEGATIVE, then cancel (drag-dismiss / scrim / back).
+        fragment.onRatingSelected(2)
+        shadowOf(getMainLooper()).idle()
+        fragment.onCancel(fragment.requireDialog())
+        shadowOf(getMainLooper()).idle()
+
+        assertEquals("onDismiss fires exactly once on cancel", 1, dismissCount)
+        assertEquals("onSubmit never fires on a cancel path", 0, submitCount)
     }
 }
