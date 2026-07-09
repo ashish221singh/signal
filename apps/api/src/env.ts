@@ -3,6 +3,12 @@ import { z } from 'zod';
 const DEV_DATABASE_URL = 'postgresql://signal:signal_local_dev@localhost:5433/signal';
 const DEV_APP_KEYS = 'dev-app-key';
 const DEV_SESSION_SECRET = 'dev-session-secret-not-for-prod';
+const DEV_S3_ENDPOINT = 'http://localhost:9000';
+const DEV_S3_REGION = 'us-east-1';
+const DEV_S3_BUCKET = 'signal-feedback-images';
+const DEV_S3_ACCESS_KEY = 'signal';
+const DEV_S3_SECRET_KEY = 'signal_local_dev';
+const DEV_S3_PUBLIC_URL = 'http://localhost:9000/signal-feedback-images';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -11,15 +17,35 @@ const envSchema = z.object({
   DATABASE_URL: z.url().optional(),
   SIGNAL_APP_KEYS: z.string().optional(),
   SESSION_SECRET: z.string().min(16).optional(),
+  S3_ENDPOINT: z.url().optional(),
+  S3_REGION: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_PUBLIC_URL: z.url().optional(),
 });
 
 export type Env = Omit<
   z.infer<typeof envSchema>,
-  'DATABASE_URL' | 'SIGNAL_APP_KEYS' | 'SESSION_SECRET'
+  | 'DATABASE_URL'
+  | 'SIGNAL_APP_KEYS'
+  | 'SESSION_SECRET'
+  | 'S3_ENDPOINT'
+  | 'S3_REGION'
+  | 'S3_BUCKET'
+  | 'S3_ACCESS_KEY'
+  | 'S3_SECRET_KEY'
+  | 'S3_PUBLIC_URL'
 > & {
   DATABASE_URL: string;
   appKeys: string[];
   SESSION_SECRET: string;
+  S3_ENDPOINT: string;
+  S3_REGION: string;
+  S3_BUCKET: string;
+  S3_ACCESS_KEY: string;
+  S3_SECRET_KEY: string;
+  S3_PUBLIC_URL: string;
 };
 
 export function parseEnv(source: Record<string, string | undefined>): Env {
@@ -31,18 +57,46 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     throw new Error(`Invalid environment configuration — ${details}`);
   }
 
-  const { DATABASE_URL, SIGNAL_APP_KEYS, SESSION_SECRET, ...rest } = result.data;
+  const {
+    DATABASE_URL,
+    SIGNAL_APP_KEYS,
+    SESSION_SECRET,
+    S3_ENDPOINT,
+    S3_REGION,
+    S3_BUCKET,
+    S3_ACCESS_KEY,
+    S3_SECRET_KEY,
+    S3_PUBLIC_URL,
+    ...rest
+  } = result.data;
   const isProduction = rest.NODE_ENV === 'production';
 
   const databaseUrl = DATABASE_URL ?? (isProduction ? undefined : DEV_DATABASE_URL);
   const appKeysRaw = SIGNAL_APP_KEYS ?? (isProduction ? undefined : DEV_APP_KEYS);
   const sessionSecret = SESSION_SECRET ?? (isProduction ? undefined : DEV_SESSION_SECRET);
 
-  if (databaseUrl === undefined || appKeysRaw === undefined || sessionSecret === undefined) {
+  // Endpoint/region/bucket/publicUrl are safe to default even in production;
+  // only the S3 secrets (access/secret keys) must be provided in production.
+  const s3Endpoint = S3_ENDPOINT ?? DEV_S3_ENDPOINT;
+  const s3Region = S3_REGION ?? DEV_S3_REGION;
+  const s3Bucket = S3_BUCKET ?? DEV_S3_BUCKET;
+  const s3PublicUrl = S3_PUBLIC_URL ?? DEV_S3_PUBLIC_URL;
+  const s3AccessKey = S3_ACCESS_KEY ?? (isProduction ? undefined : DEV_S3_ACCESS_KEY);
+  const s3SecretKey = S3_SECRET_KEY ?? (isProduction ? undefined : DEV_S3_SECRET_KEY);
+
+  if (
+    databaseUrl === undefined ||
+    appKeysRaw === undefined ||
+    sessionSecret === undefined ||
+    s3AccessKey === undefined ||
+    s3SecretKey === undefined
+  ) {
     const missing = [
       ...(databaseUrl === undefined ? ['DATABASE_URL'] : []),
       ...(appKeysRaw === undefined ? ['SIGNAL_APP_KEYS'] : []),
       ...(sessionSecret === undefined ? ['SESSION_SECRET'] : []),
+      ...(s3AccessKey === undefined ? ['S3_ACCESS_KEY'] : []),
+      ...(s3SecretKey === undefined ? ['S3_SECRET_KEY'] : []),
     ];
     throw new Error(`Missing required environment variables in production: ${missing.join(', ')}`);
   }
@@ -52,5 +106,16 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     .map((key) => key.trim())
     .filter((key) => key.length > 0);
 
-  return { ...rest, DATABASE_URL: databaseUrl, appKeys, SESSION_SECRET: sessionSecret };
+  return {
+    ...rest,
+    DATABASE_URL: databaseUrl,
+    appKeys,
+    SESSION_SECRET: sessionSecret,
+    S3_ENDPOINT: s3Endpoint,
+    S3_REGION: s3Region,
+    S3_BUCKET: s3Bucket,
+    S3_ACCESS_KEY: s3AccessKey,
+    S3_SECRET_KEY: s3SecretKey,
+    S3_PUBLIC_URL: s3PublicUrl,
+  };
 }
