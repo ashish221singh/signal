@@ -1,6 +1,7 @@
 export * from './console/auth.js';
 export * from './console/campaigns.js';
 export * from './console/clients.js';
+export * from './console/reporting.js';
 export * from './console/targets.js';
 export * from './eligibility.js';
 export * from './feedback.js';

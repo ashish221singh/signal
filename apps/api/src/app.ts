@@ -13,6 +13,7 @@ import { sessionGuard } from './plugins/sessionGuard.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { campaignRoutes } from './routes/console/campaigns.js';
 import { clientRoutes } from './routes/console/clients.js';
+import { reportingRoutes } from './routes/console/reporting.js';
 import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
 
@@ -111,7 +112,9 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
         prefix: '/campaigns',
       });
-      // reporting mounted here in later tasks
+      // Reporting (Task 16): mounted with NO sub-prefix — its routes carry their
+      // own `/campaigns/:id/overview` path, distinct from campaignRoutes above.
+      await consoleApi.register(reportingRoutes({ db: resolvedDb }));
     },
     { prefix: '/v1/console' },
   );
