@@ -21,3 +21,14 @@ export const targetSchema = z.object({
   integration_status: integrationStatusSchema,
 });
 export type Target = z.infer<typeof targetSchema>;
+
+/**
+ * Create contract (M2, Task 14). The PM supplies only a non-empty display name
+ * and the trigger mechanism; `screen_id` is slugified server-side (never
+ * client-supplied) and `integration_status` defaults to `not_sent`.
+ */
+export const targetCreateSchema = z.object({
+  name: z.string().min(1),
+  trigger_mechanism: triggerMechanismSchema,
+});
+export type TargetCreate = z.infer<typeof targetCreateSchema>;
