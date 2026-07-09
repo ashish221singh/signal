@@ -12,6 +12,8 @@
     "create-admin": "tsx src/scripts/create-admin.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.0",
+    "@fastify/rate-limit": "^11.1.0",
     "@node-rs/argon2": "^2.0.2",
     "@signal/contracts": "workspace:*",
     "drizzle-orm": "^0.45.2",
