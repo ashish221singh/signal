@@ -698,3 +698,320 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     expect(res.json().status).toBe('active');
   });
 });
+
+describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+  // A fixed clock well after created_at so the lifecycle updated_at bump is deterministic.
+  const LIFECYCLE_TIME = new Date('2030-06-01T00:00:00.000Z');
+  const clock = new FixedClock(LIFECYCLE_TIME);
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  function completePayload(targetId: string, clientIds: string[] = ['cl_A']) {
+    return {
+      target_id: targetId,
+      client_ids: clientIds,
+      metric_type: 'CSAT' as const,
+      rating_type: 'star' as const,
+      rating_scale_max: 5,
+      header_text: 'How was your delivery?',
+      positive_threshold: 4,
+      ask_frequency: 'after_7_days' as const,
+    };
+  }
+
+  /** Create a draft via the API, patch it complete, publish it → return the active id. */
+  async function publishActive(targetId: string, clientIds: string[] = ['cl_A']): Promise<string> {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id as string;
+    await app.inject({
+      method: 'PATCH',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+      payload: completePayload(targetId, clientIds),
+    });
+    const pub = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pub.statusCode).toBe(200);
+    return id;
+  }
+
+  async function getCampaign(id: string) {
+    return app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+    });
+  }
+
+  /** After a cache refresh, is this campaign still served by the SDK eligibility hot path? */
+  async function eligible(screenId: string, clientId: string, userId: string): Promise<boolean> {
+    await app.campaignCache.refresh();
+    const elig = await app.inject({
+      method: 'GET',
+      url: '/v1/sdk/eligibility',
+      headers: { 'x-signal-app-key': 'test-app-key' },
+      query: {
+        screen_id: screenId,
+        client_id: clientId,
+        user_id: userId,
+        rep_tenure_days: '365',
+      },
+    });
+    return elig.statusCode === 200;
+  }
+
+  // Scenario 1 — pause an active campaign.
+  it('scenario 1: POST /:id/pause on active → 200 paused; no longer in the SDK cache', async () => {
+    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const id = await publishActive(targetId);
+    // Sanity: active campaign IS eligible before pausing.
+    expect(await eligible('order_completion', 'cl_A', 'fresh-user-pause-pre')).toBe(true);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/pause`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(campaignSchema.safeParse(body).success).toBe(true);
+    expect(body.status).toBe('paused');
+    expect(new Date(body.updated_at).getTime()).toBe(LIFECYCLE_TIME.getTime());
+
+    // After refresh the paused campaign is no longer eligible.
+    expect(await eligible('order_completion', 'cl_A', 'fresh-user-pause-post')).toBe(false);
+  });
+
+  it('pausing a draft (not active) → 409 invalid_state', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id as string;
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/pause`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('invalid_state');
+  });
+
+  it('pause unknown id → 404 not_found', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/pause`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  // Scenario 2 — resume re-runs the overlap check.
+  it('scenario 2: resume with no clash → 200 active; reappears in the SDK cache', async () => {
+    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const id = await publishActive(targetId);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/pause`,
+      headers: { cookie: cookieHeader },
+    });
+    // Paused → not eligible.
+    expect(await eligible('order_completion', 'cl_A', 'fresh-user-resume-pre')).toBe(false);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/resume`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe('active');
+
+    // Active again → eligible after refresh.
+    expect(await eligible('order_completion', 'cl_A', 'fresh-user-resume-post')).toBe(true);
+  });
+
+  it('scenario 2b: resume re-runs overlap — a clash that appeared while paused → 409 overlap; stays paused', async () => {
+    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    // A active on (target, cl_A), then paused.
+    const idA = await publishActive(targetId, ['cl_A']);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idA}/pause`,
+      headers: { cookie: cookieHeader },
+    });
+    // B published active on the SAME (target, cl_A) while A is paused.
+    const idB = await publishActive(targetId, ['cl_A']);
+
+    // Resuming A now clashes with B → 409 overlap, A stays paused.
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${idA}/resume`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe('overlap');
+    expect(body.conflict.id).toBe(idB);
+
+    expect((await getCampaign(idA)).json().status).toBe('paused');
+  });
+
+  it('resuming a non-paused (active) campaign → 409 invalid_state', async () => {
+    const targetId = await seedTarget(t.db);
+    const id = await publishActive(targetId);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/resume`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('invalid_state');
+  });
+
+  it('resume unknown id → 404 not_found', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/resume`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  // Scenario 3 — archive.
+  it('scenario 3: POST /:id/archive → 200 archived; excluded from default list and SDK cache', async () => {
+    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const id = await publishActive(targetId);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${id}/archive`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(campaignSchema.safeParse(body).success).toBe(true);
+    expect(body.status).toBe('archived');
+    expect(new Date(body.updated_at).getTime()).toBe(LIFECYCLE_TIME.getTime());
+
+    // Excluded from the default list.
+    const list = await app.inject({
+      method: 'GET',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+    });
+    expect(list.json().some((r: { id: string }) => r.id === id)).toBe(false);
+
+    // Excluded from the SDK cache.
+    expect(await eligible('order_completion', 'cl_A', 'fresh-user-archive')).toBe(false);
+  });
+
+  it('archive unknown id → 404 not_found', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/archive`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  // Scenario 4 — hard delete a clean draft.
+  it('scenario 4: DELETE /:id on a draft with zero triggers/responses → 204, row gone', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id as string;
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(del.statusCode).toBe(204);
+
+    expect((await getCampaign(id)).statusCode).toBe(404);
+  });
+
+  it('delete unknown id → 404 not_found', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+  });
+
+  // Scenario 5 — has_history / non-draft guard.
+  it('scenario 5: DELETE on a campaign with trigger/response rows → 409 has_history; row survives', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieHeader },
+      payload: {},
+    });
+    const id = created.json().id as string;
+    await seedResponse(t.db, id); // inserts trigger_log + responses
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(del.statusCode).toBe(409);
+    const body = del.json();
+    expect(body.error.code).toBe('has_history');
+    expect(body.error.message).toBe('archive instead');
+
+    // Row survives the 409.
+    expect((await getCampaign(id)).statusCode).toBe(200);
+  });
+
+  it('scenario 5b: DELETE on an ACTIVE campaign with zero history → 409 has_history (only drafts are hard-deletable)', async () => {
+    const targetId = await seedTarget(t.db);
+    const id = await publishActive(targetId);
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/console/campaigns/${id}`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(del.statusCode).toBe(409);
+    expect(del.json().error.code).toBe('has_history');
+
+    expect((await getCampaign(id)).statusCode).toBe(200);
+  });
+});

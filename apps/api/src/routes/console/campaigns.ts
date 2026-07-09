@@ -100,6 +100,72 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
       });
     });
 
+    // POST /:id/pause — active → paused (Task 13). 404 not_found; 409 invalid_state.
+    app.post<{ Params: { id: string } }>('/:id/pause', async (request, reply) => {
+      const result = await service.pause(request.params.id);
+      if (result.ok) return reply.send(result.campaign);
+      if (result.reason === 'not_found') {
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'campaign not found' } });
+      }
+      return reply.code(409).send({
+        error: { code: 'invalid_state', message: 'only an active campaign can be paused' },
+      });
+    });
+
+    // POST /:id/resume — paused → active, re-running the overlap check (Task 13).
+    // 404 not_found; 409 invalid_state; 409 overlap (with `conflict`) if a clash appeared.
+    app.post<{ Params: { id: string } }>('/:id/resume', async (request, reply) => {
+      const result = await service.resume(request.params.id);
+      if (result.ok) return reply.send(result.campaign);
+      if (result.reason === 'not_found') {
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'campaign not found' } });
+      }
+      if (result.reason === 'overlap') {
+        // overlap (M2-D8): another active campaign now clashes on (target, client).
+        return reply.code(409).send({
+          error: {
+            code: 'overlap',
+            message: 'another active campaign already targets an overlapping client',
+          },
+          conflict: result.conflict,
+        });
+      }
+      return reply.code(409).send({
+        error: { code: 'invalid_state', message: 'only a paused campaign can be resumed' },
+      });
+    });
+
+    // POST /:id/archive — any non-archived state → archived (Task 13, M2-D6).
+    app.post<{ Params: { id: string } }>('/:id/archive', async (request, reply) => {
+      const result = await service.archive(request.params.id);
+      if (result.ok) return reply.send(result.campaign);
+      if (result.reason === 'not_found') {
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'campaign not found' } });
+      }
+      return reply
+        .code(409)
+        .send({ error: { code: 'invalid_state', message: 'campaign is already archived' } });
+    });
+
+    // DELETE /:id — safe hard delete (Task 13, M2-D6). 204 only for a draft with
+    // zero trigger/response history; otherwise 409 has_history ("archive instead").
+    app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
+      const result = await service.remove(request.params.id);
+      if (result.ok) return reply.code(204).send();
+      if (result.reason === 'not_found') {
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'campaign not found' } });
+      }
+      return reply.code(409).send({ error: { code: 'has_history', message: 'archive instead' } });
+    });
+
     // GET / — list projection; archived excluded unless ?include=archived (M2-D6).
     app.get<{ Querystring: { include?: string } }>('/', async (request, reply) => {
       const includeArchived = request.query.include === 'archived';

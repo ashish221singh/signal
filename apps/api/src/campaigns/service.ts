@@ -7,7 +7,13 @@ import type {
 import { and, count, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
-import { campaigns, responses, targetRegistry } from '../db/schema.js';
+import {
+  campaigns,
+  responses,
+  suppressionState,
+  targetRegistry,
+  triggerLog,
+} from '../db/schema.js';
 
 /**
  * Semantic fields (M2-D9): they define the score math. Once a campaign has ≥1
@@ -59,6 +65,30 @@ export type PublishResult =
   | { ok: false; reason: 'not_found' }
   | { ok: false; reason: 'incomplete'; missing: MissingField[] }
   | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
+
+/**
+ * Outcome of `pause`/`archive` (state transitions with a simple guard). `archive`
+ * never returns `invalid_state` (any non-archived state may archive), but reuses
+ * the same union so the route can map `not_found` uniformly.
+ */
+export type TransitionResult =
+  | { ok: true; campaign: Campaign }
+  | { ok: false; reason: 'not_found' | 'invalid_state' };
+
+/**
+ * Outcome of `resume`: like a transition but it re-runs the active-overlap check
+ * (M2-D8) before flipping back to active, so it can also fail with `overlap`.
+ */
+export type ResumeResult =
+  | { ok: true; campaign: Campaign }
+  | { ok: false; reason: 'not_found' | 'invalid_state' }
+  | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
+
+/**
+ * Outcome of `remove` (hard delete). Only a draft with zero trigger/response
+ * history is physically deletable (M2-D6); anything else → `has_history`.
+ */
+export type RemoveResult = { ok: true } | { ok: false; reason: 'not_found' | 'has_history' };
 
 /**
  * Console-side campaign service (M2, Task 10). Distinct from the SDK-side
@@ -229,6 +259,118 @@ export class CampaignService {
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Pause an ACTIVE campaign → `paused` (M2, Task 13). Unknown id → `not_found`;
+   * pausing a non-active (draft/paused/archived) campaign → `invalid_state`
+   * (minimal guard, M2-D6). A paused campaign is absent from the SDK cache
+   * (which loads only `status = 'active'`), so it stops being served on refresh.
+   */
+  async pause(id: string): Promise<TransitionResult> {
+    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+    if (!row) return { ok: false, reason: 'not_found' };
+    if (row.status !== 'active') return { ok: false, reason: 'invalid_state' };
+
+    const [updated] = await this.db
+      .update(campaigns)
+      .set({ status: 'paused', updatedAt: this.clock.now() })
+      .where(eq(campaigns.id, id))
+      .returning();
+    if (!updated) return { ok: false, reason: 'not_found' };
+    return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Resume a PAUSED campaign → `active` (M2, Task 13). Unknown id → `not_found`;
+   * resuming a non-paused campaign → `invalid_state`. Because an active campaign
+   * on the same (target, client) may have appeared while this one was paused,
+   * resume RE-RUNS the same overlap check publish uses (M2-D8) — a clash →
+   * `overlap` (campaign stays paused). Reuses `findActiveOverlap` (Task 12).
+   */
+  async resume(id: string): Promise<ResumeResult> {
+    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+    if (!row) return { ok: false, reason: 'not_found' };
+    if (row.status !== 'paused') return { ok: false, reason: 'invalid_state' };
+
+    // A paused campaign is always complete (it was active before), so `targetId`
+    // is non-null. Re-run the overlap check before reactivating.
+    const conflict = await this.findActiveOverlap(id, row.targetId as string, row.clientIds);
+    if (conflict) return { ok: false, reason: 'overlap', conflict };
+
+    const [updated] = await this.db
+      .update(campaigns)
+      .set({ status: 'active', updatedAt: this.clock.now() })
+      .where(eq(campaigns.id, id))
+      .returning();
+    if (!updated) return { ok: false, reason: 'not_found' };
+    return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Archive a campaign → `archived` from any non-archived state (M2, Task 13,
+   * M2-D6 "delete = archive"). Unknown id → `not_found`; already archived →
+   * `invalid_state` (idempotent no-op guard). Archived campaigns are excluded
+   * from the default list (Task 10) and from the SDK cache (which loads only
+   * `active`), so no extra exclusion work is needed beyond setting the status.
+   */
+  async archive(id: string): Promise<TransitionResult> {
+    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+    if (!row) return { ok: false, reason: 'not_found' };
+    if (row.status === 'archived') return { ok: false, reason: 'invalid_state' };
+
+    const [updated] = await this.db
+      .update(campaigns)
+      .set({ status: 'archived', updatedAt: this.clock.now() })
+      .where(eq(campaigns.id, id))
+      .returning();
+    if (!updated) return { ok: false, reason: 'not_found' };
+    return { ok: true, campaign: toCampaign(updated) };
+  }
+
+  /**
+   * Hard delete a campaign row (M2, Task 13). Named `remove` to avoid the JS
+   * `delete` keyword. Per M2-D6 a physical delete is permitted ONLY for a
+   * `draft` with ZERO `trigger_log` and ZERO `responses` rows — FK-referenced
+   * history must never be destroyed. Anything else (has history, or not a draft
+   * even with zero history) → `has_history` (route surfaces `archive instead`).
+   * Unknown id → `not_found`.
+   */
+  async remove(id: string): Promise<RemoveResult> {
+    const [row] = await this.db
+      .select({ status: campaigns.status })
+      .from(campaigns)
+      .where(eq(campaigns.id, id))
+      .limit(1);
+    if (!row) return { ok: false, reason: 'not_found' };
+
+    // Only drafts are hard-deletable (M2-D6). The draft status is the real
+    // safety gate — any campaign that ever went active is archived, not deleted.
+    if (row.status !== 'draft') {
+      return { ok: false, reason: 'has_history' };
+    }
+
+    // Belt-and-suspenders: count EVERY FK child that references campaigns.id
+    // (all ON DELETE no action) so a hard delete can never orphan/destroy
+    // history even if a draft somehow acquired child rows.
+    const [trig] = await this.db
+      .select({ n: count() })
+      .from(triggerLog)
+      .where(eq(triggerLog.campaignId, id));
+    const [resp] = await this.db
+      .select({ n: count() })
+      .from(responses)
+      .where(eq(responses.campaignId, id));
+    const [supp] = await this.db
+      .select({ n: count() })
+      .from(suppressionState)
+      .where(eq(suppressionState.campaignId, id));
+    if ((trig?.n ?? 0) > 0 || (resp?.n ?? 0) > 0 || (supp?.n ?? 0) > 0) {
+      return { ok: false, reason: 'has_history' };
+    }
+
+    await this.db.delete(campaigns).where(eq(campaigns.id, id));
+    return { ok: true };
   }
 
   /**
