@@ -3,8 +3,9 @@ import type {
   CampaignHealth,
   CampaignOverview,
   DashboardSummary,
+  Reasons,
 } from '@signal/contracts';
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { campaigns, responses, targetRegistry, triggerLog } from '../db/schema.js';
 
@@ -83,6 +84,41 @@ export async function campaignOverview(
     responses: total,
     response_rate,
     positive_score,
+  };
+}
+
+/**
+ * Campaign Reasons reporting query (M4, Task 2). Ranks the non-null
+ * `chip_selected` selections for a campaign, most-selected first, or `null`
+ * if the campaign does not exist (the route turns that into a 404).
+ *
+ * Binding decision (M4-D2): `total_chip_responses` counts responses whose
+ * `chip_selected` is non-null; each chip's `share = count / total`, and `0`
+ * when the total is 0 (never divide by zero).
+ */
+export async function campaignReasons(db: Db, campaignId: string): Promise<Reasons | null> {
+  const [campaign] = await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId));
+  if (!campaign) return null;
+
+  const rows = await db
+    .select({ chip: responses.chipSelected, count: sql<number>`count(*)::int` })
+    .from(responses)
+    .where(and(eq(responses.campaignId, campaignId), isNotNull(responses.chipSelected)))
+    .groupBy(responses.chipSelected)
+    .orderBy(desc(sql`count(*)`));
+
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  return {
+    campaign_id: campaignId,
+    total_chip_responses: total,
+    chips: rows.map((r) => ({
+      chip: r.chip as string,
+      count: r.count,
+      share: total === 0 ? 0 : r.count / total,
+    })),
   };
 }
 

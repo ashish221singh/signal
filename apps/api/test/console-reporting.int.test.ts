@@ -1,5 +1,5 @@
 // apps/api/test/console-reporting.int.test.ts
-import { campaignOverviewSchema, dashboardSummarySchema } from '@signal/contracts';
+import { campaignOverviewSchema, dashboardSummarySchema, reasonsSchema } from '@signal/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { Clock } from '../src/clock.js';
@@ -85,6 +85,29 @@ async function seedResponseWithRating(
     clientId: 'cl_A',
     screenId: 'alpha',
     ratingValue,
+    deviceOs: 'Android',
+    appVersion: '1',
+    shownAt: new Date(),
+    respondedAt: new Date(),
+  });
+}
+
+/** Insert a trigger + a response with a KNOWN chip_selected value for a campaign. */
+async function seedResponseWithChip(
+  db: Db,
+  campaignId: string,
+  ratingValue: number,
+  chip: string | null,
+): Promise<void> {
+  const triggerId = await seedTrigger(db, campaignId);
+  await db.insert(s.responses).values({
+    triggerId,
+    campaignId,
+    userId: 'u',
+    clientId: 'cl_A',
+    screenId: 'alpha',
+    ratingValue,
+    chipSelected: chip,
     deviceOs: 'Android',
     appVersion: '1',
     shownAt: new Date(),
@@ -444,5 +467,89 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
     expect(ids).toContain(paused);
     expect(ids).not.toContain(draft);
     expect(ids).not.toContain(archived);
+  });
+});
+
+describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('without a cookie → 401', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/reasons`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('unknown id → 404 campaign_not_found', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/reasons`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('campaign_not_found');
+  });
+
+  it('ranks non-null chip selections desc with shares and ignores null chips', async () => {
+    // chip "A" ×3, chip "B" ×1, chip null ×2 → total_chip_responses = 4.
+    const id = await seedActiveCampaign(t.db);
+    await seedResponseWithChip(t.db, id, 5, 'A');
+    await seedResponseWithChip(t.db, id, 4, 'A');
+    await seedResponseWithChip(t.db, id, 3, 'A');
+    await seedResponseWithChip(t.db, id, 2, 'B');
+    await seedResponseWithChip(t.db, id, 1, null);
+    await seedResponseWithChip(t.db, id, 1, null);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/reasons`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(reasonsSchema.safeParse(body).success).toBe(true);
+    expect(body.campaign_id).toBe(id);
+    expect(body.total_chip_responses).toBe(4);
+    expect(body.chips).toEqual([
+      { chip: 'A', count: 3, share: 0.75 },
+      { chip: 'B', count: 1, share: 0.25 },
+    ]);
+  });
+
+  it('zero chip responses → total_chip_responses=0, chips=[]', async () => {
+    // Only null-chip responses → no chip aggregation.
+    const id = await seedActiveCampaign(t.db);
+    await seedResponseWithChip(t.db, id, 5, null);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/reasons`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(reasonsSchema.safeParse(body).success).toBe(true);
+    expect(body.total_chip_responses).toBe(0);
+    expect(body.chips).toEqual([]);
   });
 });
