@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ratingBoundsFor } from './index.js';
+import { campaignStatusSchema, ratingBoundsFor } from './index.js';
+
+describe('campaignStatusSchema', () => {
+  it('accepts every DB campaign_status value including archived', () => {
+    for (const status of ['draft', 'active', 'paused', 'archived']) {
+      expect(campaignStatusSchema.safeParse(status).success).toBe(true);
+    }
+  });
+  it('rejects an unknown status', () => {
+    expect(campaignStatusSchema.safeParse('live').success).toBe(false);
+  });
+});
 
 describe('ratingBoundsFor', () => {
   it('star is always 1..5', () => {
