@@ -6,6 +6,7 @@ import type {
   DashboardSummary,
   Reasons,
   ResponseFeedItem,
+  Trend,
 } from '@signal/contracts';
 import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
@@ -273,6 +274,79 @@ export async function campaignResponses(
       responded_at: r.respondedAt.toISOString(),
     })),
     next_cursor: next,
+  };
+}
+
+/**
+ * 30-day positive-score trend reporting query (M4, Task 5). Returns one point
+ * per UTC calendar day THAT HAS responses in the last 30 days ending at `now`
+ * (days with no responses are simply absent), ordered by date ascending, or
+ * `null` if the campaign does not exist (the route turns that into a 404,
+ * M4-D12).
+ *
+ * Window: `[now - 30 days, now]`, bound as ISO strings cast to `::timestamptz`
+ * because the postgres.js driver can't bind a raw `Date` inside a `sql`
+ * fragment (same pattern as `dashboardSummary`). The rolling `now` is threaded
+ * from the app clock so tests are deterministic.
+ *
+ * Per day (M4-D4/§10): `responses` = `count(*)`; `positive` = a filtered
+ * aggregate `count(*) filter (where rating_value >= threshold)` (only when the
+ * campaign has a threshold). Grouping is on `date_trunc('day', responded_at at
+ * time zone 'UTC')` and the `date` string is emitted as the UTC calendar day —
+ * both pinned to UTC explicitly so the bucket boundary never drifts with the
+ * session timezone. `positive_score = threshold === null ? null : positive /
+ * responses` (a grouped day always has ≥1 response, so it's never null for the
+ * divide-by-zero reason).
+ */
+export async function campaignTrend(db: Db, campaignId: string, now: Date): Promise<Trend | null> {
+  const [campaign] = await db
+    .select({ positiveThreshold: campaigns.positiveThreshold })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  if (!campaign) return null;
+
+  const threshold = campaign.positiveThreshold;
+
+  // postgres.js can't bind a raw JS `Date` inside a `sql` fragment, so bind the
+  // window boundaries as ISO strings cast to timestamptz (like dashboardSummary).
+  const windowStartIso = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const nowIso = now.toISOString();
+  const windowStart = sql`${windowStartIso}::timestamptz`;
+  const windowEnd = sql`${nowIso}::timestamptz`;
+
+  // Bucket by the UTC calendar day. `at time zone 'UTC'` pins the truncation to
+  // UTC regardless of the session timezone; the same expression is formatted as
+  // the YYYY-MM-DD date string so the point's date is always the UTC day.
+  const day = sql`date_trunc('day', ${responses.respondedAt} at time zone 'UTC')`;
+
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${day}, 'YYYY-MM-DD')`,
+      responses: sql<number>`count(*)::int`,
+      positive:
+        threshold === null
+          ? sql<number>`0::int`
+          : sql<number>`count(*) filter (where ${responses.ratingValue} >= ${threshold})::int`,
+    })
+    .from(responses)
+    .where(
+      and(
+        eq(responses.campaignId, campaignId),
+        gte(responses.respondedAt, windowStart),
+        lte(responses.respondedAt, windowEnd),
+      ),
+    )
+    .groupBy(day)
+    .orderBy(day);
+
+  return {
+    campaign_id: campaignId,
+    points: rows.map((r) => ({
+      date: r.date,
+      responses: r.responses,
+      positive_score: threshold === null ? null : r.positive / r.responses,
+    })),
   };
 }
 

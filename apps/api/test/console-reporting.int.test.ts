@@ -5,6 +5,7 @@ import {
   dashboardSummarySchema,
   reasonsSchema,
   responseFeedSchema,
+  trendSchema,
 } from '@signal/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
@@ -885,5 +886,149 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
     expect(item.other_image_url).toBe('https://cdn.example/x.jpg');
     expect(item.location).toEqual({ lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' });
     expect(item.client_id).toBe('cl_A');
+  });
+});
+
+describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
+  // Fixed "now" so the 30-day window boundary (now - 30d) is deterministic and
+  // we can seed responses on either side of it, and on known UTC calendar days.
+  const NOW = new Date('2026-07-09T12:00:00.000Z');
+  const clock = new FixedClock(NOW);
+
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+
+  /** Insert a trigger + a response with a known rating at a controlled respondedAt. */
+  async function seedResponseAt(
+    campaignId: string,
+    ratingValue: number,
+    respondedAt: Date,
+  ): Promise<void> {
+    const triggerId = await seedTrigger(t.db, campaignId);
+    await t.db.insert(s.responses).values({
+      triggerId,
+      campaignId,
+      userId: 'u',
+      clientId: 'cl_A',
+      screenId: 'alpha',
+      ratingValue,
+      deviceOs: 'Android',
+      appVersion: '1',
+      shownAt: respondedAt,
+      respondedAt,
+    });
+  }
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('without a cookie → 401', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/trend`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('unknown id → 404 campaign_not_found', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/trend`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('campaign_not_found');
+  });
+
+  it('one point per UTC day with per-day responses count and positive_score', async () => {
+    // threshold 4. Three distinct UTC days, all within 30 days of NOW.
+    // Day A (2026-07-01): 2 responses both >= 4 → score 1.0.
+    // Day B (2026-07-03): 3 responses, one >= 4 → score 1/3.
+    // Day C (2026-07-05): 1 response < 4 → score 0.0.
+    const id = await seedActiveCampaign(t.db, { positiveThreshold: 4 });
+    await seedResponseAt(id, 5, new Date('2026-07-01T02:00:00.000Z'));
+    await seedResponseAt(id, 4, new Date('2026-07-01T20:00:00.000Z'));
+    await seedResponseAt(id, 5, new Date('2026-07-03T01:00:00.000Z'));
+    await seedResponseAt(id, 2, new Date('2026-07-03T10:00:00.000Z'));
+    await seedResponseAt(id, 3, new Date('2026-07-03T23:00:00.000Z'));
+    await seedResponseAt(id, 1, new Date('2026-07-05T12:00:00.000Z'));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/trend`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(trendSchema.safeParse(body).success).toBe(true);
+    expect(body.campaign_id).toBe(id);
+    // One point per day, ordered ascending by date.
+    expect(body.points.map((p: { date: string }) => p.date)).toEqual([
+      '2026-07-01',
+      '2026-07-03',
+      '2026-07-05',
+    ]);
+    const [a, b, c] = body.points;
+    expect(a.responses).toBe(2);
+    expect(a.positive_score).toBeCloseTo(1.0, 10);
+    expect(b.responses).toBe(3);
+    expect(b.positive_score).toBeCloseTo(1 / 3, 10);
+    expect(c.responses).toBe(1);
+    expect(c.positive_score).toBeCloseTo(0.0, 10);
+  });
+
+  it('a day with responses but none positive → score 0; out-of-window responses excluded', async () => {
+    const id = await seedActiveCampaign(t.db, { positiveThreshold: 4 });
+    // In-window day with two responses both < threshold → score 0.
+    await seedResponseAt(id, 2, new Date('2026-07-08T04:00:00.000Z'));
+    await seedResponseAt(id, 1, new Date('2026-07-08T18:00:00.000Z'));
+    // Response 40 days before NOW → outside the 30-day window, must be excluded.
+    await seedResponseAt(id, 5, new Date('2026-05-30T12:00:00.000Z'));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/trend`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(trendSchema.safeParse(body).success).toBe(true);
+    // Only the in-window day appears; the out-of-window day is absent.
+    expect(body.points).toHaveLength(1);
+    expect(body.points[0].date).toBe('2026-07-08');
+    expect(body.points[0].responses).toBe(2);
+    expect(body.points[0].positive_score).toBe(0);
+  });
+
+  it('a campaign with a null positive_threshold → positive_score null per day', async () => {
+    const id = await seedActiveCampaign(t.db, { status: 'draft', positiveThreshold: null });
+    await seedResponseAt(id, 5, new Date('2026-07-06T05:00:00.000Z'));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/trend`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(trendSchema.safeParse(body).success).toBe(true);
+    expect(body.points).toHaveLength(1);
+    expect(body.points[0].responses).toBe(1);
+    expect(body.points[0].positive_score).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import {
   campaignOverview,
   campaignReasons,
   campaignResponses,
+  campaignTrend,
   dashboardSummary,
 } from '../../reporting/queries.js';
 
@@ -82,6 +83,19 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
           .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
       }
       return reply.send(feed);
+    });
+
+    // GET /campaigns/:id/trend — 30-day per-UTC-day positive-score trend for the
+    // Trend tab (M4, Task 5). Uses the same threaded clock as /dashboard so the
+    // rolling window has a deterministic "now". Unknown campaign → 404 (M4-D12).
+    app.get<{ Params: { id: string } }>('/campaigns/:id/trend', async (request, reply) => {
+      const trend = await campaignTrend(deps.db, request.params.id, clock.now());
+      if (!trend) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
+      }
+      return reply.send(trend);
     });
 
     // GET /dashboard — the console landing summary. KPIs over active campaigns
