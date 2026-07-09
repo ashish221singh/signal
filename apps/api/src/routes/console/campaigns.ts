@@ -1,4 +1,4 @@
-import { campaignDraftCreateSchema } from '@signal/contracts';
+import { campaignDraftCreateSchema, campaignUpdateSchema } from '@signal/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import { CampaignService } from '../../campaigns/service.js';
 import type { Clock } from '../../clock.js';
@@ -44,6 +44,32 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           .send({ error: { code: 'not_found', message: 'campaign not found' } });
       }
       return reply.send(campaign);
+    });
+
+    // PATCH /:id — partial update of a draft's builder fields (Task 11). Semantic
+    // fields (M2-D9) lock to 422 semantic_locked once the campaign has ≥1 response.
+    app.patch<{ Params: { id: string } }>('/:id', async (request, reply) => {
+      const parsed = campaignUpdateSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply
+          .code(422)
+          .send({ error: { code: 'invalid_body', message: 'invalid campaign update' } });
+      }
+      const result = await service.update(request.params.id, parsed.data);
+      if (!result.ok) {
+        if (result.reason === 'not_found') {
+          return reply
+            .code(404)
+            .send({ error: { code: 'not_found', message: 'campaign not found' } });
+        }
+        return reply.code(422).send({
+          error: {
+            code: 'semantic_locked',
+            message: 'semantic fields are locked once the campaign has responses',
+          },
+        });
+      }
+      return reply.send(result.campaign);
     });
 
     // GET / — list projection; archived excluded unless ?include=archived (M2-D6).
