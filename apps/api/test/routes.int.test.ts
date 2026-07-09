@@ -188,6 +188,29 @@ describe('/v1/sdk routes (real Postgres)', () => {
     });
   });
 
+  describe('internal refresh-cache hook (Task 18)', () => {
+    it('204 with the app key, 401 without', async () => {
+      const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+      try {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/v1/sdk/internal/refresh-cache',
+          headers: AUTH,
+        });
+        expect(ok.statusCode).toBe(204);
+        expect(ok.body).toBe('');
+
+        const noKey = await app.inject({
+          method: 'POST',
+          url: '/v1/sdk/internal/refresh-cache',
+        });
+        expect(noKey.statusCode).toBe(401);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
   describe('scenario 5+6: response', () => {
     it('valid → 204, replay → 204, exactly one row', async () => {
       await seedStarCampaign(t.db);

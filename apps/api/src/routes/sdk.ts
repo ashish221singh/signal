@@ -62,5 +62,17 @@ export function sdkRoutes(deps: {
           .send({ error: { code: 'unknown_trigger', message: 'no such trigger_id' } });
       return reply.code(204).send();
     });
+
+    // POST /internal/refresh-cache — operational/test hook that forces an
+    // immediate reload of active campaigns into the SDK cache, so a
+    // publish/pause is reflected in `/eligibility` without waiting on the 60s
+    // auto-refresh timer. It is idempotent (just reloads from the DB) and sits
+    // inside this app-key-guarded SDK scope, so the same `X-Signal-App-Key`
+    // header protects it. Used by the console end-to-end demo for a
+    // deterministic build→publish→fire→pause loop.
+    app.post('/internal/refresh-cache', async (request, reply) => {
+      await request.server.campaignCache.refresh();
+      return reply.code(204).send();
+    });
   };
 }
