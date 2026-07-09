@@ -16,6 +16,8 @@ import { clientRoutes } from './routes/console/clients.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
+import { uploadRoutes } from './routes/uploads.js';
+import { makeS3 } from './uploads/presign.js';
 
 /**
  * Expose the SDK campaign cache on the Fastify instance so its `refresh()` is
@@ -60,6 +62,10 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   app.decorate('campaignCache', cache);
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
+
+  // One S3 client for the app lifetime — shared by the SDK upload route. Its
+  // close is a no-op, so there is nothing to tear down in `onClose`.
+  const s3 = makeS3(env);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     request.log.error(error);
@@ -130,6 +136,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
           eligibility,
         }),
       );
+      await sdk.register(uploadRoutes({ s3, env }));
     },
     { prefix: '/v1/sdk' },
   );
