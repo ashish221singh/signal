@@ -18,6 +18,10 @@ export async function recordResponse(
   // Campaign status deliberately NOT checked (M1-D12); we read it only for rating bounds.
   const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, trigger.campaignId));
   if (!campaign) return 'unknown_trigger';
+  // ratingType is nullable on drafts; a campaign with a live trigger is always
+  // complete (active), but guard defensively so a rating can't be validated
+  // against a null bound.
+  if (campaign.ratingType === null) return 'invalid_rating';
 
   const bounds = ratingBoundsFor(campaign.ratingType, campaign.ratingScaleMax);
   if (body.rating_value < bounds.min || body.rating_value > bounds.max) return 'invalid_rating';

@@ -15,6 +15,13 @@
       "when": 1783565426241,
       "tag": "0001_slimy_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783569418043,
+      "tag": "0002_clumsy_invisible_woman",
+      "breakpoints": true
     }
   ]
 }

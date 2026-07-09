@@ -157,7 +157,7 @@ async function main(): Promise<void> {
     const screenByTargetId = new Map(targetRows.map((t) => [t.id, t.screenId]));
     const table = inserted.map((c) => ({
       id: c.id,
-      screenId: screenByTargetId.get(c.targetId) ?? '(unknown)',
+      screenId: (c.targetId && screenByTargetId.get(c.targetId)) ?? '(unknown)',
       clientIds: c.clientIds.join(','),
       ratingType: c.ratingType,
       askFrequency: c.askFrequency,

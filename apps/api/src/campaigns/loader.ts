@@ -10,22 +10,38 @@ export function makeDbCampaignLoader(db: Db): CampaignLoader {
       .from(campaigns)
       .innerJoin(targetRegistry, eq(campaigns.targetId, targetRegistry.id))
       .where(eq(campaigns.status, 'active'));
-    return rows.map(({ campaigns: c, target_registry: t }) => ({
-      id: c.id,
-      screenId: t.screenId,
-      clientIds: c.clientIds,
-      metricType: c.metricType,
-      ratingType: c.ratingType,
-      ratingScaleMax: c.ratingScaleMax,
-      headerText: c.headerText,
-      positiveThreshold: c.positiveThreshold,
-      chipsOnNegative: c.chipsOnNegative,
-      otherRequiresText: c.otherRequiresText,
-      otherAllowsImage: c.otherAllowsImage,
-      onPositiveAction: c.onPositiveAction,
-      askFrequency: c.askFrequency,
-      minTenureDays: c.minTenureDays,
-      createdAt: c.createdAt,
-    }));
+    const result: CachedCampaign[] = [];
+    for (const { campaigns: c, target_registry: t } of rows) {
+      // Active campaigns are guaranteed complete by the campaigns_active_complete
+      // DB CHECK; this guard narrows the nullable content columns for the type
+      // system and defends against any unexpectedly incomplete active row.
+      if (
+        c.metricType === null ||
+        c.ratingType === null ||
+        c.ratingScaleMax === null ||
+        c.headerText === null ||
+        c.positiveThreshold === null
+      ) {
+        continue;
+      }
+      result.push({
+        id: c.id,
+        screenId: t.screenId,
+        clientIds: c.clientIds,
+        metricType: c.metricType,
+        ratingType: c.ratingType,
+        ratingScaleMax: c.ratingScaleMax,
+        headerText: c.headerText,
+        positiveThreshold: c.positiveThreshold,
+        chipsOnNegative: c.chipsOnNegative,
+        otherRequiresText: c.otherRequiresText,
+        otherAllowsImage: c.otherAllowsImage,
+        onPositiveAction: c.onPositiveAction,
+        askFrequency: c.askFrequency,
+        minTenureDays: c.minTenureDays,
+        createdAt: c.createdAt,
+      });
+    }
+    return result;
   };
 }

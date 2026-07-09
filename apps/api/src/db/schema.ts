@@ -1,6 +1,8 @@
 // apps/api/src/db/schema.ts
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -27,7 +29,12 @@ export const askFrequencyEnum = pgEnum('ask_frequency', [
   'after_30_days',
   'after_60_days',
 ]);
-export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused']);
+export const campaignStatusEnum = pgEnum('campaign_status', [
+  'draft',
+  'active',
+  'paused',
+  'archived',
+]);
 export const lastActionEnum = pgEnum('last_action', ['dismissed', 'submitted']);
 export const clientStatusEnum = pgEnum('client_status', ['active', 'inactive']);
 export const consoleUserRoleEnum = pgEnum('console_user_role', ['admin', 'editor']);
@@ -44,27 +51,40 @@ export const campaigns = pgTable(
   'campaigns',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    targetId: uuid('target_id')
+    targetId: uuid('target_id').references(() => targetRegistry.id),
+    clientIds: jsonb('client_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    metricType: metricTypeEnum('metric_type'),
+    ratingType: ratingTypeEnum('rating_type'),
+    ratingScaleMax: integer('rating_scale_max'),
+    headerText: text('header_text'),
+    positiveThreshold: integer('positive_threshold'),
+    chipsOnNegative: jsonb('chips_on_negative')
+      .$type<string[]>()
       .notNull()
-      .references(() => targetRegistry.id),
-    clientIds: jsonb('client_ids').$type<string[]>().notNull(),
-    metricType: metricTypeEnum('metric_type').notNull(),
-    ratingType: ratingTypeEnum('rating_type').notNull(),
-    ratingScaleMax: integer('rating_scale_max').notNull(),
-    headerText: text('header_text').notNull(),
-    positiveThreshold: integer('positive_threshold').notNull(),
-    chipsOnNegative: jsonb('chips_on_negative').$type<string[]>().notNull(),
+      .default(sql`'[]'::jsonb`),
     otherRequiresText: boolean('other_requires_text').notNull().default(true),
     otherAllowsImage: boolean('other_allows_image').notNull().default(false),
     onPositiveAction: onPositiveActionEnum('on_positive_action').notNull().default('none'),
-    askFrequency: askFrequencyEnum('ask_frequency').notNull(),
+    askFrequency: askFrequencyEnum('ask_frequency').notNull().default('after_7_days'),
     minTenureDays: integer('min_tenure_days'),
     status: campaignStatusEnum('status').notNull().default('draft'),
     createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('campaigns_status_target_idx').on(t.status, t.targetId)],
+  (t) => [
+    index('campaigns_status_target_idx').on(t.status, t.targetId),
+    check(
+      'campaigns_active_complete',
+      sql`
+        ${t.status} <> 'active' OR (
+          ${t.targetId} IS NOT NULL AND ${t.metricType} IS NOT NULL AND ${t.ratingType} IS NOT NULL
+          AND ${t.ratingScaleMax} IS NOT NULL AND ${t.headerText} IS NOT NULL
+          AND ${t.positiveThreshold} IS NOT NULL AND jsonb_array_length(${t.clientIds}) >= 1
+        )
+      `,
+    ),
+  ],
 );
 
 export const suppressionState = pgTable(
