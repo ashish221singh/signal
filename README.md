@@ -137,6 +137,19 @@ ADMIN_EMAIL=pm@signal.local ADMIN_PASSWORD=changeme123 ./scripts/console-demo.sh
 # prints ALL CONSOLE SCENARIOS PASSED
 ```
 
+## Android SDK
+
+The **Signal SDK** (`com.beatroute:signal-sdk`) is the Android library hosts
+integrate: a one-line hook at the right moment drives the full feedback loop
+(eligibility → config-driven bottom sheet → response/dismiss → suppression),
+invisible when there's nothing to ask and guest-safe by construction.
+
+See [`sdk-android/README.md`](sdk-android/README.md) for the full integration +
+testing guide: `SessionProvider` + `Signal.init`, the `trackEvent` /
+`onScreenEnter` / `onScreenExit` hooks, behaviour notes, build/test commands
+(`./gradlew :signal-sdk:testDebugUnitTest` / `assembleRelease`), pointing at a
+local backend, and the manual QA checklist.
+
 See [`docs/signal-spec-v1.md`](docs/signal-spec-v1.md),
 [`docs/signal-architecture-v1.md`](docs/signal-architecture-v1.md), and
 [`docs/plans/`](docs/plans/) for the spec, architecture, and milestone plans.
