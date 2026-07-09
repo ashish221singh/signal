@@ -113,11 +113,37 @@ session cookie; the session guard returns 401 without one.
 | `POST` | `/v1/console/campaigns/:id/archive` | any non-archived state → archived |
 | `DELETE` | `/v1/console/campaigns/:id` | hard-delete a draft with no history only, else `409 has_history` |
 | `GET` | `/v1/console/campaigns/:id/overview` | trigger/response counts, response rate, positive score |
+| `GET` | `/v1/console/campaigns/:id/reasons` | ranked top complaint reasons — non-null `chip_selected` counts with `share`; `total_chip_responses` + `chips[]` |
+| `GET` | `/v1/console/campaigns/:id/clients` | per-client breakdown — `triggers`, `responses`, `response_rate`, `positive_score` |
+| `GET` | `/v1/console/campaigns/:id/responses` | cursor-paginated response feed (`?min_rating=&max_rating=&cursor=&limit=`) |
+| `GET` | `/v1/console/campaigns/:id/trend` | 30-day daily positive-score series (`points[]` of `{date, responses, positive_score}`) |
 | `GET` | `/v1/console/dashboard` | landing summary — KPIs, attention rules, campaign-health list |
 
 Two behaviors worth calling out: delete is archive-first — a campaign that has ever
 fired or collected a response can only be archived, never hard-deleted (M2-D6); and
 publish is **never** blocked by a target's `integration_status` (M2-D7).
+
+### Reporting (per-campaign tabs)
+
+The four per-campaign reporting endpoints back the Console's Reasons / Clients /
+Responses / Trend tabs. They are API-only (no dashboard aggregation) and, like the
+rest of `/v1/console/*`, require the session cookie. An unknown campaign id returns
+`404 campaign_not_found`, and every ratio is null-safe — a zero denominator yields
+`null` (never `0`).
+
+- `GET /v1/console/campaigns/:id/reasons` — the top complaint reasons: ranked,
+  non-null `chip_selected` counts each with a `share`. Returns `total_chip_responses`
+  and `chips[]` (`{ chip, count, share }`).
+- `GET /v1/console/campaigns/:id/clients` — per-client breakdown: `client_id`,
+  `triggers`, `responses`, `response_rate`, `positive_score`.
+- `GET /v1/console/campaigns/:id/responses?min_rating=&max_rating=&cursor=&limit=` —
+  the cursor-paginated response feed, newest-first (`limit` defaults to 50, max 200),
+  filterable by an inclusive score range. Each item carries `rating_value`,
+  `chip_selected`, `other_text`, `other_image_url`, `location`, `client_id`,
+  `device_os`, `app_version`, `shown_at`/`responded_at`, plus a top-level
+  `next_cursor`.
+- `GET /v1/console/campaigns/:id/trend` — the 30-day daily positive-score series:
+  `points[]` of `{ date, responses, positive_score }` (one point per UTC day).
 
 ### Console demo
 
@@ -136,6 +162,46 @@ pnpm --filter @signal/api dev &
 ADMIN_EMAIL=pm@signal.local ADMIN_PASSWORD=changeme123 ./scripts/console-demo.sh
 # prints ALL CONSOLE SCENARIOS PASSED
 ```
+
+## Client sync
+
+The `clients` table is a read-only cache of BeatRoute's client roster, kept fresh by
+a one-shot CLI:
+
+```bash
+pnpm --filter @signal/api sync-clients
+```
+
+Each run does an OAuth2 client-credentials pull from BeatRoute, then an **idempotent**
+upsert into `clients`: it inserts new clients, updates the `name`/`status` of existing
+ones, deactivates any client absent from the source (sets `status = inactive`), and
+**never deletes** a row. Touched rows have their `last_synced_at` bumped. On any
+failure (token or client-list fetch) it logs which step failed, leaves the `clients`
+cache **untouched**, and exits non-zero so alerting notices.
+
+Configuration is via `BEATROUTE_*` env placeholders:
+
+| Var | Purpose |
+| --- | --- |
+| `BEATROUTE_TOKEN_URL` | OAuth2 token endpoint |
+| `BEATROUTE_CLIENTS_API_URL` | client-list endpoint |
+| `BEATROUTE_CLIENT_ID` | client-credentials id |
+| `BEATROUTE_CLIENT_SECRET` | client-credentials secret |
+| `BEATROUTE_OAUTH_SCOPE` | OAuth scope (default `clients:read`) |
+
+In dev/test these default to a local mock (`http://localhost:4599/...`). In production
+they are **required** — missing values fail fast at startup. The secret originates
+from a secrets manager in prod; **never commit a real secret**.
+
+**Asks for BeatRoute engineering** (spec §14.2):
+
+- register a `signal-backend` client-credentials app,
+- issue a client id/secret scoped `clients:read`,
+- confirm the token URL and the client-list response shape:
+  `[{ id | client_id, name, status }]`.
+
+The command itself is stateless — the nightly cadence is owned by an **external
+scheduler** set up in the deploy milestone, not by this repo.
 
 ## Android SDK
 
