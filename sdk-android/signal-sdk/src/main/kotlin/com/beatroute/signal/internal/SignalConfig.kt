@@ -19,7 +19,10 @@ internal class SignalState(
     val baseUrl: HttpUrl,
     val appKey: String,
     val sessionProvider: SessionProvider,
-    val eligibilityClient: EligibilityClient,
+    val eligibility: EligibilitySource,
+    val suppressionCache: SuppressionStore,
+    val sheetPresenter: SheetPresenter,
     val feedbackClient: FeedbackClient,
     val scope: CoroutineScope,
+    val clock: () -> Long = System::currentTimeMillis,
 )

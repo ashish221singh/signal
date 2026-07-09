@@ -12,8 +12,8 @@ internal class EligibilityClient(
     private val appKey: String,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .callTimeout(2, TimeUnit.SECONDS).build(),
-) {
-    suspend fun check(
+) : EligibilitySource {
+    override suspend fun check(
         screenId: String,
         userId: String,
         clientId: String,

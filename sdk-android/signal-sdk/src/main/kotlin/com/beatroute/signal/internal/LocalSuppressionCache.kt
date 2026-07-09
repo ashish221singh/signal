@@ -20,12 +20,12 @@ import kotlinx.coroutines.flow.first
  */
 internal class LocalSuppressionCache(
     private val dataStore: DataStore<Preferences>,
-) {
+) : SuppressionStore {
     private fun key(screenId: String, clientId: String) =
         longPreferencesKey("$screenId|$clientId")
 
     /** Records a completed interaction at [nowMs] for the given pair. */
-    suspend fun recordInteraction(screenId: String, clientId: String, nowMs: Long) {
+    override suspend fun recordInteraction(screenId: String, clientId: String, nowMs: Long) {
         dataStore.edit { prefs -> prefs[key(screenId, clientId)] = nowMs }
     }
 
@@ -33,7 +33,7 @@ internal class LocalSuppressionCache(
      * Returns true iff a prior interaction is recorded for the pair and it falls
      * within the 7-day suppression floor relative to [nowMs]. Missing key -> false.
      */
-    suspend fun isSuppressed(screenId: String, clientId: String, nowMs: Long): Boolean {
+    override suspend fun isSuppressed(screenId: String, clientId: String, nowMs: Long): Boolean {
         val stored = dataStore.data.first()[key(screenId, clientId)]
         return stored != null && (nowMs - stored) < SUPPRESS_FLOOR_MS
     }

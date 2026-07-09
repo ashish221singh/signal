@@ -1,13 +1,19 @@
 package com.beatroute.signal
 
 import android.content.Context
+import android.util.Log
 import com.beatroute.signal.internal.EligibilityClient
 import com.beatroute.signal.internal.FeedbackClient
+import com.beatroute.signal.internal.LocalSuppressionCache
+import com.beatroute.signal.internal.NoOpSheetPresenter
 import com.beatroute.signal.internal.SignalState
+import com.beatroute.signal.internal.runTrigger
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /**
@@ -53,17 +59,24 @@ object Signal {
         val appContext = context.applicationContext
 
         // M3-D16: one SDK-owned supervised scope; a single thrown coroutine can
-        // never propagate to sibling work or crash the host.
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        // never propagate to sibling work or crash the host. The handler is
+        // defense-in-depth — call sites also wrap flows in runCatching.
+        val handler = CoroutineExceptionHandler { _, t ->
+            Log.w("Signal", "Swallowed uncaught coroutine failure", t)
+        }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + handler)
 
         state = SignalState(
             applicationContext = appContext,
             baseUrl = baseUrl,
             appKey = appKey,
             sessionProvider = sessionProvider,
-            eligibilityClient = EligibilityClient(baseUrl, appKey),
+            eligibility = EligibilityClient(baseUrl, appKey),
+            suppressionCache = LocalSuppressionCache.create(appContext),
+            sheetPresenter = NoOpSheetPresenter,
             feedbackClient = FeedbackClient(baseUrl, appKey),
             scope = scope,
+            clock = System::currentTimeMillis,
         )
     }
 
@@ -72,9 +85,11 @@ object Signal {
      * No-op before [init]. Flow logic lands in Phase D.
      */
     fun trackEvent(screenId: String) {
-        @Suppress("UNUSED_VARIABLE")
-        val s = state ?: return
-        // Phase D: eligibility check + sheet trigger.
+        val s = state ?: return // no-op before init
+        s.scope.launch {
+            // M3-D16: never let a trigger failure escape into the host.
+            runCatching { runTrigger(s, screenId) }
+        }
     }
 
     /**
