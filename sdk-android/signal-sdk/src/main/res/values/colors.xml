@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- ============================================================ -->
+  <!-- Signal design tokens: colors (ported from design/tokens.css) -->
+  <!-- ============================================================ -->
+
+  <!-- Brand orange ramp -->
+  <color name="signal_orange_50">#FFFFF5EB</color>
+  <color name="signal_orange_100">#FFFFE8D1</color>
+  <color name="signal_orange_200">#FFFFD3A8</color>
+  <color name="signal_orange_300">#FFFFB870</color>
+  <color name="signal_orange_400">#FFFD9D38</color>
+  <color name="signal_orange_500">#FFF78200</color> <!-- brand -->
+  <color name="signal_orange_600">#FFD96F00</color>
+  <color name="signal_orange_700">#FFB25B00</color>
+  <color name="signal_orange_800">#FF7F4100</color>
+  <color name="signal_orange_900">#FF552C00</color>
+
+  <!-- Blue ramp -->
+  <color name="signal_blue_50">#FFEBF7FD</color>
+  <color name="signal_blue_100">#FFD3EEFB</color>
+  <color name="signal_blue_200">#FFA8DEF7</color>
+  <color name="signal_blue_300">#FF70C9F1</color>
+  <color name="signal_blue_400">#FF38B3E9</color>
+  <color name="signal_blue_500">#FF0094DD</color> <!-- brand -->
+  <color name="signal_blue_600">#FF007DBD</color>
+  <color name="signal_blue_700">#FF00659A</color>
+  <color name="signal_blue_800">#FF004A72</color>
+  <color name="signal_blue_900">#FF00344F</color>
+
+  <!-- Warm grays -->
+  <color name="signal_white">#FFFFFFFF</color>
+  <color name="signal_gray_25">#FFFCFCFB</color>
+  <color name="signal_gray_50">#FFF7F7F6</color>
+  <color name="signal_gray_100">#FFF0F0EE</color>
+  <color name="signal_gray_200">#FFE5E4E1</color>
+  <color name="signal_gray_300">#FFD2D1CD</color>
+  <color name="signal_gray_400">#FFA8A7A1</color>
+  <color name="signal_gray_500">#FF7C7B75</color>
+  <color name="signal_gray_600">#FF5B5A55</color>
+  <color name="signal_gray_700">#FF42413D</color>
+  <color name="signal_gray_800">#FF2A2926</color>
+  <color name="signal_gray_900">#FF191815</color> <!-- ink -->
+
+  <!-- Semantic fg / bg pairs -->
+  <color name="signal_success">#FF178A5E</color>
+  <color name="signal_success_bg">#FFE8F6F0</color>
+  <color name="signal_warning">#FFB7791F</color>
+  <color name="signal_warning_bg">#FFFCF3E3</color>
+  <color name="signal_danger">#FFCC3D33</color>
+  <color name="signal_danger_bg">#FFFBEDEC</color>
+  <color name="signal_info">@color/signal_blue_700</color>
+  <color name="signal_info_bg">@color/signal_blue_50</color>
+
+  <!-- Semantic aliases used by components -->
+  <color name="signal_bg">@color/signal_white</color>
+  <color name="signal_bg_subtle">@color/signal_gray_25</color>
+  <color name="signal_bg_sunken">@color/signal_gray_50</color>
+  <color name="signal_ink">@color/signal_gray_900</color>
+  <color name="signal_ink_secondary">@color/signal_gray_600</color>
+  <color name="signal_ink_tertiary">@color/signal_gray_400</color>
+  <color name="signal_line">@color/signal_gray_200</color>
+  <color name="signal_line_subtle">@color/signal_gray_100</color>
+  <color name="signal_action">@color/signal_orange_500</color>
+  <color name="signal_action_hover">@color/signal_orange_600</color>
+  <color name="signal_action_ink">#FFFFFFFF</color>
+  <color name="signal_link">@color/signal_blue_700</color>
+  <color name="signal_focus">@color/signal_blue_500</color>
+</resources>

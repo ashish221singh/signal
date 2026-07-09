@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- =============================================================== -->
+  <!-- Signal design tokens: dimensions (radii, spacing, touch target) -->
+  <!-- =============================================================== -->
+
+  <!-- Corner radii -->
+  <dimen name="signal_radius_sm">6dp</dimen>   <!-- chips / badges -->
+  <dimen name="signal_radius_md">10dp</dimen>  <!-- buttons / inputs -->
+  <dimen name="signal_radius_lg">14dp</dimen>  <!-- cards -->
+  <dimen name="signal_radius_xl">20dp</dimen>  <!-- modals / bottom sheet -->
+  <dimen name="signal_radius_full">999dp</dimen>
+
+  <!-- Named radii required by later tasks -->
+  <dimen name="signal_radius_sheet">20dp</dimen> <!-- sheet corner, echoes radius_xl -->
+  <dimen name="signal_radius_chip">6dp</dimen>   <!-- chip corner, echoes radius_sm -->
+
+  <!-- Spacing (4px scale) -->
+  <dimen name="signal_space_1">4dp</dimen>
+  <dimen name="signal_space_2">8dp</dimen>
+  <dimen name="signal_space_3">12dp</dimen>
+  <dimen name="signal_space_4">16dp</dimen>
+  <dimen name="signal_space_5">20dp</dimen>
+  <dimen name="signal_space_6">24dp</dimen>
+  <dimen name="signal_space_8">32dp</dimen>
+  <dimen name="signal_space_10">40dp</dimen>
+  <dimen name="signal_space_12">48dp</dimen>
+  <dimen name="signal_space_16">64dp</dimen>
+
+  <!-- Minimum touch target -->
+  <dimen name="signal_touch_target">48dp</dimen>
+</resources>

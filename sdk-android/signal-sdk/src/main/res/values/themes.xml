@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- ============================================================= -->
+  <!-- Signal theme (DayNight so values-night colors apply for free) -->
+  <!-- ============================================================= -->
+  <style name="Theme.Signal" parent="Theme.Material3.DayNight.NoActionBar">
+    <item name="colorPrimary">@color/signal_orange_500</item>
+    <item name="colorOnPrimary">@color/signal_action_ink</item>
+    <item name="colorSecondary">@color/signal_blue_700</item>
+    <item name="colorOnSecondary">@color/signal_action_ink</item>
+    <item name="colorSurface">@color/signal_bg</item>
+    <item name="android:colorBackground">@color/signal_bg</item>
+    <item name="colorOnSurface">@color/signal_ink</item>
+    <item name="colorOnSurfaceVariant">@color/signal_ink_secondary</item>
+    <item name="colorOutline">@color/signal_line</item>
+    <item name="colorError">@color/signal_danger</item>
+  </style>
+
+  <!-- ============================================================= -->
+  <!-- Bottom sheet look, applied by Phase E when rendering the sheet -->
+  <!-- ============================================================= -->
+  <style name="ShapeAppearance.Signal.BottomSheet" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+    <item name="cornerFamily">rounded</item>
+    <item name="cornerSizeTopLeft">@dimen/signal_radius_sheet</item>
+    <item name="cornerSizeTopRight">@dimen/signal_radius_sheet</item>
+    <item name="cornerSizeBottomLeft">0dp</item>
+    <item name="cornerSizeBottomRight">0dp</item>
+  </style>
+
+  <style name="Widget.Signal.BottomSheet" parent="Widget.Material3.BottomSheet.Modal">
+    <item name="shapeAppearance">@style/ShapeAppearance.Signal.BottomSheet</item>
+    <item name="backgroundTint">@color/signal_bg</item>
+  </style>
+
+  <style name="ThemeOverlay.Signal.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+    <item name="colorPrimary">@color/signal_orange_500</item>
+    <item name="colorOnPrimary">@color/signal_action_ink</item>
+    <item name="colorSurface">@color/signal_bg</item>
+    <item name="colorOnSurface">@color/signal_ink</item>
+    <item name="bottomSheetStyle">@style/Widget.Signal.BottomSheet</item>
+    <!-- drag-handle tint -->
+    <item name="colorOnSurfaceVariant">@color/signal_ink_tertiary</item>
+  </style>
+</resources>

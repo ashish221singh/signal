@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- ================================================================= -->
+  <!-- Signal dark aliases: invert ink/paper. Brand orange is UNCHANGED. -->
+  <!-- Only the semantic alias colors are overridden here.               -->
+  <!-- ================================================================= -->
+
+  <!-- Dark paper (near-black ink shade) -->
+  <color name="signal_bg">#FF191815</color>
+  <color name="signal_bg_subtle">#FF2A2926</color>
+  <color name="signal_bg_sunken">#FF42413D</color>
+
+  <!-- Near-white ink -->
+  <color name="signal_ink">#FFF7F7F6</color>
+  <color name="signal_ink_secondary">@color/signal_gray_400</color>
+  <color name="signal_ink_tertiary">@color/signal_gray_500</color>
+
+  <!-- Dark lines -->
+  <color name="signal_line">@color/signal_gray_700</color>
+  <color name="signal_line_subtle">@color/signal_gray_800</color>
+
+  <!-- link/focus lean brighter for contrast on dark paper -->
+  <color name="signal_link">@color/signal_blue_400</color>
+  <color name="signal_focus">@color/signal_blue_400</color>
+</resources>
