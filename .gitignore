@@ -19,3 +19,10 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Android SDK build artifacts
+sdk-android/.gradle/
+sdk-android/build/
+sdk-android/**/build/
+.cxx/
+local.properties
