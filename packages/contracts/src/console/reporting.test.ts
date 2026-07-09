@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignOverviewSchema } from '../index.js';
+import { campaignOverviewSchema, dashboardSummarySchema } from '../index.js';
 
 describe('campaignOverviewSchema', () => {
   const overview = {
@@ -34,5 +34,59 @@ describe('campaignOverviewSchema', () => {
     expect(campaignOverviewSchema.safeParse({ ...overview, campaign_id: 'nope' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('dashboardSummarySchema', () => {
+  const cid = '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e';
+  const summary = {
+    kpis: { active_campaigns: 2, total_triggers_30d: 40, avg_positive_score: 0.72 },
+    attention: [{ campaign_id: cid, header: 'How was it?', reason: 'low_response_rate' }],
+    campaigns: [
+      {
+        campaign_id: cid,
+        header: 'How was it?',
+        status: 'active',
+        integration_status: 'confirmed_live',
+        triggers_30d: 20,
+        responses_30d: 6,
+        response_rate: 0.3,
+        positive_score: 0.5,
+      },
+    ],
+  };
+
+  it('parses a fully-populated dashboard summary', () => {
+    expect(dashboardSummarySchema.safeParse(summary).success).toBe(true);
+  });
+
+  it('accepts null avg_positive_score / rates / integration_status', () => {
+    expect(
+      dashboardSummarySchema.safeParse({
+        kpis: { active_campaigns: 0, total_triggers_30d: 0, avg_positive_score: null },
+        attention: [],
+        campaigns: [
+          {
+            campaign_id: cid,
+            header: null,
+            status: 'paused',
+            integration_status: null,
+            triggers_30d: 0,
+            responses_30d: 0,
+            response_rate: null,
+            positive_score: null,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an unknown attention reason', () => {
+    expect(
+      dashboardSummarySchema.safeParse({
+        ...summary,
+        attention: [{ campaign_id: cid, header: null, reason: 'nope' }],
+      }).success,
+    ).toBe(false);
   });
 });

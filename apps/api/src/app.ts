@@ -112,9 +112,10 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
         prefix: '/campaigns',
       });
-      // Reporting (Task 16): mounted with NO sub-prefix — its routes carry their
-      // own `/campaigns/:id/overview` path, distinct from campaignRoutes above.
-      await consoleApi.register(reportingRoutes({ db: resolvedDb }));
+      // Reporting (Tasks 16–17): mounted with NO sub-prefix — its routes carry
+      // their own `/campaigns/:id/overview` and `/dashboard` paths, distinct
+      // from campaignRoutes above. The clock feeds the dashboard's 30-day window.
+      await consoleApi.register(reportingRoutes({ db: resolvedDb, clock }));
     },
     { prefix: '/v1/console' },
   );
