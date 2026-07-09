@@ -1,7 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { type Clock, systemClock } from '../../clock.js';
 import type { Db } from '../../db/client.js';
-import { campaignOverview, campaignReasons, dashboardSummary } from '../../reporting/queries.js';
+import {
+  campaignClientBreakdown,
+  campaignOverview,
+  campaignReasons,
+  dashboardSummary,
+} from '../../reporting/queries.js';
 
 /**
  * Console reporting routes (M2, Tasks 16–17). Mounted (with NO sub-prefix)
@@ -39,6 +44,18 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
           .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
       }
       return reply.send(reasons);
+    });
+
+    // GET /campaigns/:id/clients — per-client trigger/response breakdown for the
+    // Clients tab (M4, Task 3). Unknown campaign → 404 campaign_not_found (M4-D12).
+    app.get<{ Params: { id: string } }>('/campaigns/:id/clients', async (request, reply) => {
+      const breakdown = await campaignClientBreakdown(deps.db, request.params.id);
+      if (!breakdown) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
+      }
+      return reply.send(breakdown);
     });
 
     // GET /dashboard — the console landing summary. KPIs over active campaigns

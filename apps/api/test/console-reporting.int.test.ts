@@ -1,5 +1,10 @@
 // apps/api/test/console-reporting.int.test.ts
-import { campaignOverviewSchema, dashboardSummarySchema, reasonsSchema } from '@signal/contracts';
+import {
+  campaignOverviewSchema,
+  clientBreakdownSchema,
+  dashboardSummarySchema,
+  reasonsSchema,
+} from '@signal/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { Clock } from '../src/clock.js';
@@ -83,6 +88,44 @@ async function seedResponseWithRating(
     campaignId,
     userId: 'u',
     clientId: 'cl_A',
+    screenId: 'alpha',
+    ratingValue,
+    deviceOs: 'Android',
+    appVersion: '1',
+    shownAt: new Date(),
+    respondedAt: new Date(),
+  });
+}
+
+/** Insert one trigger_log row attributed to a specific client. */
+async function seedTriggerForClient(db: Db, campaignId: string, clientId: string): Promise<string> {
+  const [trigger] = await db
+    .insert(s.triggerLog)
+    .values({
+      campaignId,
+      userId: 'u',
+      clientId,
+      screenId: 'alpha',
+      shownAt: new Date(),
+    })
+    .returning();
+  if (!trigger) throw new Error('trigger seed returned no row');
+  return trigger.id;
+}
+
+/** Insert a trigger + a response for a specific client with a KNOWN rating_value. */
+async function seedResponseForClient(
+  db: Db,
+  campaignId: string,
+  clientId: string,
+  ratingValue: number,
+): Promise<void> {
+  const triggerId = await seedTriggerForClient(db, campaignId, clientId);
+  await db.insert(s.responses).values({
+    triggerId,
+    campaignId,
+    userId: 'u',
+    clientId,
     screenId: 'alpha',
     ratingValue,
     deviceOs: 'Android',
@@ -551,5 +594,115 @@ describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
     expect(reasonsSchema.safeParse(body).success).toBe(true);
     expect(body.total_chip_responses).toBe(0);
     expect(body.chips).toEqual([]);
+  });
+});
+
+describe('GET /v1/console/campaigns/:id/clients (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+    const signed = app.signCookie(USER_ID);
+    cookieHeader = `signal_session=${signed}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('without a cookie → 401', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/clients`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('unknown id → 404 campaign_not_found', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${UNKNOWN_ID}/clients`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('campaign_not_found');
+  });
+
+  it('splits triggers/responses per client with null-safe rates', async () => {
+    // Campaign for [cl_A, cl_B], threshold 4.
+    // cl_A: 4 triggers / 2 responses (ratings 5 and 1) → rate 0.5, score 0.5.
+    // cl_B: 2 triggers / 0 responses → rate 0 (has triggers), score null.
+    const id = await seedActiveCampaign(t.db, {
+      clientIds: ['cl_A', 'cl_B'],
+      positiveThreshold: 4,
+    });
+    // cl_A: two bare triggers + two responses (each response adds a trigger) = 4.
+    await seedTriggerForClient(t.db, id, 'cl_A');
+    await seedTriggerForClient(t.db, id, 'cl_A');
+    await seedResponseForClient(t.db, id, 'cl_A', 5);
+    await seedResponseForClient(t.db, id, 'cl_A', 1);
+    // cl_B: two bare triggers, no responses.
+    await seedTriggerForClient(t.db, id, 'cl_B');
+    await seedTriggerForClient(t.db, id, 'cl_B');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/clients`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(clientBreakdownSchema.safeParse(body).success).toBe(true);
+    expect(body.campaign_id).toBe(id);
+    // Order preserved from client_ids.
+    expect(body.clients.map((c: { client_id: string }) => c.client_id)).toEqual(['cl_A', 'cl_B']);
+
+    const [a, b] = body.clients;
+    expect(a).toEqual({
+      client_id: 'cl_A',
+      triggers: 4,
+      responses: 2,
+      response_rate: 0.5,
+      positive_score: 0.5, // one of two responses (rating 5) >= 4
+    });
+    // cl_B has triggers but zero responses → rate is 0 (NOT null), score null.
+    expect(b.client_id).toBe('cl_B');
+    expect(b.triggers).toBe(2);
+    expect(b.responses).toBe(0);
+    expect(b.response_rate).toBe(0);
+    expect(b.positive_score).toBeNull();
+  });
+
+  it('a client with zero triggers still appears with null rate and score', async () => {
+    const id = await seedActiveCampaign(t.db, {
+      clientIds: ['cl_A', 'cl_ZERO'],
+      positiveThreshold: 4,
+    });
+    await seedTriggerForClient(t.db, id, 'cl_A');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${id}/clients`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(clientBreakdownSchema.safeParse(body).success).toBe(true);
+
+    const zero = body.clients.find((c: { client_id: string }) => c.client_id === 'cl_ZERO');
+    expect(zero).toBeDefined();
+    expect(zero.triggers).toBe(0);
+    expect(zero.responses).toBe(0);
+    expect(zero.response_rate).toBeNull(); // zero triggers → null (not 0)
+    expect(zero.positive_score).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import type {
   AttentionItem,
   CampaignHealth,
   CampaignOverview,
+  ClientBreakdown,
   DashboardSummary,
   Reasons,
 } from '@signal/contracts';
@@ -120,6 +121,76 @@ export async function campaignReasons(db: Db, campaignId: string): Promise<Reaso
       share: total === 0 ? 0 : r.count / total,
     })),
   };
+}
+
+/**
+ * Per-client campaign breakdown reporting query (M4, Task 3, Clients tab).
+ * Returns one row per `client_id` in the campaign's `client_ids`, or `null` if
+ * the campaign does not exist (the route turns that into a 404, M4-D12).
+ *
+ * Each client's triggers/responses/positive are computed with the SAME math as
+ * `campaignOverview`, just scoped to that `client_id` (M4-D3):
+ *  - `triggers` = trigger_log rows for the campaign+client.
+ *  - `responses` total + `positive` = a filtered aggregate over responses for
+ *    the campaign+client (positive only when the campaign has a threshold).
+ *
+ * Null-safety mirrors Overview (M4-D5):
+ *  - `response_rate = responses / triggers`, but `null` when triggers === 0
+ *    (a client with triggers but no responses stays 0, not null).
+ *  - `positive_score = positive / responses`, but `null` when responses === 0
+ *    or the campaign has no `positive_threshold`.
+ *
+ * A per-client loop of small counting queries is fine at this scale (it mirrors
+ * how `campaignOverview` counts). The `client_ids` order is preserved.
+ */
+export async function campaignClientBreakdown(
+  db: Db,
+  campaignId: string,
+): Promise<ClientBreakdown | null> {
+  const [campaign] = await db
+    .select({
+      clientIds: campaigns.clientIds,
+      positiveThreshold: campaigns.positiveThreshold,
+    })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  if (!campaign) return null;
+
+  const threshold = campaign.positiveThreshold;
+  const clients: ClientBreakdown['clients'] = [];
+
+  for (const clientId of campaign.clientIds) {
+    const [triggerRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(triggerLog)
+      .where(and(eq(triggerLog.campaignId, campaignId), eq(triggerLog.clientId, clientId)));
+
+    const [responseRow] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        positive:
+          threshold === null
+            ? sql<number>`0::int`
+            : sql<number>`count(*) filter (where ${responses.ratingValue} >= ${threshold})::int`,
+      })
+      .from(responses)
+      .where(and(eq(responses.campaignId, campaignId), eq(responses.clientId, clientId)));
+
+    const triggers = triggerRow?.count ?? 0;
+    const total = responseRow?.total ?? 0;
+    const positive = responseRow?.positive ?? 0;
+
+    clients.push({
+      client_id: clientId,
+      triggers,
+      responses: total,
+      response_rate: triggers === 0 ? null : total / triggers,
+      positive_score: total === 0 || threshold === null ? null : positive / total,
+    });
+  }
+
+  return { campaign_id: campaignId, clients };
 }
 
 /**
