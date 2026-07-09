@@ -206,6 +206,46 @@ expect_status 200 "$status" "10. GET /v1/console/dashboard → 200"
 IN_HEALTH="$(jq -r --arg id "$CAMPAIGN_ID" '[.campaigns[] | select(.campaign_id==$id)] | length' "$BODY")"
 expect_eq "1" "$IN_HEALTH" "10b. campaign present in dashboard health list"
 
+# expect_jq <label> — asserts stdin-less jq -e over $BODY; ✅ on true, ❌+exit otherwise.
+# usage: expect_jq '<jq filter>' '<label>'
+expect_jq() {
+  local filter="$1" label="$2"
+  if jq -e "$filter" "$BODY" >/dev/null 2>&1; then
+    echo "✅ $label"
+  else
+    echo "❌ $label (jq assertion failed: $filter)"
+    echo "   response body:"; cat "$BODY" 2>/dev/null | head -20; echo
+    exit 1
+  fi
+}
+
+# ── Step 13: reasons report — chips breakdown for the campaign ───────────────
+status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/reasons")"
+expect_status 200 "$status" "13. GET /v1/console/campaigns/:id/reasons → 200"
+expect_jq '.chips | type == "array"' "13b. reasons.chips is an array"
+expect_jq '.total_chip_responses | type == "number"' "13c. reasons.total_chip_responses is numeric"
+
+# ── Step 14: clients report — acting client cl_A shows a response ─────────────
+status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/clients")"
+expect_status 200 "$status" "14. GET /v1/console/campaigns/:id/clients → 200"
+expect_jq ".clients[] | select(.client_id==\"$CLIENT\") | .responses >= 1" \
+  "14b. clients report: $CLIENT responses >= 1"
+
+# ── Step 15: responses report — rating filter returns an array ───────────────
+status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/responses?min_rating=1&max_rating=2")"
+expect_status 200 "$status" "15. GET /v1/console/campaigns/:id/responses?min_rating=1&max_rating=2 → 200"
+expect_jq '.items | type == "array"' "15b. responses.items is an array (rating-5 response filtered out)"
+
+# ── Step 16: trend report — daily points include today's response ────────────
+status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/trend")"
+expect_status 200 "$status" "16. GET /v1/console/campaigns/:id/trend → 200"
+expect_jq '.points | type == "array"' "16b. trend.points is an array"
+expect_jq '.points | length >= 1' "16c. trend.points has at least one point"
+
+# ── Step 17: unauthenticated reporting read (no jar) → 401 ───────────────────
+status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/v1/console/campaigns/$CAMPAIGN_ID/responses")"
+expect_status 401 "$status" "17. GET /v1/console/campaigns/:id/responses with no session → 401"
+
 # ── Step 11: a SECOND overlapping campaign on same target+client → publish 409 ─
 status="$(console_post "/v1/console/campaigns" "$(jq -nc --arg c "$CLIENT" '{client_ids:[$c]}')")"
 expect_status 201 "$status" "11a. POST /campaigns (second draft) → 201"
