@@ -8,12 +8,13 @@ import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
 import type { Env } from './env.js';
 import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
-import { sessionGuard } from './plugins/sessionGuard.js';
+import { resolveAuth } from './plugins/resolveAuth.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { workflowRoutes } from './routes/console/workflows.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
+import { TokenService } from './tokens/service.js';
 import { makeS3 } from './uploads/presign.js';
 import { WorkflowCache } from './workflows/cache.js';
 import { makeDbWorkflowLoader } from './workflows/loader.js';
@@ -62,6 +63,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
   const accountsService = new AccountsService(resolvedDb);
+  const tokenService = new TokenService(resolvedDb, clock);
 
   // One S3 client for the app lifetime — shared by the SDK upload route. Its
   // close is a no-op, so there is nothing to tear down in `onClose`.
@@ -106,13 +108,14 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // reachable without a session. The guarded console subtree arrives in Task 7.
   await app.register(consoleAuthRoutes({ db: resolvedDb }), { prefix: '/v1/console/auth' });
 
-  // Guarded console subtree (M2, Task 7): the fp-wrapped session guard runs on
-  // every request into this encapsulated scope, so the sibling read routes below
-  // are protected. This is a SEPARATE register from `/v1/console/auth` above —
-  // login/logout/me stay reachable without a cookie.
+  // Guarded console subtree (M2 Task 7, B3-D5): the fp-wrapped `resolveAuth` runs
+  // on every request into this encapsulated scope, accepting EITHER a cookie
+  // session (⇒ all scopes) OR an `Authorization: Bearer cli_…` token (⇒ the
+  // token's scopes). Sibling routes are protected. Separate register from
+  // `/v1/console/auth` above — login/logout/me stay reachable without a cookie.
   await app.register(
     async (consoleApi) => {
-      await consoleApi.register(sessionGuard({ db: resolvedDb }));
+      await consoleApi.register(resolveAuth({ db: resolvedDb, tokens: tokenService }));
       await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
         prefix: '/workflows',
       });

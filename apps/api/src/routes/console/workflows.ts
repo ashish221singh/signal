@@ -22,11 +22,13 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           .code(422)
           .send({ error: { code: 'invalid_body', message: 'invalid workflow draft' } });
       }
-      const createdBy = request.consoleUserId;
       const accountId = request.accountId;
-      if (!createdBy || !accountId) {
+      if (!accountId) {
         return reply.code(401).send({ error: { code: 'unauthorized', message: 'login required' } });
       }
+      // Session requests carry a console user; token requests do not — stamp a
+      // token marker so `created_by` is always populated (B3-D5).
+      const createdBy = request.consoleUserId ?? 'cli-token';
       const workflow = await service.create(accountId, createdBy, parsed.data);
       return reply.code(201).send(workflow);
     });
