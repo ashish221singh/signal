@@ -2,17 +2,17 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
 import Fastify, { type FastifyError } from 'fastify';
+import { AccountsService } from './accounts/service.js';
 import { CampaignCache } from './campaigns/cache.js';
 import { makeDbCampaignLoader } from './campaigns/loader.js';
 import { type Clock, systemClock } from './clock.js';
 import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
 import type { Env } from './env.js';
-import { appKeyAuth } from './plugins/appKeyAuth.js';
+import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
 import { sessionGuard } from './plugins/sessionGuard.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { campaignRoutes } from './routes/console/campaigns.js';
-import { clientRoutes } from './routes/console/clients.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { targetRoutes } from './routes/console/targets.js';
 import { sdkRoutes } from './routes/sdk.js';
@@ -62,6 +62,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   app.decorate('campaignCache', cache);
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
+  const accountsService = new AccountsService(resolvedDb);
 
   // One S3 client for the app lifetime — shared by the SDK upload route. Its
   // close is a no-op, so there is nothing to tear down in `onClose`.
@@ -112,9 +113,8 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // login/logout/me stay reachable without a cookie.
   await app.register(
     async (consoleApi) => {
-      await consoleApi.register(sessionGuard);
+      await consoleApi.register(sessionGuard({ db: resolvedDb }));
       await consoleApi.register(targetRoutes({ db: resolvedDb }), { prefix: '/targets' });
-      await consoleApi.register(clientRoutes({ db: resolvedDb }), { prefix: '/clients' });
       await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
         prefix: '/campaigns',
       });
@@ -128,7 +128,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   await app.register(
     async (sdk) => {
-      await sdk.register(appKeyAuth(env.appKeys));
+      await sdk.register(publishableKeyAuth((key) => accountsService.lookupAccountByKey(key)));
       await sdk.register(
         sdkRoutes({
           db: resolvedDb,

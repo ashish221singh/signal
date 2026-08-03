@@ -25,19 +25,20 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           .code(422)
           .send({ error: { code: 'invalid_body', message: 'invalid campaign draft' } });
       }
-      // `consoleUserId` is guaranteed set by the session guard on this subtree;
-      // the guard 401s before the handler runs otherwise, so this never throws.
+      // `consoleUserId`/`accountId` are guaranteed set by the session guard on
+      // this subtree; the guard 401s before the handler runs otherwise.
       const createdBy = request.consoleUserId;
-      if (!createdBy) {
+      const accountId = request.accountId;
+      if (!createdBy || !accountId) {
         return reply.code(401).send({ error: { code: 'unauthorized', message: 'login required' } });
       }
-      const campaign = await service.create(createdBy, parsed.data);
+      const campaign = await service.create(accountId, createdBy, parsed.data);
       return reply.code(201).send(campaign);
     });
 
     // GET /:id — the full campaign, or 404.
     app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
-      const campaign = await service.getById(request.params.id);
+      const campaign = await service.getById(request.accountId as string, request.params.id);
       if (!campaign) {
         return reply
           .code(404)
@@ -55,7 +56,11 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           .code(422)
           .send({ error: { code: 'invalid_body', message: 'invalid campaign update' } });
       }
-      const result = await service.update(request.params.id, parsed.data);
+      const result = await service.update(
+        request.accountId as string,
+        request.params.id,
+        parsed.data,
+      );
       if (!result.ok) {
         if (result.reason === 'not_found') {
           return reply
@@ -77,7 +82,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
     // an active (target, client) collision returns 409 `overlap` with a top-level
     // `conflict: { id, header }` (both carried ALONGSIDE the standard error envelope).
     app.post<{ Params: { id: string } }>('/:id/publish', async (request, reply) => {
-      const result = await service.publish(request.params.id);
+      const result = await service.publish(request.accountId as string, request.params.id);
       if (result.ok) return reply.send(result.campaign);
       if (result.reason === 'not_found') {
         return reply
@@ -102,7 +107,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
 
     // POST /:id/pause — active → paused (Task 13). 404 not_found; 409 invalid_state.
     app.post<{ Params: { id: string } }>('/:id/pause', async (request, reply) => {
-      const result = await service.pause(request.params.id);
+      const result = await service.pause(request.accountId as string, request.params.id);
       if (result.ok) return reply.send(result.campaign);
       if (result.reason === 'not_found') {
         return reply
@@ -117,7 +122,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
     // POST /:id/resume — paused → active, re-running the overlap check (Task 13).
     // 404 not_found; 409 invalid_state; 409 overlap (with `conflict`) if a clash appeared.
     app.post<{ Params: { id: string } }>('/:id/resume', async (request, reply) => {
-      const result = await service.resume(request.params.id);
+      const result = await service.resume(request.accountId as string, request.params.id);
       if (result.ok) return reply.send(result.campaign);
       if (result.reason === 'not_found') {
         return reply
@@ -141,7 +146,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
 
     // POST /:id/archive — any non-archived state → archived (Task 13, M2-D6).
     app.post<{ Params: { id: string } }>('/:id/archive', async (request, reply) => {
-      const result = await service.archive(request.params.id);
+      const result = await service.archive(request.accountId as string, request.params.id);
       if (result.ok) return reply.send(result.campaign);
       if (result.reason === 'not_found') {
         return reply
@@ -156,7 +161,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
     // DELETE /:id — safe hard delete (Task 13, M2-D6). 204 only for a draft with
     // zero trigger/response history; otherwise 409 has_history ("archive instead").
     app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
-      const result = await service.remove(request.params.id);
+      const result = await service.remove(request.accountId as string, request.params.id);
       if (result.ok) return reply.code(204).send();
       if (result.reason === 'not_found') {
         return reply
@@ -169,7 +174,7 @@ export function campaignRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
     // GET / — list projection; archived excluded unless ?include=archived (M2-D6).
     app.get<{ Querystring: { include?: string } }>('/', async (request, reply) => {
       const includeArchived = request.query.include === 'archived';
-      const rows = await service.list({ includeArchived });
+      const rows = await service.list(request.accountId as string, { includeArchived });
       return reply.send(rows);
     });
   };

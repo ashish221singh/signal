@@ -4,7 +4,7 @@ import type {
   CampaignListItem,
   CampaignUpdate,
 } from '@signal/contracts';
-import { and, count, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ne } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import {
@@ -34,10 +34,10 @@ export type UpdateResult =
   | { ok: false; reason: 'not_found' | 'semantic_locked' };
 
 /**
- * The six columns + non-empty `client_ids` that the DB CHECK
- * (`campaigns_active_complete`) requires before a campaign may go `active`.
- * Mirrored in code (M2-D5) so publish can list the *missing* fields in a 422
- * rather than surfacing a raw CHECK violation. Wire (snake_case) names.
+ * The columns the DB CHECK (`campaigns_active_complete`) requires before a
+ * campaign may go `active`. Mirrored in code (M2-D5) so publish can list the
+ * *missing* fields in a 422 rather than surfacing a raw CHECK violation.
+ * Wire (snake_case) names. B1-D6 dropped `client_ids` from the CHECK.
  */
 export type MissingField =
   | 'target_id'
@@ -45,10 +45,9 @@ export type MissingField =
   | 'rating_type'
   | 'rating_scale_max'
   | 'header_text'
-  | 'positive_threshold'
-  | 'client_ids';
+  | 'positive_threshold';
 
-/** The active campaign a publish would collide with (M2-D8 / M1-D3). */
+/** The active campaign a publish would collide with (M2-D8 / one active per target). */
 export interface OverlapConflict {
   id: string;
   header: string | null;
@@ -56,9 +55,7 @@ export interface OverlapConflict {
 
 /**
  * Discriminated outcome of `publish` so the route can map to
- * 200 / 404 / 422 (incomplete) / 409 (overlap). Extends the `UpdateResult`
- * style with the two publish-specific failure reasons, each carrying the extra
- * payload the route surfaces alongside the standard error envelope.
+ * 200 / 404 / 422 (incomplete) / 409 (overlap).
  */
 export type PublishResult =
   | { ok: true; campaign: Campaign }
@@ -91,13 +88,10 @@ export type ResumeResult =
 export type RemoveResult = { ok: true } | { ok: false; reason: 'not_found' | 'has_history' };
 
 /**
- * Console-side campaign service (M2, Task 10). Distinct from the SDK-side
- * `campaigns/cache.ts`/`loader.ts` (which feed the eligibility hot path — not
- * touched here). Backs the guarded `/v1/console/campaigns` CRUD routes.
- *
- * The `clock` dependency is injected now so Task 11 (update) can stamp
- * `updatedAt` deterministically; for Task 10 the DB `defaultNow()` handles
- * `created_at`/`updated_at` on insert.
+ * Console-side campaign service (M2, Task 10). Every read and write is scoped by
+ * `account_id` (B1-D8): a campaign is only visible/mutable to its owning account,
+ * and new rows are stamped with the account. Distinct from the SDK-side
+ * `campaigns/cache.ts`/`loader.ts` (the eligibility hot path — not touched here).
  */
 export type CampaignRow = typeof campaigns.$inferSelect;
 
@@ -106,7 +100,6 @@ export function toCampaign(r: CampaignRow): Campaign {
   return {
     id: r.id,
     target_id: r.targetId,
-    client_ids: r.clientIds,
     metric_type: r.metricType,
     rating_type: r.ratingType,
     rating_scale_max: r.ratingScaleMax,
@@ -138,7 +131,6 @@ export function missingRequiredFields(r: CampaignRow): MissingField[] {
   if (r.ratingScaleMax === null) missing.push('rating_scale_max');
   if (r.headerText === null) missing.push('header_text');
   if (r.positiveThreshold === null) missing.push('positive_threshold');
-  if (r.clientIds.length === 0) missing.push('client_ids');
   return missing;
 }
 
@@ -149,44 +141,42 @@ export class CampaignService {
   ) {}
 
   /**
-   * Insert a minimal draft row. `createdBy` is the authenticated PM (M2-D18);
-   * `clientIds` come from the body (default `[]`); all content columns stay NULL
-   * and `status` defaults to 'draft'. Timestamps use the DB `defaultNow()`.
+   * Insert a minimal draft row owned by `accountId` and `createdBy` (M2-D18).
+   * All content columns stay NULL; `status` defaults to 'draft'. Timestamps use
+   * the DB `defaultNow()`. `_body` is accepted for signature stability (drafts
+   * carry no fields in B1 after clients were removed).
    */
-  async create(createdBy: string, body: CampaignDraftCreate): Promise<Campaign> {
-    const [row] = await this.db
-      .insert(campaigns)
-      .values({
-        createdBy,
-        clientIds: body.client_ids ?? [],
-      })
-      .returning();
+  async create(
+    accountId: string,
+    createdBy: string,
+    _body: CampaignDraftCreate,
+  ): Promise<Campaign> {
+    const [row] = await this.db.insert(campaigns).values({ accountId, createdBy }).returning();
     if (!row) throw new Error('campaign insert returned no row');
     return toCampaign(row);
   }
 
-  async getById(id: string): Promise<Campaign | null> {
-    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  async getById(accountId: string, id: string): Promise<Campaign | null> {
+    const [row] = await this.db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
+      .limit(1);
     return row ? toCampaign(row) : null;
   }
 
   /**
-   * Partial update of a draft's builder fields (M2, Task 11).
-   *
-   * - Unknown id → `{ ok: false, reason: 'not_found' }`.
-   * - If the patch touches ANY semantic field (M2-D9) AND the campaign already
-   *   has ≥1 response, the change would redefine historical score math →
-   *   `{ ok: false, reason: 'semantic_locked' }` (no write).
-   * - Otherwise apply ONLY the provided keys (partial — unset columns untouched),
-   *   always stamp `updatedAt = clock.now()`, and return the updated campaign.
-   *
-   * The body is expected already validated by `campaignUpdateSchema` at the route.
+   * Partial update of a draft's builder fields (M2, Task 11), scoped to
+   * `accountId`. Unknown id (or another account's id) → `not_found`. If the
+   * patch touches ANY semantic field (M2-D9) AND the campaign already has ≥1
+   * response → `semantic_locked` (no write). Otherwise apply only the provided
+   * keys and stamp `updatedAt`.
    */
-  async update(id: string, patch: CampaignUpdate): Promise<UpdateResult> {
+  async update(accountId: string, id: string, patch: CampaignUpdate): Promise<UpdateResult> {
     const existing = await this.db
       .select({ id: campaigns.id })
       .from(campaigns)
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .limit(1);
     if (existing.length === 0) return { ok: false, reason: 'not_found' };
 
@@ -195,14 +185,12 @@ export class CampaignService {
       const [row] = await this.db
         .select({ n: count() })
         .from(responses)
-        .where(eq(responses.campaignId, id));
+        .where(and(eq(responses.campaignId, id), eq(responses.accountId, accountId)));
       if ((row?.n ?? 0) > 0) return { ok: false, reason: 'semantic_locked' };
     }
 
-    // Build the update set from ONLY the provided keys (partial update).
     const set: Partial<typeof campaigns.$inferInsert> = { updatedAt: this.clock.now() };
     if ('target_id' in patch) set.targetId = patch.target_id;
-    if ('client_ids' in patch) set.clientIds = patch.client_ids;
     if ('metric_type' in patch) set.metricType = patch.metric_type;
     if ('rating_type' in patch) set.ratingType = patch.rating_type;
     if ('rating_scale_max' in patch) set.ratingScaleMax = patch.rating_scale_max;
@@ -218,141 +206,122 @@ export class CampaignService {
     const [updated] = await this.db
       .update(campaigns)
       .set(set)
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
   }
 
   /**
-   * Publish a draft (M2, Task 12): validate completeness in code, reject an
-   * overlapping active campaign, then flip `status = 'active'`.
-   *
-   * - Unknown id → `{ ok: false, reason: 'not_found' }`.
-   * - Missing any of the six required content columns or an empty `client_ids`
-   *   (mirrors the `campaigns_active_complete` CHECK, M2-D5) →
-   *   `{ ok: false, reason: 'incomplete', missing: [...] }` (wire field names).
-   * - An existing ACTIVE campaign on the same `target_id` sharing ≥1 client
-   *   (M2-D8, the other half of M1-D3) →
-   *   `{ ok: false, reason: 'overlap', conflict: { id, header } }` (first match).
-   * - Otherwise stamp `updatedAt` and set `status = 'active'`.
+   * Publish a draft (M2, Task 12), scoped to `accountId`: validate completeness
+   * in code, reject an overlapping active campaign on the same target within the
+   * account, then flip `status = 'active'`.
    *
    * NOTE (M2-D7): publish is NEVER gated on the target's `integration_status`.
-   * A `not_sent` target still publishes fine — integration status is an
-   * operational health signal, not a publish precondition.
    */
-  async publish(id: string): Promise<PublishResult> {
-    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  async publish(accountId: string, id: string): Promise<PublishResult> {
+    const [row] = await this.db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
+      .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
 
     const missing = missingRequiredFields(row);
     if (missing.length > 0) return { ok: false, reason: 'incomplete', missing };
 
     // `targetId` is guaranteed non-null here (completeness passed above).
-    const conflict = await this.findActiveOverlap(id, row.targetId as string, row.clientIds);
+    const conflict = await this.findActiveOverlap(accountId, id, row.targetId as string);
     if (conflict) return { ok: false, reason: 'overlap', conflict };
 
     const [updated] = await this.db
       .update(campaigns)
       .set({ status: 'active', updatedAt: this.clock.now() })
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
   }
 
-  /**
-   * Pause an ACTIVE campaign → `paused` (M2, Task 13). Unknown id → `not_found`;
-   * pausing a non-active (draft/paused/archived) campaign → `invalid_state`
-   * (minimal guard, M2-D6). A paused campaign is absent from the SDK cache
-   * (which loads only `status = 'active'`), so it stops being served on refresh.
-   */
-  async pause(id: string): Promise<TransitionResult> {
-    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  /** Pause an ACTIVE campaign → `paused` (M2, Task 13), scoped to `accountId`. */
+  async pause(accountId: string, id: string): Promise<TransitionResult> {
+    const [row] = await this.db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
+      .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
     if (row.status !== 'active') return { ok: false, reason: 'invalid_state' };
 
     const [updated] = await this.db
       .update(campaigns)
       .set({ status: 'paused', updatedAt: this.clock.now() })
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
   }
 
   /**
-   * Resume a PAUSED campaign → `active` (M2, Task 13). Unknown id → `not_found`;
-   * resuming a non-paused campaign → `invalid_state`. Because an active campaign
-   * on the same (target, client) may have appeared while this one was paused,
-   * resume RE-RUNS the same overlap check publish uses (M2-D8) — a clash →
-   * `overlap` (campaign stays paused). Reuses `findActiveOverlap` (Task 12).
+   * Resume a PAUSED campaign → `active` (M2, Task 13), scoped to `accountId`.
+   * Re-runs the same active-overlap check publish uses (M2-D8).
    */
-  async resume(id: string): Promise<ResumeResult> {
-    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  async resume(accountId: string, id: string): Promise<ResumeResult> {
+    const [row] = await this.db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
+      .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
     if (row.status !== 'paused') return { ok: false, reason: 'invalid_state' };
 
-    // A paused campaign is always complete (it was active before), so `targetId`
-    // is non-null. Re-run the overlap check before reactivating.
-    const conflict = await this.findActiveOverlap(id, row.targetId as string, row.clientIds);
+    const conflict = await this.findActiveOverlap(accountId, id, row.targetId as string);
     if (conflict) return { ok: false, reason: 'overlap', conflict };
 
     const [updated] = await this.db
       .update(campaigns)
       .set({ status: 'active', updatedAt: this.clock.now() })
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
   }
 
-  /**
-   * Archive a campaign → `archived` from any non-archived state (M2, Task 13,
-   * M2-D6 "delete = archive"). Unknown id → `not_found`; already archived →
-   * `invalid_state` (idempotent no-op guard). Archived campaigns are excluded
-   * from the default list (Task 10) and from the SDK cache (which loads only
-   * `active`), so no extra exclusion work is needed beyond setting the status.
-   */
-  async archive(id: string): Promise<TransitionResult> {
-    const [row] = await this.db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  /** Archive a campaign → `archived` from any non-archived state (M2, Task 13). */
+  async archive(accountId: string, id: string): Promise<TransitionResult> {
+    const [row] = await this.db
+      .select()
+      .from(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
+      .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
     if (row.status === 'archived') return { ok: false, reason: 'invalid_state' };
 
     const [updated] = await this.db
       .update(campaigns)
       .set({ status: 'archived', updatedAt: this.clock.now() })
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .returning();
     if (!updated) return { ok: false, reason: 'not_found' };
     return { ok: true, campaign: toCampaign(updated) };
   }
 
   /**
-   * Hard delete a campaign row (M2, Task 13). Named `remove` to avoid the JS
-   * `delete` keyword. Per M2-D6 a physical delete is permitted ONLY for a
-   * `draft` with ZERO `trigger_log` and ZERO `responses` rows — FK-referenced
-   * history must never be destroyed. Anything else (has history, or not a draft
-   * even with zero history) → `has_history` (route surfaces `archive instead`).
-   * Unknown id → `not_found`.
+   * Hard delete a campaign row (M2, Task 13), scoped to `accountId`. Only a
+   * `draft` with ZERO trigger/response/suppression history is deletable (M2-D6).
    */
-  async remove(id: string): Promise<RemoveResult> {
+  async remove(accountId: string, id: string): Promise<RemoveResult> {
     const [row] = await this.db
       .select({ status: campaigns.status })
       .from(campaigns)
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
 
-    // Only drafts are hard-deletable (M2-D6). The draft status is the real
-    // safety gate — any campaign that ever went active is archived, not deleted.
     if (row.status !== 'draft') {
       return { ok: false, reason: 'has_history' };
     }
 
-    // Belt-and-suspenders: count EVERY FK child that references campaigns.id
-    // (all ON DELETE no action) so a hard delete can never orphan/destroy
-    // history even if a draft somehow acquired child rows.
     const [trig] = await this.db
       .select({ n: count() })
       .from(triggerLog)
@@ -369,32 +338,31 @@ export class CampaignService {
       return { ok: false, reason: 'has_history' };
     }
 
-    await this.db.delete(campaigns).where(eq(campaigns.id, id));
+    await this.db
+      .delete(campaigns)
+      .where(and(eq(campaigns.id, id), eq(campaigns.accountId, accountId)));
     return { ok: true };
   }
 
   /**
-   * Find an ACTIVE campaign on `targetId` whose `client_ids` intersects
-   * `clientIds`, excluding `excludeId` (the campaign being published/resumed).
-   * Returns the first match's `{ id, header }` or null. Task 13's resume reuses
-   * this. Uses the Postgres jsonb `?|` operator (client_ids ?| text[]) — the
-   * param is bound, never string-concatenated. `[]` short-circuits (no overlap).
+   * Find an ACTIVE campaign in the account on `targetId`, excluding `excludeId`.
+   * One active campaign per (account, target) is the B1 rule (client targeting
+   * was removed with the generic-SaaS pivot). Returns the first match or null.
    */
   private async findActiveOverlap(
+    accountId: string,
     excludeId: string,
     targetId: string,
-    clientIds: string[],
   ): Promise<OverlapConflict | null> {
-    if (clientIds.length === 0) return null;
     const [conflict] = await this.db
       .select({ id: campaigns.id, header: campaigns.headerText })
       .from(campaigns)
       .where(
         and(
+          eq(campaigns.accountId, accountId),
           eq(campaigns.status, 'active'),
           eq(campaigns.targetId, targetId),
           ne(campaigns.id, excludeId),
-          sql`${campaigns.clientIds} ?| ${sql.param(clientIds)}::text[]`,
         ),
       )
       .orderBy(campaigns.createdAt)
@@ -403,23 +371,29 @@ export class CampaignService {
   }
 
   /**
-   * List campaigns ordered by `updatedAt desc`. Excludes archived unless
-   * `includeArchived` (M2-D6). LEFT JOINs `target_registry` for `screen_id`
-   * (nullable when a draft has no target). `client_count` = size of clientIds.
+   * List campaigns for the account ordered by `updatedAt desc`. Excludes archived
+   * unless `includeArchived` (M2-D6). LEFT JOINs `target_registry` for `screen_id`.
    */
-  async list({ includeArchived }: { includeArchived: boolean }): Promise<CampaignListItem[]> {
+  async list(
+    accountId: string,
+    { includeArchived }: { includeArchived: boolean },
+  ): Promise<CampaignListItem[]> {
+    const statusCond = includeArchived ? undefined : ne(campaigns.status, 'archived');
     const rows = await this.db
       .select({
         id: campaigns.id,
         header_text: campaigns.headerText,
         status: campaigns.status,
         screen_id: targetRegistry.screenId,
-        client_ids: campaigns.clientIds,
         updated_at: campaigns.updatedAt,
       })
       .from(campaigns)
       .leftJoin(targetRegistry, eq(campaigns.targetId, targetRegistry.id))
-      .where(includeArchived ? undefined : ne(campaigns.status, 'archived'))
+      .where(
+        statusCond
+          ? and(eq(campaigns.accountId, accountId), statusCond)
+          : eq(campaigns.accountId, accountId),
+      )
       .orderBy(desc(campaigns.updatedAt));
 
     return rows.map((r) => ({
@@ -427,7 +401,6 @@ export class CampaignService {
       header_text: r.header_text,
       status: r.status,
       screen_id: r.screen_id,
-      client_count: r.client_ids.length,
       updated_at: r.updated_at,
     }));
   }

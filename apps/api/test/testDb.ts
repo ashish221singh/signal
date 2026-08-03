@@ -35,6 +35,30 @@ export async function seedApiKey(
   return key;
 }
 
+/**
+ * Seed an account + one admin console user. Returns both ids. The session guard
+ * (B1-D5) loads the user to resolve the account, so console tests must sign a
+ * REAL user's id — a bare signed cookie for a non-existent user now 401s.
+ */
+export async function seedAccountWithUser(
+  db: Db,
+  opts: { accountName?: string; email?: string } = {},
+): Promise<{ accountId: string; userId: string }> {
+  const accountId = await seedAccount(db, opts.accountName ?? 'Test Account');
+  const [user] = await db
+    .insert(schema.consoleUsers)
+    .values({
+      accountId,
+      email: opts.email ?? `admin+${accountId}@example.com`,
+      passwordHash: 'x',
+      name: 'Admin',
+      role: 'admin',
+    })
+    .returning();
+  if (!user) throw new Error('console user seed returned no row');
+  return { accountId, userId: user.id };
+}
+
 export async function startTestDb(): Promise<{
   db: Db;
   truncateAll: () => Promise<void>;

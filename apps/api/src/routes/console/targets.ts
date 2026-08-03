@@ -3,7 +3,7 @@ import {
   targetCreateSchema,
   targetIntegrationStatusUpdateSchema,
 } from '@signal/contracts';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Db } from '../../db/client.js';
 import { targetRegistry } from '../../db/schema.js';
@@ -27,7 +27,7 @@ export function targetRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (!parsed.success) {
         return reply.code(422).send({ error: { code: 'invalid_body', message: 'invalid target' } });
       }
-      const result = await service.create(parsed.data);
+      const result = await service.create(request.accountId as string, parsed.data);
       if (!result.ok) {
         if (result.reason === 'slug_conflict') {
           return reply.code(422).send({
@@ -54,7 +54,11 @@ export function targetRoutes(deps: { db: Db }): FastifyPluginAsync {
           .code(422)
           .send({ error: { code: 'invalid_body', message: 'invalid integration status' } });
       }
-      const result = await service.setIntegrationStatus(request.params.id, parsed.data.to);
+      const result = await service.setIntegrationStatus(
+        request.accountId as string,
+        request.params.id,
+        parsed.data.to,
+      );
       if (result.ok) return reply.send(result.target);
       if (result.reason === 'not_found') {
         return reply.code(404).send({ error: { code: 'not_found', message: 'target not found' } });
@@ -67,8 +71,12 @@ export function targetRoutes(deps: { db: Db }): FastifyPluginAsync {
       });
     });
 
-    app.get('/', async () => {
-      const rows = await deps.db.select().from(targetRegistry).orderBy(asc(targetRegistry.name));
+    app.get('/', async (request) => {
+      const rows = await deps.db
+        .select()
+        .from(targetRegistry)
+        .where(eq(targetRegistry.accountId, request.accountId as string))
+        .orderBy(asc(targetRegistry.name));
       return rows.map(
         (r): Target => ({
           id: r.id,

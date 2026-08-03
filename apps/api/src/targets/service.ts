@@ -1,5 +1,5 @@
 import type { IntegrationStatus, Target, TargetCreate } from '@signal/contracts';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { targetRegistry } from '../db/schema.js';
 import { slugify } from './slug.js';
@@ -72,7 +72,7 @@ export class TargetService {
    * with `onConflictDoNothing` on the unique `screen_id`; an empty `.returning()`
    * means the slug already existed → `slug_conflict` (no auto-suffix).
    */
-  async create(input: TargetCreate): Promise<CreateTargetResult> {
+  async create(accountId: string, input: TargetCreate): Promise<CreateTargetResult> {
     const screenId = slugify(input.name);
     if (screenId === '') {
       return { ok: false, reason: 'invalid_body' };
@@ -81,11 +81,16 @@ export class TargetService {
     const [row] = await this.db
       .insert(targetRegistry)
       .values({
+        accountId,
         name: input.name,
         screenId,
         triggerMechanism: input.trigger_mechanism,
       })
-      .onConflictDoNothing({ target: targetRegistry.screenId })
+      // screen_id is unique per (account, screen_id) now; a same-account collision
+      // does nothing and returns no row → slug_conflict.
+      .onConflictDoNothing({
+        target: [targetRegistry.accountId, targetRegistry.screenId],
+      })
       .returning();
 
     if (!row) {
@@ -101,10 +106,14 @@ export class TargetService {
    * updated target. No `updatedAt` on `target_registry` — nothing else changes.
    */
   async setIntegrationStatus(
+    accountId: string,
     id: string,
     to: IntegrationStatus,
   ): Promise<SetIntegrationStatusResult> {
-    const [current] = await this.db.select().from(targetRegistry).where(eq(targetRegistry.id, id));
+    const [current] = await this.db
+      .select()
+      .from(targetRegistry)
+      .where(and(eq(targetRegistry.id, id), eq(targetRegistry.accountId, accountId)));
     if (!current) {
       return { ok: false, reason: 'not_found' };
     }
@@ -116,7 +125,7 @@ export class TargetService {
     const [row] = await this.db
       .update(targetRegistry)
       .set({ integrationStatus: to })
-      .where(eq(targetRegistry.id, id))
+      .where(and(eq(targetRegistry.id, id), eq(targetRegistry.accountId, accountId)))
       .returning();
     if (!row) {
       return { ok: false, reason: 'not_found' };

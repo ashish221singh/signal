@@ -1,25 +1,25 @@
 // apps/api/test/console-reference.int.test.ts
-import { clientSchema, targetSchema } from '@signal/contracts';
+import { targetSchema } from '@signal/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
 import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccountWithUser, startTestDb } from './testDb.js';
 
-const env = parseEnv({ NODE_ENV: 'test', SIGNAL_APP_KEYS: 'test-app-key' });
+const env = parseEnv({ NODE_ENV: 'test' });
 
-const USER_ID = '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e';
-
-async function seedTargets(db: Db) {
+async function seedTargets(db: Db, accountId: string) {
   await db.insert(s.targetRegistry).values([
     {
+      accountId,
       name: 'Beta Screen',
       screenId: 'beta',
       triggerMechanism: 'action',
       integrationStatus: 'not_sent',
     },
     {
+      accountId,
       name: 'Alpha Screen',
       screenId: 'alpha',
       triggerMechanism: 'dwell',
@@ -28,20 +28,12 @@ async function seedTargets(db: Db) {
   ]);
 }
 
-async function seedClients(db: Db) {
-  await db.insert(s.clients).values([
-    { id: 'c-gamma', name: 'Gamma', status: 'active' },
-    { id: 'c-alpha', name: 'Alpha', status: 'inactive' },
-    { id: 'c-beta', name: 'Beta', status: 'active' },
-  ]);
-}
-
 describe('/v1/console reference read routes (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
-  // A validly-signed session cookie; the guard only checks the signature, not
-  // that the user row exists.
   let cookieHeader: string;
+  let accountId: string;
+  let userId: string;
 
   beforeAll(async () => {
     t = await startTestDb();
@@ -52,9 +44,9 @@ describe('/v1/console reference read routes (real Postgres)', () => {
 
   beforeEach(async () => {
     await t.truncateAll();
+    ({ accountId, userId } = await seedAccountWithUser(t.db));
     app = await buildApp(env, { db: t.db, closeDb: async () => {} });
-    const signed = app.signCookie(USER_ID);
-    cookieHeader = `signal_session=${signed}`;
+    cookieHeader = `signal_session=${app.signCookie(userId)}`;
   });
   afterEach(async () => {
     await app.close();
@@ -67,7 +59,7 @@ describe('/v1/console reference read routes (real Postgres)', () => {
     });
 
     it('with a cookie, after seeding 2 targets → 200 array of 2 matching targetSchema', async () => {
-      await seedTargets(t.db);
+      await seedTargets(t.db, accountId);
       const res = await app.inject({
         method: 'GET',
         url: '/v1/console/targets',
@@ -183,6 +175,7 @@ describe('/v1/console reference read routes (real Postgres)', () => {
       const [row] = await db
         .insert(s.targetRegistry)
         .values({
+          accountId,
           name: `Target ${integrationStatus}`,
           screenId: `target_${integrationStatus}`,
           triggerMechanism: 'action',
@@ -323,27 +316,25 @@ describe('/v1/console reference read routes (real Postgres)', () => {
     });
   });
 
-  describe('GET /v1/console/clients', () => {
-    it('without a cookie → 401', async () => {
-      const res = await app.inject({ method: 'GET', url: '/v1/console/clients' });
-      expect(res.statusCode).toBe(401);
-    });
+  describe('target isolation', () => {
+    it("A cannot see B's targets in the list", async () => {
+      await seedTargets(t.db, accountId); // account A owns these two
+      const b = await seedAccountWithUser(t.db, { accountName: 'B', email: 'b@example.com' });
+      await t.db.insert(s.targetRegistry).values({
+        accountId: b.accountId,
+        name: 'B Screen',
+        screenId: 'b_screen',
+        triggerMechanism: 'action',
+      });
 
-    it('with a cookie, after seeding 3 clients → 200 array of 3 matching clientSchema', async () => {
-      await seedClients(t.db);
       const res = await app.inject({
         method: 'GET',
-        url: '/v1/console/clients',
+        url: '/v1/console/targets',
         headers: { cookie: cookieHeader },
       });
       expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(3);
-      for (const row of body) {
-        expect(clientSchema.safeParse(row).success).toBe(true);
-      }
-      expect(body.map((r: { name: string }) => r.name)).toEqual(['Alpha', 'Beta', 'Gamma']);
+      const names = res.json().map((r: { name: string }) => r.name);
+      expect(names).toEqual(['Alpha Screen', 'Beta Screen']); // no B Screen
     });
   });
 

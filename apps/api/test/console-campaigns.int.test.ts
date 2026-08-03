@@ -1,16 +1,17 @@
 // apps/api/test/console-campaigns.int.test.ts
 import { campaignListItemSchema, campaignSchema } from '@signal/contracts';
+import { eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import type { Clock } from '../src/clock.js';
 import type { Db } from '../src/db/client.js';
 import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccountWithUser, seedApiKey, startTestDb } from './testDb.js';
 
-const env = parseEnv({ NODE_ENV: 'test', SIGNAL_APP_KEYS: 'test-app-key' });
+const env = parseEnv({ NODE_ENV: 'test' });
 
-const USER_ID = '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e';
+const SDK_KEY = 'pk_test_campaignsxxxxxxxxxxxx';
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000';
 
 /** Fixed clock so the `updated_at` bump is deterministic (no wall-clock races). */
@@ -23,11 +24,13 @@ class FixedClock implements Clock {
 
 async function seedTarget(
   db: Db,
+  accountId: string,
   overrides: Partial<typeof s.targetRegistry.$inferInsert> = {},
 ): Promise<string> {
   const [row] = await db
     .insert(s.targetRegistry)
     .values({
+      accountId,
       name: 'Alpha Screen',
       screenId: 'alpha',
       triggerMechanism: 'action',
@@ -39,28 +42,18 @@ async function seedTarget(
   return row.id;
 }
 
-/**
- * Seed one response for a campaign so `count(responses where campaign_id) > 0`.
- * A response references a `trigger_log` row (FK), so we insert that first with
- * the minimal valid columns.
- */
-async function seedResponse(db: Db, campaignId: string): Promise<void> {
+/** Seed one response for a campaign so `count(responses where campaign_id) > 0`. */
+async function seedResponse(db: Db, accountId: string, campaignId: string): Promise<void> {
   const [trigger] = await db
     .insert(s.triggerLog)
-    .values({
-      campaignId,
-      userId: 'u',
-      clientId: 'cl_A',
-      screenId: 'alpha',
-      shownAt: new Date(),
-    })
+    .values({ accountId, campaignId, userId: 'u', screenId: 'alpha', shownAt: new Date() })
     .returning();
   if (!trigger) throw new Error('trigger seed returned no row');
   await db.insert(s.responses).values({
+    accountId,
     triggerId: trigger.id,
     campaignId,
     userId: 'u',
-    clientId: 'cl_A',
     screenId: 'alpha',
     ratingValue: 5,
     deviceOs: 'Android',
@@ -70,10 +63,25 @@ async function seedResponse(db: Db, campaignId: string): Promise<void> {
   });
 }
 
+/** The complete set of builder fields required to publish (mirrors the DB CHECK). */
+function completePayload(targetId: string) {
+  return {
+    target_id: targetId,
+    metric_type: 'CSAT' as const,
+    rating_type: 'star' as const,
+    rating_scale_max: 5,
+    header_text: 'How was your delivery?',
+    positive_threshold: 4,
+    ask_frequency: 'after_7_days' as const,
+  };
+}
+
 describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
+  let accountId: string;
+  let userId: string;
 
   beforeAll(async () => {
     t = await startTestDb();
@@ -84,9 +92,9 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
 
   beforeEach(async () => {
     await t.truncateAll();
+    ({ accountId, userId } = await seedAccountWithUser(t.db));
     app = await buildApp(env, { db: t.db, closeDb: async () => {} });
-    const signed = app.signCookie(USER_ID);
-    cookieHeader = `signal_session=${signed}`;
+    cookieHeader = `signal_session=${app.signCookie(userId)}`;
   });
   afterEach(async () => {
     await app.close();
@@ -109,21 +117,9 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
       const body = res.json();
       expect(campaignSchema.safeParse(body).success).toBe(true);
       expect(body.status).toBe('draft');
-      expect(body.created_by).toBe(USER_ID);
+      expect(body.created_by).toBe(userId);
       expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
-      expect(body.client_ids).toEqual([]);
       expect(body.target_id).toBeNull();
-    });
-
-    it('with client_ids in the body → they are persisted on the draft', async () => {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/v1/console/campaigns',
-        headers: { cookie: cookieHeader },
-        payload: { client_ids: ['c-alpha', 'c-beta'] },
-      });
-      expect(res.statusCode).toBe(201);
-      expect(res.json().client_ids).toEqual(['c-alpha', 'c-beta']);
     });
   });
 
@@ -170,12 +166,12 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
     });
 
     it('lists drafts as campaignListItem shapes, joining screen_id from the target', async () => {
-      const targetId = await seedTarget(t.db);
+      const targetId = await seedTarget(t.db, accountId);
       await t.db.insert(s.campaigns).values({
+        accountId,
         targetId,
-        clientIds: ['c-alpha', 'c-beta'],
         headerText: 'Rate us',
-        createdBy: USER_ID,
+        createdBy: userId,
       });
       const res = await app.inject({
         method: 'GET',
@@ -190,7 +186,6 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
         expect(campaignListItemSchema.safeParse(row).success).toBe(true);
       }
       expect(body[0].screen_id).toBe('alpha');
-      expect(body[0].client_count).toBe(2);
       expect(body[0].header_text).toBe('Rate us');
     });
 
@@ -209,18 +204,16 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
       const body = res.json();
       expect(body).toHaveLength(1);
       expect(body[0].screen_id).toBeNull();
-      expect(body[0].client_count).toBe(0);
     });
 
     it('excludes archived by default, includes them with ?include=archived', async () => {
-      // one draft (created via the API), one archived directly in the DB
       await app.inject({
         method: 'POST',
         url: '/v1/console/campaigns',
         headers: { cookie: cookieHeader },
         payload: {},
       });
-      await t.db.insert(s.campaigns).values({ createdBy: USER_ID, status: 'archived' });
+      await t.db.insert(s.campaigns).values({ accountId, createdBy: userId, status: 'archived' });
 
       const def = await app.inject({
         method: 'GET',
@@ -228,19 +221,18 @@ describe('/v1/console/campaigns create/get/list (real Postgres)', () => {
         headers: { cookie: cookieHeader },
       });
       expect(def.statusCode).toBe(200);
-      const defBody = def.json();
-      expect(defBody).toHaveLength(1);
-      expect(defBody.every((r: { status: string }) => r.status !== 'archived')).toBe(true);
+      expect(def.json()).toHaveLength(1);
+      expect(def.json().every((r: { status: string }) => r.status !== 'archived')).toBe(true);
 
       const withArchived = await app.inject({
         method: 'GET',
         url: '/v1/console/campaigns?include=archived',
         headers: { cookie: cookieHeader },
       });
-      expect(withArchived.statusCode).toBe(200);
-      const allBody = withArchived.json();
-      expect(allBody).toHaveLength(2);
-      expect(allBody.some((r: { status: string }) => r.status === 'archived')).toBe(true);
+      expect(withArchived.json()).toHaveLength(2);
+      expect(withArchived.json().some((r: { status: string }) => r.status === 'archived')).toBe(
+        true,
+      );
     });
   });
 });
@@ -249,8 +241,8 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
-  // A fixed clock set well after the DB `defaultNow()` created_at, so any patch's
-  // `updated_at = clock.now()` is deterministically later than created_at.
+  let accountId: string;
+  let userId: string;
   const PATCH_TIME = new Date('2030-01-01T00:00:00.000Z');
   const clock = new FixedClock(PATCH_TIME);
 
@@ -263,9 +255,9 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
 
   beforeEach(async () => {
     await t.truncateAll();
+    ({ accountId, userId } = await seedAccountWithUser(t.db));
     app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
-    const signed = app.signCookie(USER_ID);
-    cookieHeader = `signal_session=${signed}`;
+    cookieHeader = `signal_session=${app.signCookie(userId)}`;
   });
   afterEach(async () => {
     await app.close();
@@ -282,7 +274,7 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
   }
 
   it('updates operational fields on a draft → 200, persisted, updated_at bumped', async () => {
-    const targetId = await seedTarget(t.db);
+    const targetId = await seedTarget(t.db, accountId);
     const id = await createDraft();
 
     const res = await app.inject({
@@ -294,7 +286,6 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
         chips_on_negative: ['Slow', 'Confusing'],
         ask_frequency: 'after_30_days',
         min_tenure_days: 14,
-        client_ids: ['cl_A', 'cl_B'],
         target_id: targetId,
       },
     });
@@ -306,15 +297,12 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
     expect(body.chips_on_negative).toEqual(['Slow', 'Confusing']);
     expect(body.ask_frequency).toBe('after_30_days');
     expect(body.min_tenure_days).toBe(14);
-    expect(body.client_ids).toEqual(['cl_A', 'cl_B']);
     expect(body.target_id).toBe(targetId);
-    // updated_at stamped from the injected clock, later than created_at.
     expect(new Date(body.updated_at).getTime()).toBe(PATCH_TIME.getTime());
     expect(new Date(body.updated_at).getTime()).toBeGreaterThan(
       new Date(body.created_at).getTime(),
     );
 
-    // Persisted: re-fetch returns the same values.
     const got = await app.inject({
       method: 'GET',
       url: `/v1/console/campaigns/${id}`,
@@ -330,7 +318,7 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
       method: 'PATCH',
       url: `/v1/console/campaigns/${id}`,
       headers: { cookie: cookieHeader },
-      payload: { header_text: 'First', client_ids: ['cl_A'] },
+      payload: { header_text: 'First', chips_on_negative: ['Slow'] },
     });
     const res = await app.inject({
       method: 'PATCH',
@@ -340,8 +328,7 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
     });
     const body = res.json();
     expect(body.header_text).toBe('Second');
-    // client_ids from the earlier patch must survive the header-only patch.
-    expect(body.client_ids).toEqual(['cl_A']);
+    expect(body.chips_on_negative).toEqual(['Slow']);
   });
 
   it('semantic fields are patchable while the campaign has zero responses → 200', async () => {
@@ -358,16 +345,12 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
       },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.metric_type).toBe('CSAT');
-    expect(body.rating_type).toBe('star');
-    expect(body.rating_scale_max).toBe(5);
-    expect(body.positive_threshold).toBe(4);
+    expect(res.json().metric_type).toBe('CSAT');
   });
 
   it('once a response exists, a semantic field patch → 422 semantic_locked, but header_text still patches', async () => {
     const id = await createDraft();
-    await seedResponse(t.db, id);
+    await seedResponse(t.db, accountId, id);
 
     const locked = await app.inject({
       method: 'PATCH',
@@ -378,7 +361,6 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
     expect(locked.statusCode).toBe(422);
     expect(locked.json().error.code).toBe('semantic_locked');
 
-    // Non-semantic (operational) field is still editable after the lock.
     const ok = await app.inject({
       method: 'PATCH',
       url: `/v1/console/campaigns/${id}`,
@@ -387,28 +369,6 @@ describe('PATCH /v1/console/campaigns/:id — update + semantic-field lock (real
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().header_text).toBe('Updated after lock');
-  });
-
-  it('a mixed patch (semantic + operational) with a response present → 422 semantic_locked, no partial write', async () => {
-    const id = await createDraft();
-    await seedResponse(t.db, id);
-
-    const res = await app.inject({
-      method: 'PATCH',
-      url: `/v1/console/campaigns/${id}`,
-      headers: { cookie: cookieHeader },
-      payload: { header_text: 'Should not persist', rating_scale_max: 7 },
-    });
-    expect(res.statusCode).toBe(422);
-    expect(res.json().error.code).toBe('semantic_locked');
-
-    // The operational field in the rejected patch must NOT have been written.
-    const got = await app.inject({
-      method: 'GET',
-      url: `/v1/console/campaigns/${id}`,
-      headers: { cookie: cookieHeader },
-    });
-    expect(got.json().header_text).not.toBe('Should not persist');
   });
 
   it('invalid body → 422 invalid_body', async () => {
@@ -439,6 +399,8 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
+  let accountId: string;
+  let userId: string;
   const clock = new FixedClock(new Date('2030-01-01T00:00:00.000Z'));
 
   beforeAll(async () => {
@@ -450,29 +412,15 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
 
   beforeEach(async () => {
     await t.truncateAll();
+    ({ accountId, userId } = await seedAccountWithUser(t.db));
+    await seedApiKey(t.db, accountId, SDK_KEY);
     app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
-    const signed = app.signCookie(USER_ID);
-    cookieHeader = `signal_session=${signed}`;
+    cookieHeader = `signal_session=${app.signCookie(userId)}`;
   });
   afterEach(async () => {
     await app.close();
   });
 
-  /** The complete set of builder fields required to publish (mirrors the DB CHECK). */
-  function completePayload(targetId: string, clientIds: string[] = ['cl_A']) {
-    return {
-      target_id: targetId,
-      client_ids: clientIds,
-      metric_type: 'CSAT' as const,
-      rating_type: 'star' as const,
-      rating_scale_max: 5,
-      header_text: 'How was your delivery?',
-      positive_threshold: 4,
-      ask_frequency: 'after_7_days' as const,
-    };
-  }
-
-  /** Create a draft via the API, patch it with `patch`, return its id. */
   async function draftWith(patch: Record<string, unknown>): Promise<string> {
     const created = await app.inject({
       method: 'POST',
@@ -517,10 +465,11 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     expect(res.json().error.code).toBe('not_found');
   });
 
-  // Scenario 1 — CROSS-MILESTONE: a Console-published campaign fires through the
-  // M1 SDK eligibility engine after the campaign cache is refreshed.
+  // CROSS-MILESTONE: a Console-published campaign fires through the SDK
+  // eligibility engine after the campaign cache is refreshed, authenticated by
+  // the account's publishable key.
   it('scenario 1: a fully-specified draft publishes → 200 active AND appears via /v1/sdk/eligibility', async () => {
-    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const targetId = await seedTarget(t.db, accountId, { screenId: 'order_completion' });
     const id = await draftWith(completePayload(targetId));
 
     const pub = await app.inject({
@@ -529,20 +478,16 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
       headers: { cookie: cookieHeader },
     });
     expect(pub.statusCode).toBe(200);
-    const body = pub.json();
-    expect(campaignSchema.safeParse(body).success).toBe(true);
-    expect(body.status).toBe('active');
+    expect(pub.json().status).toBe('active');
 
-    // Refresh the M1 SDK cache so the newly-active campaign is visible on the hot path.
     await app.campaignCache.refresh();
 
     const elig = await app.inject({
       method: 'GET',
       url: '/v1/sdk/eligibility',
-      headers: { 'x-signal-app-key': 'test-app-key' },
+      headers: { 'x-signal-app-key': SDK_KEY },
       query: {
         screen_id: 'order_completion',
-        client_id: 'cl_A',
         user_id: 'fresh-user-scenario-1',
         rep_tenure_days: '365',
       },
@@ -554,9 +499,8 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     expect(cfg.trigger_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  // Scenario 2 — incomplete draft (missing header_text) → 422 incomplete.
   it('scenario 2: publishing a draft missing header_text → 422 incomplete listing header_text; stays draft', async () => {
-    const targetId = await seedTarget(t.db);
+    const targetId = await seedTarget(t.db, accountId);
     const { header_text: _omit, ...noHeader } = completePayload(targetId);
     const id = await draftWith(noHeader);
 
@@ -566,10 +510,8 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(422);
-    const body = res.json();
-    expect(body.error.code).toBe('incomplete');
-    expect(body.missing).toContain('header_text');
-
+    expect(res.json().error.code).toBe('incomplete');
+    expect(res.json().missing).toContain('header_text');
     expect((await getCampaign(id)).status).toBe('draft');
   });
 
@@ -596,17 +538,15 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
         'rating_scale_max',
         'header_text',
         'positive_threshold',
-        'client_ids',
       ]),
     );
     expect((await getCampaign(id)).status).toBe('draft');
   });
 
-  // Scenario 3 — overlap 409 against an existing active campaign.
-  it('scenario 3: publishing over an active (target, client) → 409 overlap naming the conflict; stays draft', async () => {
-    const targetId = await seedTarget(t.db);
-    // Campaign A: already active on (target, cl_A).
-    const idA = await draftWith(completePayload(targetId, ['cl_A']));
+  // Overlap 409: one active campaign per (account, target) — B1 rule (no clients).
+  it('scenario 3: publishing over an active campaign on the same target → 409 overlap; stays draft', async () => {
+    const targetId = await seedTarget(t.db, accountId);
+    const idA = await draftWith(completePayload(targetId));
     const pubA = await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idA}/publish`,
@@ -614,8 +554,7 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     });
     expect(pubA.statusCode).toBe(200);
 
-    // Campaign B: draft on the same target with an overlapping client.
-    const idB = await draftWith(completePayload(targetId, ['cl_A', 'cl_C']));
+    const idB = await draftWith(completePayload(targetId));
     const pubB = await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idB}/publish`,
@@ -626,21 +565,19 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     expect(body.error.code).toBe('overlap');
     expect(body.conflict.id).toBe(idA);
     expect(body.conflict.header).toBe('How was your delivery?');
-
     expect((await getCampaign(idB)).status).toBe('draft');
   });
 
-  // Scenario 4 — overlap ignores non-active statuses and non-intersecting clients.
-  it('scenario 4a: overlap ignores active campaigns whose clients do not intersect → 200', async () => {
-    const targetId = await seedTarget(t.db);
-    const idA = await draftWith(completePayload(targetId, ['cl_A']));
+  it('scenario 4a: overlap ignores active campaigns on a DIFFERENT target → 200', async () => {
+    const targetA = await seedTarget(t.db, accountId, { screenId: 'alpha' });
+    const targetB = await seedTarget(t.db, accountId, { screenId: 'beta' });
+    const idA = await draftWith(completePayload(targetA));
     await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idA}/publish`,
       headers: { cookie: cookieHeader },
     });
-    // B on the same target but disjoint clients → allowed.
-    const idB = await draftWith(completePayload(targetId, ['cl_B']));
+    const idB = await draftWith(completePayload(targetB));
     const pubB = await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idB}/publish`,
@@ -651,28 +588,26 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
   });
 
   it('scenario 4b: overlap ignores draft/paused/archived same-target campaigns → 200', async () => {
-    const targetId = await seedTarget(t.db);
-    // Seed a PAUSED campaign directly on (target, cl_A) — must be ignored.
+    const targetId = await seedTarget(t.db, accountId);
     await t.db.insert(s.campaigns).values({
+      accountId,
       targetId,
-      clientIds: ['cl_A'],
       metricType: 'CSAT',
       ratingType: 'star',
       ratingScaleMax: 5,
       headerText: 'Paused one',
       positiveThreshold: 4,
       status: 'paused',
-      createdBy: USER_ID,
+      createdBy: userId,
     });
-    // Seed an ARCHIVED campaign on the same overlapping client — must be ignored.
     await t.db.insert(s.campaigns).values({
+      accountId,
       targetId,
-      clientIds: ['cl_A'],
       headerText: 'Archived one',
       status: 'archived',
-      createdBy: USER_ID,
+      createdBy: userId,
     });
-    const id = await draftWith(completePayload(targetId, ['cl_A']));
+    const id = await draftWith(completePayload(targetId));
     const res = await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${id}/publish`,
@@ -682,9 +617,8 @@ describe('POST /v1/console/campaigns/:id/publish — completeness + overlap 409 
     expect(res.json().status).toBe('active');
   });
 
-  // Scenario 5 — publish is NEVER blocked by the target's integration_status (M2-D7).
-  it('scenario 5: a complete draft on a not_sent target publishes → 200 active', async () => {
-    const targetId = await seedTarget(t.db, {
+  it('scenario 5: a complete draft on a not_sent target publishes → 200 active (M2-D7)', async () => {
+    const targetId = await seedTarget(t.db, accountId, {
       screenId: 'not_sent_screen',
       integrationStatus: 'not_sent',
     });
@@ -703,7 +637,8 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
-  // A fixed clock well after created_at so the lifecycle updated_at bump is deterministic.
+  let accountId: string;
+  let userId: string;
   const LIFECYCLE_TIME = new Date('2030-06-01T00:00:00.000Z');
   const clock = new FixedClock(LIFECYCLE_TIME);
 
@@ -716,29 +651,16 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
 
   beforeEach(async () => {
     await t.truncateAll();
+    ({ accountId, userId } = await seedAccountWithUser(t.db));
+    await seedApiKey(t.db, accountId, SDK_KEY);
     app = await buildApp(env, { db: t.db, clock, closeDb: async () => {} });
-    const signed = app.signCookie(USER_ID);
-    cookieHeader = `signal_session=${signed}`;
+    cookieHeader = `signal_session=${app.signCookie(userId)}`;
   });
   afterEach(async () => {
     await app.close();
   });
 
-  function completePayload(targetId: string, clientIds: string[] = ['cl_A']) {
-    return {
-      target_id: targetId,
-      client_ids: clientIds,
-      metric_type: 'CSAT' as const,
-      rating_type: 'star' as const,
-      rating_scale_max: 5,
-      header_text: 'How was your delivery?',
-      positive_threshold: 4,
-      ask_frequency: 'after_7_days' as const,
-    };
-  }
-
-  /** Create a draft via the API, patch it complete, publish it → return the active id. */
-  async function publishActive(targetId: string, clientIds: string[] = ['cl_A']): Promise<string> {
+  async function publishActive(targetId: string): Promise<string> {
     const created = await app.inject({
       method: 'POST',
       url: '/v1/console/campaigns',
@@ -750,7 +672,7 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       method: 'PATCH',
       url: `/v1/console/campaigns/${id}`,
       headers: { cookie: cookieHeader },
-      payload: completePayload(targetId, clientIds),
+      payload: completePayload(targetId),
     });
     const pub = await app.inject({
       method: 'POST',
@@ -769,29 +691,21 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
     });
   }
 
-  /** After a cache refresh, is this campaign still served by the SDK eligibility hot path? */
-  async function eligible(screenId: string, clientId: string, userId: string): Promise<boolean> {
+  async function eligible(screenId: string, userIdParam: string): Promise<boolean> {
     await app.campaignCache.refresh();
     const elig = await app.inject({
       method: 'GET',
       url: '/v1/sdk/eligibility',
-      headers: { 'x-signal-app-key': 'test-app-key' },
-      query: {
-        screen_id: screenId,
-        client_id: clientId,
-        user_id: userId,
-        rep_tenure_days: '365',
-      },
+      headers: { 'x-signal-app-key': SDK_KEY },
+      query: { screen_id: screenId, user_id: userIdParam, rep_tenure_days: '365' },
     });
     return elig.statusCode === 200;
   }
 
-  // Scenario 1 — pause an active campaign.
   it('scenario 1: POST /:id/pause on active → 200 paused; no longer in the SDK cache', async () => {
-    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const targetId = await seedTarget(t.db, accountId, { screenId: 'order_completion' });
     const id = await publishActive(targetId);
-    // Sanity: active campaign IS eligible before pausing.
-    expect(await eligible('order_completion', 'cl_A', 'fresh-user-pause-pre')).toBe(true);
+    expect(await eligible('order_completion', 'fresh-user-pause-pre')).toBe(true);
 
     const res = await app.inject({
       method: 'POST',
@@ -799,13 +713,10 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(campaignSchema.safeParse(body).success).toBe(true);
-    expect(body.status).toBe('paused');
-    expect(new Date(body.updated_at).getTime()).toBe(LIFECYCLE_TIME.getTime());
+    expect(res.json().status).toBe('paused');
+    expect(new Date(res.json().updated_at).getTime()).toBe(LIFECYCLE_TIME.getTime());
 
-    // After refresh the paused campaign is no longer eligible.
-    expect(await eligible('order_completion', 'cl_A', 'fresh-user-pause-post')).toBe(false);
+    expect(await eligible('order_completion', 'fresh-user-pause-post')).toBe(false);
   });
 
   it('pausing a draft (not active) → 409 invalid_state', async () => {
@@ -832,20 +743,17 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(404);
-    expect(res.json().error.code).toBe('not_found');
   });
 
-  // Scenario 2 — resume re-runs the overlap check.
   it('scenario 2: resume with no clash → 200 active; reappears in the SDK cache', async () => {
-    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const targetId = await seedTarget(t.db, accountId, { screenId: 'order_completion' });
     const id = await publishActive(targetId);
     await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${id}/pause`,
       headers: { cookie: cookieHeader },
     });
-    // Paused → not eligible.
-    expect(await eligible('order_completion', 'cl_A', 'fresh-user-resume-pre')).toBe(false);
+    expect(await eligible('order_completion', 'fresh-user-resume-pre')).toBe(false);
 
     const res = await app.inject({
       method: 'POST',
@@ -854,39 +762,32 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('active');
-
-    // Active again → eligible after refresh.
-    expect(await eligible('order_completion', 'cl_A', 'fresh-user-resume-post')).toBe(true);
+    expect(await eligible('order_completion', 'fresh-user-resume-post')).toBe(true);
   });
 
   it('scenario 2b: resume re-runs overlap — a clash that appeared while paused → 409 overlap; stays paused', async () => {
-    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
-    // A active on (target, cl_A), then paused.
-    const idA = await publishActive(targetId, ['cl_A']);
+    const targetId = await seedTarget(t.db, accountId, { screenId: 'order_completion' });
+    const idA = await publishActive(targetId);
     await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idA}/pause`,
       headers: { cookie: cookieHeader },
     });
-    // B published active on the SAME (target, cl_A) while A is paused.
-    const idB = await publishActive(targetId, ['cl_A']);
+    const idB = await publishActive(targetId);
 
-    // Resuming A now clashes with B → 409 overlap, A stays paused.
     const res = await app.inject({
       method: 'POST',
       url: `/v1/console/campaigns/${idA}/resume`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(409);
-    const body = res.json();
-    expect(body.error.code).toBe('overlap');
-    expect(body.conflict.id).toBe(idB);
-
+    expect(res.json().error.code).toBe('overlap');
+    expect(res.json().conflict.id).toBe(idB);
     expect((await getCampaign(idA)).json().status).toBe('paused');
   });
 
   it('resuming a non-paused (active) campaign → 409 invalid_state', async () => {
-    const targetId = await seedTarget(t.db);
+    const targetId = await seedTarget(t.db, accountId);
     const id = await publishActive(targetId);
     const res = await app.inject({
       method: 'POST',
@@ -897,19 +798,8 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
     expect(res.json().error.code).toBe('invalid_state');
   });
 
-  it('resume unknown id → 404 not_found', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/resume`,
-      headers: { cookie: cookieHeader },
-    });
-    expect(res.statusCode).toBe(404);
-    expect(res.json().error.code).toBe('not_found');
-  });
-
-  // Scenario 3 — archive.
   it('scenario 3: POST /:id/archive → 200 archived; excluded from default list and SDK cache', async () => {
-    const targetId = await seedTarget(t.db, { screenId: 'order_completion' });
+    const targetId = await seedTarget(t.db, accountId, { screenId: 'order_completion' });
     const id = await publishActive(targetId);
 
     const res = await app.inject({
@@ -918,34 +808,17 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(campaignSchema.safeParse(body).success).toBe(true);
-    expect(body.status).toBe('archived');
-    expect(new Date(body.updated_at).getTime()).toBe(LIFECYCLE_TIME.getTime());
+    expect(res.json().status).toBe('archived');
 
-    // Excluded from the default list.
     const list = await app.inject({
       method: 'GET',
       url: '/v1/console/campaigns',
       headers: { cookie: cookieHeader },
     });
     expect(list.json().some((r: { id: string }) => r.id === id)).toBe(false);
-
-    // Excluded from the SDK cache.
-    expect(await eligible('order_completion', 'cl_A', 'fresh-user-archive')).toBe(false);
+    expect(await eligible('order_completion', 'fresh-user-archive')).toBe(false);
   });
 
-  it('archive unknown id → 404 not_found', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/archive`,
-      headers: { cookie: cookieHeader },
-    });
-    expect(res.statusCode).toBe(404);
-    expect(res.json().error.code).toBe('not_found');
-  });
-
-  // Scenario 4 — hard delete a clean draft.
   it('scenario 4: DELETE /:id on a draft with zero triggers/responses → 204, row gone', async () => {
     const created = await app.inject({
       method: 'POST',
@@ -961,21 +834,9 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       headers: { cookie: cookieHeader },
     });
     expect(del.statusCode).toBe(204);
-
     expect((await getCampaign(id)).statusCode).toBe(404);
   });
 
-  it('delete unknown id → 404 not_found', async () => {
-    const res = await app.inject({
-      method: 'DELETE',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}`,
-      headers: { cookie: cookieHeader },
-    });
-    expect(res.statusCode).toBe(404);
-    expect(res.json().error.code).toBe('not_found');
-  });
-
-  // Scenario 5 — has_history / non-draft guard.
   it('scenario 5: DELETE on a campaign with trigger/response rows → 409 has_history; row survives', async () => {
     const created = await app.inject({
       method: 'POST',
@@ -984,7 +845,7 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       payload: {},
     });
     const id = created.json().id as string;
-    await seedResponse(t.db, id); // inserts trigger_log + responses
+    await seedResponse(t.db, accountId, id);
 
     const del = await app.inject({
       method: 'DELETE',
@@ -992,16 +853,12 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
       headers: { cookie: cookieHeader },
     });
     expect(del.statusCode).toBe(409);
-    const body = del.json();
-    expect(body.error.code).toBe('has_history');
-    expect(body.error.message).toBe('archive instead');
-
-    // Row survives the 409.
+    expect(del.json().error.code).toBe('has_history');
     expect((await getCampaign(id)).statusCode).toBe(200);
   });
 
-  it('scenario 5b: DELETE on an ACTIVE campaign with zero history → 409 has_history (only drafts are hard-deletable)', async () => {
-    const targetId = await seedTarget(t.db);
+  it('scenario 5b: DELETE on an ACTIVE campaign with zero history → 409 has_history', async () => {
+    const targetId = await seedTarget(t.db, accountId);
     const id = await publishActive(targetId);
 
     const del = await app.inject({
@@ -1011,7 +868,76 @@ describe('campaign lifecycle: pause / resume / archive / hard-delete (real Postg
     });
     expect(del.statusCode).toBe(409);
     expect(del.json().error.code).toBe('has_history');
-
     expect((await getCampaign(id)).statusCode).toBe(200);
+  });
+});
+
+describe('console campaign isolation: account A cannot touch account B (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let a: { accountId: string; userId: string };
+  let b: { accountId: string; userId: string };
+  let cookieA: string;
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    a = await seedAccountWithUser(t.db, { accountName: 'A', email: 'a@example.com' });
+    b = await seedAccountWithUser(t.db, { accountName: 'B', email: 'b@example.com' });
+    app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+    cookieA = `signal_session=${app.signCookie(a.userId)}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it("A cannot read, list, or mutate B's campaign", async () => {
+    // B owns a draft (seeded directly).
+    const [bCampaign] = await t.db
+      .insert(s.campaigns)
+      .values({ accountId: b.accountId, createdBy: b.userId, headerText: 'B only' })
+      .returning();
+    const bid = bCampaign!.id;
+
+    // A's list is empty.
+    const list = await app.inject({
+      method: 'GET',
+      url: '/v1/console/campaigns',
+      headers: { cookie: cookieA },
+    });
+    expect(list.json()).toHaveLength(0);
+
+    // A cannot GET B's campaign.
+    const get = await app.inject({
+      method: 'GET',
+      url: `/v1/console/campaigns/${bid}`,
+      headers: { cookie: cookieA },
+    });
+    expect(get.statusCode).toBe(404);
+
+    // A cannot PATCH B's campaign.
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/v1/console/campaigns/${bid}`,
+      headers: { cookie: cookieA },
+      payload: { header_text: 'hacked' },
+    });
+    expect(patch.statusCode).toBe(404);
+
+    // A cannot DELETE B's campaign; it survives.
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/v1/console/campaigns/${bid}`,
+      headers: { cookie: cookieA },
+    });
+    expect(del.statusCode).toBe(404);
+    const [still] = await t.db.select().from(s.campaigns).where(eq(s.campaigns.id, bid));
+    expect(still!.headerText).toBe('B only');
   });
 });

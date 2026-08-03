@@ -3,7 +3,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import { type Clock, systemClock } from '../../clock.js';
 import type { Db } from '../../db/client.js';
 import {
-  campaignClientBreakdown,
   campaignOverview,
   campaignReasons,
   campaignResponses,
@@ -28,7 +27,11 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // A distinct, more-specific path than campaignRoutes' /campaigns/:id, so the
     // two encapsulated plugins don't collide.
     app.get<{ Params: { id: string } }>('/campaigns/:id/overview', async (request, reply) => {
-      const overview = await campaignOverview(deps.db, request.params.id);
+      const overview = await campaignOverview(
+        deps.db,
+        request.accountId as string,
+        request.params.id,
+      );
       if (!overview) {
         return reply
           .code(404)
@@ -40,25 +43,17 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // GET /campaigns/:id/reasons — ranked non-null chip selections with shares
     // (M4, Task 2). Unknown campaign → 404 campaign_not_found (M4-D12).
     app.get<{ Params: { id: string } }>('/campaigns/:id/reasons', async (request, reply) => {
-      const reasons = await campaignReasons(deps.db, request.params.id);
+      const reasons = await campaignReasons(
+        deps.db,
+        request.accountId as string,
+        request.params.id,
+      );
       if (!reasons) {
         return reply
           .code(404)
           .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
       }
       return reply.send(reasons);
-    });
-
-    // GET /campaigns/:id/clients — per-client trigger/response breakdown for the
-    // Clients tab (M4, Task 3). Unknown campaign → 404 campaign_not_found (M4-D12).
-    app.get<{ Params: { id: string } }>('/campaigns/:id/clients', async (request, reply) => {
-      const breakdown = await campaignClientBreakdown(deps.db, request.params.id);
-      if (!breakdown) {
-        return reply
-          .code(404)
-          .send({ error: { code: 'campaign_not_found', message: 'no such campaign' } });
-      }
-      return reply.send(breakdown);
     });
 
     // GET /campaigns/:id/responses — cursor-paginated, newest-first response
@@ -71,12 +66,17 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
           error: { code: 'invalid_query', message: parsed.error.issues[0]?.message ?? 'invalid' },
         });
       }
-      const feed = await campaignResponses(deps.db, request.params.id, {
-        minRating: parsed.data.min_rating,
-        maxRating: parsed.data.max_rating,
-        cursor: parsed.data.cursor,
-        limit: parsed.data.limit,
-      });
+      const feed = await campaignResponses(
+        deps.db,
+        request.accountId as string,
+        request.params.id,
+        {
+          minRating: parsed.data.min_rating,
+          maxRating: parsed.data.max_rating,
+          cursor: parsed.data.cursor,
+          limit: parsed.data.limit,
+        },
+      );
       if (!feed) {
         return reply
           .code(404)
@@ -89,7 +89,12 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // Trend tab (M4, Task 5). Uses the same threaded clock as /dashboard so the
     // rolling window has a deterministic "now". Unknown campaign → 404 (M4-D12).
     app.get<{ Params: { id: string } }>('/campaigns/:id/trend', async (request, reply) => {
-      const trend = await campaignTrend(deps.db, request.params.id, clock.now());
+      const trend = await campaignTrend(
+        deps.db,
+        request.accountId as string,
+        request.params.id,
+        clock.now(),
+      );
       if (!trend) {
         return reply
           .code(404)
@@ -101,8 +106,8 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // GET /dashboard — the console landing summary. KPIs over active campaigns
     // and a rolling 30-day window, the 3 attention rules (M2-D11), and the
     // active+paused campaign-health list.
-    app.get('/dashboard', async (_request, reply) => {
-      const summary = await dashboardSummary(deps.db, clock.now());
+    app.get('/dashboard', async (request, reply) => {
+      const summary = await dashboardSummary(deps.db, request.accountId as string, clock.now());
       return reply.send(summary);
     });
   };
