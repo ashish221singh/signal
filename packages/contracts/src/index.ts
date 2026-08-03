@@ -1,4 +1,5 @@
 export * from './console/accounts.js';
+export * from './console/agentic.js';
 export * from './console/auth.js';
 export * from './console/reporting.js';
 export * from './console/workflows.js';
