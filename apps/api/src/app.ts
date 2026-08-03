@@ -1,8 +1,10 @@
+import { HeadBucketCommand } from '@aws-sdk/client-s3';
 import cookie from '@fastify/cookie';
 import cors, { type FastifyCorsOptionsDelegatePromise } from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
+import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyError } from 'fastify';
 import { AccountsService } from './accounts/service.js';
 import { DeviceService } from './cli/deviceService.js';
@@ -113,7 +115,37 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // approval page (B3-D3b) posts a native HTML form.
   await app.register(formbody);
 
+  // Liveness (B4-D3): always 200 while the process is up. Container platforms use
+  // this to decide whether to restart the instance; it does NOT touch the DB/S3.
   app.get('/health', async () => ({ status: 'ok' as const, version: SIGNAL_API_VERSION }));
+
+  // Deep readiness (B4-D3): the DB is required (a failed `select 1` → 503); S3 is
+  // best-effort (a head-bucket failure is reported but does not fail readiness,
+  // since the ingest hot path never touches S3). Distinct from liveness so the
+  // platform can hold traffic off an instance that can't reach Postgres.
+  app.get('/ready', async (_request, reply) => {
+    let dbOk = true;
+    try {
+      await resolvedDb.execute(sql`select 1`);
+    } catch (err) {
+      app.log.error(err, 'readiness: db check failed');
+      dbOk = false;
+    }
+
+    let s3Status: 'ok' | 'down' = 'ok';
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    } catch (err) {
+      app.log.warn(err, 'readiness: s3 head-bucket failed (best-effort)');
+      s3Status = 'down';
+    }
+
+    const status = dbOk ? ('ready' as const) : ('not_ready' as const);
+    return reply.code(dbOk ? 200 : 503).send({
+      status,
+      checks: { db: dbOk ? ('ok' as const) : ('down' as const), s3: s3Status },
+    });
+  });
 
   // CLI / device-flow + server-rendered auth pages (B3-D3, D4, D3b). Mounted at
   // the root (absolute paths) and PUBLIC — the approval page self-checks the
