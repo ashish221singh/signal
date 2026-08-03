@@ -25,10 +25,15 @@ export const SEMANTIC_FIELDS = [
   'positive_threshold',
 ] as const satisfies readonly (keyof WorkflowUpdate)[];
 
-/** Discriminated outcome so the route can map to 200 / 404 / 422. */
+/**
+ * `code_managed` (B3-D6): the workflow is owned by `signal deploy` (`managed_by =
+ * 'code'`); console/MCP mutations are rejected 409 so config-as-code stays the
+ * single source of truth. The route maps it to 409 `code_managed`.
+ */
+/** Discriminated outcome so the route can map to 200 / 404 / 422 / 409. */
 export type UpdateResult =
   | { ok: true; workflow: Workflow }
-  | { ok: false; reason: 'not_found' | 'semantic_locked' };
+  | { ok: false; reason: 'not_found' | 'semantic_locked' | 'code_managed' };
 
 /**
  * The columns the DB CHECK (`workflows_active_complete`) requires before a
@@ -57,20 +62,22 @@ export interface OverlapConflict {
  */
 export type PublishResult =
   | { ok: true; workflow: Workflow }
-  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'not_found' | 'code_managed' }
   | { ok: false; reason: 'incomplete'; missing: MissingField[] }
   | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
 
 export type TransitionResult =
   | { ok: true; workflow: Workflow }
-  | { ok: false; reason: 'not_found' | 'invalid_state' };
+  | { ok: false; reason: 'not_found' | 'invalid_state' | 'code_managed' };
 
 export type ResumeResult =
   | { ok: true; workflow: Workflow }
-  | { ok: false; reason: 'not_found' | 'invalid_state' }
+  | { ok: false; reason: 'not_found' | 'invalid_state' | 'code_managed' }
   | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
 
-export type RemoveResult = { ok: true } | { ok: false; reason: 'not_found' | 'has_history' };
+export type RemoveResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'has_history' | 'code_managed' };
 
 /**
  * Console-side workflow service (B2). Every read and write is scoped by
@@ -155,11 +162,13 @@ export class WorkflowService {
    */
   async update(accountId: string, id: string, patch: WorkflowUpdate): Promise<UpdateResult> {
     const existing = await this.db
-      .select({ id: workflows.id })
+      .select({ id: workflows.id, managedBy: workflows.managedBy })
       .from(workflows)
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (existing.length === 0) return { ok: false, reason: 'not_found' };
+    // B3-D6: code-managed workflows are edited only via `signal deploy`.
+    if (existing[0]?.managedBy === 'code') return { ok: false, reason: 'code_managed' };
 
     const touchesSemantic = SEMANTIC_FIELDS.some((f) => f in patch);
     if (touchesSemantic) {
@@ -206,6 +215,7 @@ export class WorkflowService {
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
+    if (row.managedBy === 'code') return { ok: false, reason: 'code_managed' };
 
     const missing = missingRequiredFields(row);
     if (missing.length > 0) return { ok: false, reason: 'incomplete', missing };
@@ -231,6 +241,7 @@ export class WorkflowService {
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
+    if (row.managedBy === 'code') return { ok: false, reason: 'code_managed' };
     if (row.status !== 'active') return { ok: false, reason: 'invalid_state' };
 
     const [updated] = await this.db
@@ -253,6 +264,7 @@ export class WorkflowService {
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
+    if (row.managedBy === 'code') return { ok: false, reason: 'code_managed' };
     if (row.status !== 'paused') return { ok: false, reason: 'invalid_state' };
 
     const conflict = await this.findActiveOverlap(accountId, id, row.eventName as string);
@@ -275,6 +287,7 @@ export class WorkflowService {
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
+    if (row.managedBy === 'code') return { ok: false, reason: 'code_managed' };
     if (row.status === 'archived') return { ok: false, reason: 'invalid_state' };
 
     const [updated] = await this.db
@@ -292,11 +305,12 @@ export class WorkflowService {
    */
   async remove(accountId: string, id: string): Promise<RemoveResult> {
     const [row] = await this.db
-      .select({ status: workflows.status })
+      .select({ status: workflows.status, managedBy: workflows.managedBy })
       .from(workflows)
       .where(and(eq(workflows.id, id), eq(workflows.accountId, accountId)))
       .limit(1);
     if (!row) return { ok: false, reason: 'not_found' };
+    if (row.managedBy === 'code') return { ok: false, reason: 'code_managed' };
 
     if (row.status !== 'draft') {
       return { ok: false, reason: 'has_history' };

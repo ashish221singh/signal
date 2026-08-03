@@ -65,6 +65,14 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
             .code(404)
             .send({ error: { code: 'not_found', message: 'workflow not found' } });
         }
+        if (result.reason === 'code_managed') {
+          return reply.code(409).send({
+            error: {
+              code: 'code_managed',
+              message: 'this workflow is managed by code (signal deploy) and cannot be edited here',
+            },
+          });
+        }
         return reply.code(422).send({
           error: {
             code: 'semantic_locked',
@@ -87,6 +95,11 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           .code(404)
           .send({ error: { code: 'not_found', message: 'workflow not found' } });
       }
+      if (result.reason === 'code_managed') {
+        return reply.code(409).send({
+          error: { code: 'code_managed', message: 'workflow is managed by code (signal deploy)' },
+        });
+      }
       if (result.reason === 'incomplete') {
         return reply.code(422).send({
           error: { code: 'incomplete', message: 'workflow is missing required fields to publish' },
@@ -94,12 +107,17 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
         });
       }
       // overlap (B2-D3): one active workflow per (account, event_name).
+      if (result.reason === 'overlap') {
+        return reply.code(409).send({
+          error: {
+            code: 'overlap',
+            message: 'another active workflow already listens for this event',
+          },
+          conflict: result.conflict,
+        });
+      }
       return reply.code(409).send({
-        error: {
-          code: 'overlap',
-          message: 'another active workflow already listens for this event',
-        },
-        conflict: result.conflict,
+        error: { code: 'invalid_state', message: 'workflow cannot be published' },
       });
     });
 
@@ -111,6 +129,11 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
         return reply
           .code(404)
           .send({ error: { code: 'not_found', message: 'workflow not found' } });
+      }
+      if (result.reason === 'code_managed') {
+        return reply.code(409).send({
+          error: { code: 'code_managed', message: 'workflow is managed by code (signal deploy)' },
+        });
       }
       return reply.code(409).send({
         error: { code: 'invalid_state', message: 'only an active workflow can be paused' },
@@ -136,6 +159,11 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           conflict: result.conflict,
         });
       }
+      if (result.reason === 'code_managed') {
+        return reply.code(409).send({
+          error: { code: 'code_managed', message: 'workflow is managed by code (signal deploy)' },
+        });
+      }
       return reply.code(409).send({
         error: { code: 'invalid_state', message: 'only a paused workflow can be resumed' },
       });
@@ -149,6 +177,11 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
         return reply
           .code(404)
           .send({ error: { code: 'not_found', message: 'workflow not found' } });
+      }
+      if (result.reason === 'code_managed') {
+        return reply.code(409).send({
+          error: { code: 'code_managed', message: 'workflow is managed by code (signal deploy)' },
+        });
       }
       return reply
         .code(409)
@@ -164,6 +197,11 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
         return reply
           .code(404)
           .send({ error: { code: 'not_found', message: 'workflow not found' } });
+      }
+      if (result.reason === 'code_managed') {
+        return reply.code(409).send({
+          error: { code: 'code_managed', message: 'workflow is managed by code (signal deploy)' },
+        });
       }
       return reply.code(409).send({ error: { code: 'has_history', message: 'archive instead' } });
     });

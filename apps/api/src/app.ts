@@ -13,6 +13,7 @@ import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
 import { resolveAuth } from './plugins/resolveAuth.js';
 import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
+import { deployRoutes } from './routes/console/deploy.js';
 import { managementRoutes } from './routes/console/management.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { workflowRoutes } from './routes/console/workflows.js';
@@ -142,6 +143,11 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       // Key & CLI-token management (B3, Task 6) — no sub-prefix; carries its own
       // `/keys` and `/cli-tokens` paths, distinct from `/workflows`.
       await consoleApi.register(managementRoutes({ db: resolvedDb, tokens: tokenService }));
+      // config-as-code deploy (B3, Task 7) — `/deploy`, `deploy` scope. Refreshes
+      // the SDK cache after apply so published workflows are immediately eligible.
+      await consoleApi.register(
+        deployRoutes({ db: resolvedDb, clock, refreshCache: () => cache.refresh() }),
+      );
       // Reporting: mounted with NO sub-prefix — its routes carry their own
       // `/workflows/:id/overview` and `/dashboard` paths, distinct from
       // workflowRoutes above. The clock feeds the dashboard's 30-day window.
