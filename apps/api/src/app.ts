@@ -3,8 +3,6 @@ import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
 import Fastify, { type FastifyError } from 'fastify';
 import { AccountsService } from './accounts/service.js';
-import { CampaignCache } from './campaigns/cache.js';
-import { makeDbCampaignLoader } from './campaigns/loader.js';
 import { type Clock, systemClock } from './clock.js';
 import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
@@ -12,21 +10,22 @@ import type { Env } from './env.js';
 import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
 import { sessionGuard } from './plugins/sessionGuard.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
-import { campaignRoutes } from './routes/console/campaigns.js';
 import { reportingRoutes } from './routes/console/reporting.js';
-import { targetRoutes } from './routes/console/targets.js';
+import { workflowRoutes } from './routes/console/workflows.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { makeS3 } from './uploads/presign.js';
+import { WorkflowCache } from './workflows/cache.js';
+import { makeDbWorkflowLoader } from './workflows/loader.js';
 
 /**
- * Expose the SDK campaign cache on the Fastify instance so its `refresh()` is
+ * Expose the SDK workflow cache on the Fastify instance so its `refresh()` is
  * reachable deterministically (the cross-milestone publish→eligibility test, and
- * Task 18's refresh endpoint) without waiting on the 60s auto-refresh timer.
+ * the refresh endpoint) without waiting on the 60s auto-refresh timer.
  */
 declare module 'fastify' {
   interface FastifyInstance {
-    campaignCache: CampaignCache;
+    workflowCache: WorkflowCache;
   }
 }
 
@@ -51,15 +50,15 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   const resolvedDb = db;
   const clock = deps.clock ?? systemClock;
 
-  const cache = new CampaignCache(makeDbCampaignLoader(resolvedDb));
+  const cache = new WorkflowCache(makeDbWorkflowLoader(resolvedDb));
   await cache.refresh();
-  cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'campaign cache refresh failed'));
+  cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'workflow cache refresh failed'));
 
-  // Expose the SDK campaign cache on the app so a deterministic `refresh()` is
+  // Expose the SDK workflow cache on the app so a deterministic `refresh()` is
   // reachable without waiting on the 60s timer. Used by the cross-milestone
-  // publish→eligibility integration test now, and by Task 18's refresh endpoint
-  // later. The eligibility hot path is unchanged — it still reads the same cache.
-  app.decorate('campaignCache', cache);
+  // publish→eligibility integration test and the refresh endpoint. The
+  // eligibility hot path is unchanged — it still reads the same cache.
+  app.decorate('workflowCache', cache);
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
   const accountsService = new AccountsService(resolvedDb);
@@ -114,13 +113,12 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   await app.register(
     async (consoleApi) => {
       await consoleApi.register(sessionGuard({ db: resolvedDb }));
-      await consoleApi.register(targetRoutes({ db: resolvedDb }), { prefix: '/targets' });
-      await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
-        prefix: '/campaigns',
+      await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
+        prefix: '/workflows',
       });
-      // Reporting (Tasks 16–17): mounted with NO sub-prefix — its routes carry
-      // their own `/campaigns/:id/overview` and `/dashboard` paths, distinct
-      // from campaignRoutes above. The clock feeds the dashboard's 30-day window.
+      // Reporting: mounted with NO sub-prefix — its routes carry their own
+      // `/workflows/:id/overview` and `/dashboard` paths, distinct from
+      // workflowRoutes above. The clock feeds the dashboard's 30-day window.
       await consoleApi.register(reportingRoutes({ db: resolvedDb, clock }));
     },
     { prefix: '/v1/console' },
@@ -128,7 +126,30 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   await app.register(
     async (sdk) => {
-      await sdk.register(publishableKeyAuth((key) => accountsService.lookupAccountByKey(key)));
+      // Hardening-lite (B2-D7): rate-limit the SDK ingest surface keyed by
+      // publishableKey + user_id (60/min). Publishable keys are public, so this
+      // blunts spoofing/abuse without per-tenant infra. Keyed off the header +
+      // the request's user_id (query for GET, body for POST); falls back to the
+      // key alone when no user_id is present. Over-limit → 429 (envelope in the
+      // error handler above).
+      await sdk.register(rateLimit, {
+        max: env.SDK_RATE_LIMIT_MAX,
+        timeWindow: '1 minute',
+        keyGenerator: (request) => {
+          const key =
+            typeof request.headers['x-signal-app-key'] === 'string'
+              ? request.headers['x-signal-app-key']
+              : 'anon';
+          const q = request.query as { user_id?: unknown } | undefined;
+          const b = request.body as { trigger_id?: unknown } | undefined;
+          const user =
+            (q && typeof q.user_id === 'string' && q.user_id) ||
+            (b && typeof b.trigger_id === 'string' && b.trigger_id) ||
+            'anon';
+          return `${key}:${user}`;
+        },
+      });
+      await sdk.register(publishableKeyAuth((key) => accountsService.resolveKey(key)));
       await sdk.register(
         sdkRoutes({
           db: resolvedDb,

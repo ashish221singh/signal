@@ -1,30 +1,33 @@
 import type { EligibilityConfig } from '@signal/contracts';
 import { and, eq } from 'drizzle-orm';
-import type { CampaignCache } from '../campaigns/cache.js';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import { suppressionState, triggerLog } from '../db/schema.js';
+import type { WorkflowCache } from '../workflows/cache.js';
 import { claimShow } from './claim.js';
 import { cooldownEndsAt } from './cooldown.js';
 import { decide } from './decide.js';
 
 export interface EligibilityQueryInput {
   accountId: string;
-  screenId: string;
+  eventName: string;
   userId: string;
-  repTenureDays?: number;
+  context?: string;
+  sessionAgeDays?: number;
 }
 
 export class EligibilityService {
   constructor(
     private readonly db: Db,
-    private readonly cache: CampaignCache,
+    private readonly cache: WorkflowCache,
     private readonly clock: Clock,
+    // Injected RNG (B2-D4) so tests can force sampled/not-sampled deterministically.
+    private readonly rng: () => number = Math.random,
   ) {}
 
   async check(input: EligibilityQueryInput): Promise<EligibilityConfig | null> {
-    const campaign = this.cache.match(input.accountId, input.screenId);
-    if (!campaign) return null;
+    const workflow = this.cache.match(input.accountId, input.eventName);
+    if (!workflow) return null;
 
     const now = this.clock.now();
 
@@ -34,27 +37,33 @@ export class EligibilityService {
       .where(
         and(
           eq(suppressionState.userId, input.userId),
-          eq(suppressionState.campaignId, campaign.id),
+          eq(suppressionState.workflowId, workflow.id),
         ),
       );
 
     const decision = decide({
-      campaign: { minTenureDays: campaign.minTenureDays },
+      workflow: {
+        minSessionAgeDays: workflow.minSessionAgeDays,
+        samplingRate: workflow.samplingRate,
+      },
       suppression: suppression
         ? { nextEligibleAt: suppression.nextEligibleAt, lastAction: suppression.lastAction }
         : undefined,
-      repTenureDays: input.repTenureDays,
+      sessionAgeDays: input.sessionAgeDays,
       now,
+      rng: this.rng,
     });
+    // Not eligible (suppressed / under session age / not_sampled) → write nothing
+    // (B2-D4: a skipped ask must not consume the user's cooldown).
     if (!decision.eligible) return null;
 
-    const nextEligibleAt = cooldownEndsAt(campaign.askFrequency, now);
+    const nextEligibleAt = cooldownEndsAt(workflow.askFrequency, now);
 
     return await this.db.transaction(async (tx) => {
       const claimed = await claimShow(
         tx as unknown as Db,
         input.userId,
-        campaign.id,
+        workflow.id,
         now,
         nextEligibleAt,
       );
@@ -63,25 +72,26 @@ export class EligibilityService {
         .insert(triggerLog)
         .values({
           accountId: input.accountId,
-          campaignId: campaign.id,
+          workflowId: workflow.id,
           userId: input.userId,
-          screenId: input.screenId,
+          eventName: input.eventName,
+          context: input.context ?? null,
           shownAt: now,
         })
         .returning();
       if (!trigger) throw new Error('trigger insert returned no row');
       return {
         trigger_id: trigger.id,
-        campaign_id: campaign.id,
-        metric_type: campaign.metricType,
-        header: campaign.headerText,
-        rating_type: campaign.ratingType,
-        rating_scale_max: campaign.ratingScaleMax,
-        positive_threshold: campaign.positiveThreshold,
-        chips_on_negative: campaign.chipsOnNegative,
-        other_requires_text: campaign.otherRequiresText,
-        other_allows_image: campaign.otherAllowsImage,
-        on_positive_action: campaign.onPositiveAction,
+        campaign_id: workflow.id,
+        metric_type: workflow.metricType,
+        header: workflow.headerText,
+        rating_type: workflow.ratingType,
+        rating_scale_max: workflow.ratingScaleMax,
+        positive_threshold: workflow.positiveThreshold,
+        chips_on_negative: workflow.chipsOnNegative,
+        other_requires_text: workflow.otherRequiresText,
+        other_allows_image: workflow.otherAllowsImage,
+        on_positive_action: workflow.onPositiveAction,
         skip_enabled: true,
       };
     });

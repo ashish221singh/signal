@@ -10,16 +10,16 @@ import type { Db } from '../db/client.js';
 export async function claimShow(
   db: Db,
   userId: string,
-  campaignId: string,
+  workflowId: string,
   now: Date,
   nextEligibleAt: Date,
 ): Promise<boolean> {
   const nowIso = now.toISOString();
   const nextIso = nextEligibleAt.toISOString();
   const result = await db.execute(sql`
-    insert into suppression_state (user_id, campaign_id, last_shown_at, last_action, next_eligible_at)
-    values (${userId}, ${campaignId}, ${nowIso}::timestamptz, null, ${nextIso}::timestamptz)
-    on conflict (user_id, campaign_id) do update
+    insert into suppression_state (user_id, workflow_id, last_shown_at, last_action, next_eligible_at)
+    values (${userId}, ${workflowId}, ${nowIso}::timestamptz, null, ${nextIso}::timestamptz)
+    on conflict (user_id, workflow_id) do update
       set last_shown_at = ${nowIso}::timestamptz, last_action = null, next_eligible_at = ${nextIso}::timestamptz
       where suppression_state.next_eligible_at is not null
         and suppression_state.next_eligible_at <= ${nowIso}::timestamptz

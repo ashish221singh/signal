@@ -8,9 +8,9 @@ import * as schema from '../src/db/schema.js';
 const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url));
 
 /**
- * Insert an account and return its id. Every owned row (targets, campaigns,
- * trigger_log, responses, console_users, api_keys) FK-references an account
- * after B1, so the isolation tests and every seed helper start here.
+ * Insert an account and return its id. Every owned row (workflows, trigger_log,
+ * responses, console_users, api_keys) FK-references an account after B1, so the
+ * isolation tests and every seed helper start here.
  */
 export async function seedAccount(db: Db, name = 'Test Account'): Promise<string> {
   const [row] = await db.insert(schema.accounts).values({ name }).returning();
@@ -73,7 +73,7 @@ export async function startTestDb(): Promise<{
     db,
     truncateAll: async () => {
       await db.execute(sql`
-        truncate responses, trigger_log, suppression_state, campaigns, target_registry,
+        truncate responses, trigger_log, suppression_state, workflows,
           api_keys, console_users, accounts
         restart identity cascade
       `);

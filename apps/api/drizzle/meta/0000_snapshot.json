@@ -1,5 +1,5 @@
 {
-  "id": "a5485e50-1a03-4b6d-9d5f-0bfb3bbcc2b0",
+  "id": "c03e7601-0d6f-4525-9ab6-9e5f61ba2b04",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -73,6 +73,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "allowed_origins": {
+          "name": "allowed_origins",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -134,202 +141,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.campaigns": {
-      "name": "campaigns",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_id": {
-          "name": "target_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metric_type": {
-          "name": "metric_type",
-          "type": "metric_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rating_type": {
-          "name": "rating_type",
-          "type": "rating_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rating_scale_max": {
-          "name": "rating_scale_max",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_text": {
-          "name": "header_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "positive_threshold": {
-          "name": "positive_threshold",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "chips_on_negative": {
-          "name": "chips_on_negative",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "other_requires_text": {
-          "name": "other_requires_text",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "other_allows_image": {
-          "name": "other_allows_image",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "on_positive_action": {
-          "name": "on_positive_action",
-          "type": "on_positive_action",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'none'"
-        },
-        "ask_frequency": {
-          "name": "ask_frequency",
-          "type": "ask_frequency",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'after_7_days'"
-        },
-        "min_tenure_days": {
-          "name": "min_tenure_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "campaign_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "campaigns_status_target_idx": {
-          "name": "campaigns_status_target_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "target_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_account_idx": {
-          "name": "campaigns_account_idx",
-          "columns": [
-            {
-              "expression": "account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "campaigns_account_id_accounts_id_fk": {
-          "name": "campaigns_account_id_accounts_id_fk",
-          "tableFrom": "campaigns",
-          "tableTo": "accounts",
-          "columnsFrom": ["account_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "campaigns_target_id_target_registry_id_fk": {
-          "name": "campaigns_target_id_target_registry_id_fk",
-          "tableFrom": "campaigns",
-          "tableTo": "target_registry",
-          "columnsFrom": ["target_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "campaigns_active_complete": {
-          "name": "campaigns_active_complete",
-          "value": "\n        \"campaigns\".\"status\" <> 'active' OR (\n          \"campaigns\".\"target_id\" IS NOT NULL AND \"campaigns\".\"metric_type\" IS NOT NULL AND \"campaigns\".\"rating_type\" IS NOT NULL\n          AND \"campaigns\".\"rating_scale_max\" IS NOT NULL AND \"campaigns\".\"header_text\" IS NOT NULL\n          AND \"campaigns\".\"positive_threshold\" IS NOT NULL\n        )\n      "
-        }
-      },
       "isRLSEnabled": false
     },
     "public.console_users": {
@@ -430,8 +241,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "campaign_id": {
-          "name": "campaign_id",
+        "workflow_id": {
+          "name": "workflow_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -442,11 +253,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "screen_id": {
-          "name": "screen_id",
+        "event_name": {
+          "name": "event_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "context": {
+          "name": "context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "rating_value": {
           "name": "rating_value",
@@ -490,8 +307,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "rep_tenure_days": {
-          "name": "rep_tenure_days",
+        "session_age_days": {
+          "name": "session_age_days",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -536,7 +353,7 @@
           "name": "responses_reporting_idx",
           "columns": [
             {
-              "expression": "campaign_id",
+              "expression": "workflow_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -573,11 +390,11 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "responses_campaign_id_campaigns_id_fk": {
-          "name": "responses_campaign_id_campaigns_id_fk",
+        "responses_workflow_id_workflows_id_fk": {
+          "name": "responses_workflow_id_workflows_id_fk",
           "tableFrom": "responses",
-          "tableTo": "campaigns",
-          "columnsFrom": ["campaign_id"],
+          "tableTo": "workflows",
+          "columnsFrom": ["workflow_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -599,8 +416,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "campaign_id": {
-          "name": "campaign_id",
+        "workflow_id": {
+          "name": "workflow_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -627,107 +444,22 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "suppression_state_campaign_id_campaigns_id_fk": {
-          "name": "suppression_state_campaign_id_campaigns_id_fk",
+        "suppression_state_workflow_id_workflows_id_fk": {
+          "name": "suppression_state_workflow_id_workflows_id_fk",
           "tableFrom": "suppression_state",
-          "tableTo": "campaigns",
-          "columnsFrom": ["campaign_id"],
+          "tableTo": "workflows",
+          "columnsFrom": ["workflow_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "suppression_state_user_id_campaign_id_pk": {
-          "name": "suppression_state_user_id_campaign_id_pk",
-          "columns": ["user_id", "campaign_id"]
+        "suppression_state_user_id_workflow_id_pk": {
+          "name": "suppression_state_user_id_workflow_id_pk",
+          "columns": ["user_id", "workflow_id"]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.target_registry": {
-      "name": "target_registry",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "screen_id": {
-          "name": "screen_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "trigger_mechanism": {
-          "name": "trigger_mechanism",
-          "type": "trigger_mechanism",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "integration_status": {
-          "name": "integration_status",
-          "type": "integration_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'not_sent'"
-        }
-      },
-      "indexes": {
-        "target_registry_account_screen_unique": {
-          "name": "target_registry_account_screen_unique",
-          "columns": [
-            {
-              "expression": "account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "screen_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "target_registry_account_id_accounts_id_fk": {
-          "name": "target_registry_account_id_accounts_id_fk",
-          "tableFrom": "target_registry",
-          "tableTo": "accounts",
-          "columnsFrom": ["account_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -750,8 +482,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "campaign_id": {
-          "name": "campaign_id",
+        "workflow_id": {
+          "name": "workflow_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -762,11 +494,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "screen_id": {
-          "name": "screen_id",
+        "event_name": {
+          "name": "event_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "context": {
+          "name": "context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "shown_at": {
           "name": "shown_at",
@@ -780,7 +518,7 @@
           "name": "trigger_log_cap_idx",
           "columns": [
             {
-              "expression": "campaign_id",
+              "expression": "workflow_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -814,11 +552,11 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "trigger_log_campaign_id_campaigns_id_fk": {
-          "name": "trigger_log_campaign_id_campaigns_id_fk",
+        "trigger_log_workflow_id_workflows_id_fk": {
+          "name": "trigger_log_workflow_id_workflows_id_fk",
           "tableFrom": "trigger_log",
-          "tableTo": "campaigns",
-          "columnsFrom": ["campaign_id"],
+          "tableTo": "workflows",
+          "columnsFrom": ["workflow_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -828,6 +566,201 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workflows": {
+      "name": "workflows",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sampling_rate": {
+          "name": "sampling_rate",
+          "type": "numeric(4, 3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1.000'"
+        },
+        "metric_type": {
+          "name": "metric_type",
+          "type": "metric_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rating_type": {
+          "name": "rating_type",
+          "type": "rating_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rating_scale_max": {
+          "name": "rating_scale_max",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_text": {
+          "name": "header_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "positive_threshold": {
+          "name": "positive_threshold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chips_on_negative": {
+          "name": "chips_on_negative",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "other_requires_text": {
+          "name": "other_requires_text",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "other_allows_image": {
+          "name": "other_allows_image",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "on_positive_action": {
+          "name": "on_positive_action",
+          "type": "on_positive_action",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'none'"
+        },
+        "ask_frequency": {
+          "name": "ask_frequency",
+          "type": "ask_frequency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'after_7_days'"
+        },
+        "min_session_age_days": {
+          "name": "min_session_age_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "workflow_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "workflows_account_idx": {
+          "name": "workflows_account_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workflows_active_event_unique": {
+          "name": "workflows_active_event_unique",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"workflows\".\"status\" = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workflows_account_id_accounts_id_fk": {
+          "name": "workflows_account_id_accounts_id_fk",
+          "tableFrom": "workflows",
+          "tableTo": "accounts",
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "workflows_active_complete": {
+          "name": "workflows_active_complete",
+          "value": "\n        \"workflows\".\"status\" <> 'active' OR (\n          \"workflows\".\"event_name\" IS NOT NULL AND \"workflows\".\"metric_type\" IS NOT NULL AND \"workflows\".\"rating_type\" IS NOT NULL\n          AND \"workflows\".\"rating_scale_max\" IS NOT NULL AND \"workflows\".\"header_text\" IS NOT NULL\n          AND \"workflows\".\"positive_threshold\" IS NOT NULL\n        )\n      "
+        }
+      },
       "isRLSEnabled": false
     }
   },
@@ -842,20 +775,10 @@
       "schema": "public",
       "values": ["after_7_days", "after_30_days", "after_60_days"]
     },
-    "public.campaign_status": {
-      "name": "campaign_status",
-      "schema": "public",
-      "values": ["draft", "active", "paused", "archived"]
-    },
     "public.console_user_role": {
       "name": "console_user_role",
       "schema": "public",
       "values": ["admin", "editor"]
-    },
-    "public.integration_status": {
-      "name": "integration_status",
-      "schema": "public",
-      "values": ["not_sent", "sent_to_engineering", "confirmed_live"]
     },
     "public.last_action": {
       "name": "last_action",
@@ -877,10 +800,10 @@
       "schema": "public",
       "values": ["star", "emoji", "effort_scale"]
     },
-    "public.trigger_mechanism": {
-      "name": "trigger_mechanism",
+    "public.workflow_status": {
+      "name": "workflow_status",
       "schema": "public",
-      "values": ["action", "dwell"]
+      "values": ["draft", "active", "paused", "archived"]
     }
   },
   "schemas": {},

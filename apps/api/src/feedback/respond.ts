@@ -3,7 +3,7 @@ import { type ResponseBody, ratingBoundsFor } from '@signal/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
-import { campaigns, responses, suppressionState, triggerLog } from '../db/schema.js';
+import { responses, suppressionState, triggerLog, workflows } from '../db/schema.js';
 
 export type RespondResult = 'ok' | 'unknown_trigger' | 'invalid_rating';
 
@@ -15,15 +15,15 @@ export async function recordResponse(
   const [trigger] = await db.select().from(triggerLog).where(eq(triggerLog.id, body.trigger_id));
   if (!trigger) return 'unknown_trigger';
 
-  // Campaign status deliberately NOT checked (M1-D12); we read it only for rating bounds.
-  const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, trigger.campaignId));
-  if (!campaign) return 'unknown_trigger';
-  // ratingType is nullable on drafts; a campaign with a live trigger is always
+  // Workflow status deliberately NOT checked (M1-D12); we read it only for rating bounds.
+  const [workflow] = await db.select().from(workflows).where(eq(workflows.id, trigger.workflowId));
+  if (!workflow) return 'unknown_trigger';
+  // ratingType is nullable on drafts; a workflow with a live trigger is always
   // complete (active), but guard defensively so a rating can't be validated
   // against a null bound.
-  if (campaign.ratingType === null) return 'invalid_rating';
+  if (workflow.ratingType === null) return 'invalid_rating';
 
-  const bounds = ratingBoundsFor(campaign.ratingType, campaign.ratingScaleMax);
+  const bounds = ratingBoundsFor(workflow.ratingType, workflow.ratingScaleMax);
   if (body.rating_value < bounds.min || body.rating_value > bounds.max) return 'invalid_rating';
 
   await db.transaction(async (tx) => {
@@ -32,9 +32,10 @@ export async function recordResponse(
       .values({
         accountId: trigger.accountId,
         triggerId: trigger.id,
-        campaignId: trigger.campaignId,
+        workflowId: trigger.workflowId,
         userId: trigger.userId,
-        screenId: trigger.screenId,
+        eventName: trigger.eventName,
+        context: trigger.context,
         ratingValue: body.rating_value,
         chipSelected: body.chip_selected ?? null,
         otherText: body.other_text ?? null,
@@ -42,7 +43,7 @@ export async function recordResponse(
         location: body.location ?? null,
         deviceOs: body.device_os,
         appVersion: body.app_version,
-        repTenureDays: body.rep_tenure_days ?? null,
+        sessionAgeDays: body.session_age_days ?? null,
         shownAt: new Date(body.shown_at),
         respondedAt: new Date(body.responded_at),
         receivedAt: clock.now(),
@@ -55,7 +56,7 @@ export async function recordResponse(
       .where(
         and(
           eq(suppressionState.userId, trigger.userId),
-          eq(suppressionState.campaignId, trigger.campaignId),
+          eq(suppressionState.workflowId, trigger.workflowId),
         ),
       );
   });

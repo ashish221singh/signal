@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -15,12 +16,8 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-export const triggerMechanismEnum = pgEnum('trigger_mechanism', ['action', 'dwell']);
-export const integrationStatusEnum = pgEnum('integration_status', [
-  'not_sent',
-  'sent_to_engineering',
-  'confirmed_live',
-]);
+// B2-D1: the `trigger_mechanism` and `integration_status` enums are dropped —
+// screens/targets are no longer a targeting concept; a named event is the trigger.
 export const metricTypeEnum = pgEnum('metric_type', ['CSAT', 'CES']);
 export const ratingTypeEnum = pgEnum('rating_type', ['star', 'emoji', 'effort_scale']);
 export const onPositiveActionEnum = pgEnum('on_positive_action', ['none', 'play_store_review']);
@@ -29,7 +26,8 @@ export const askFrequencyEnum = pgEnum('ask_frequency', [
   'after_30_days',
   'after_60_days',
 ]);
-export const campaignStatusEnum = pgEnum('campaign_status', [
+// The status enum keeps its Postgres type name for the reused lifecycle logic.
+export const workflowStatusEnum = pgEnum('workflow_status', [
   'draft',
   'active',
   'paused',
@@ -54,6 +52,10 @@ export const accounts = pgTable('accounts', {
  * Publishable API keys (B1-D3): NOT secrets. Stored plaintext and unique-indexed
  * for O(1) key→account lookup on the SDK hot path. Format `pk_<env>_<base62(24)>`.
  * Multiple keys per account allowed; `revoked_at` supports downtime-free rotation.
+ *
+ * B2-D7: `allowed_origins` is the per-account browser origin allow-list — enforced
+ * only when an `Origin` header is present (native SDKs send none and pass). Empty
+ * (the default) means "no browser restriction".
  */
 export const apiKeys = pgTable(
   'api_keys',
@@ -65,6 +67,7 @@ export const apiKeys = pgTable(
     key: text('key').notNull(),
     label: text('label').notNull(),
     environment: apiKeyEnvironmentEnum('environment').notNull(),
+    allowedOrigins: text('allowed_origins').array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
@@ -74,30 +77,26 @@ export const apiKeys = pgTable(
   ],
 );
 
-export const targetRegistry = pgTable(
-  'target_registry',
+/**
+ * Workflows (B2-D1, was `campaigns`): a workflow listens for a named `event_name`
+ * and, when eligible, presents a CSAT/CES ask. `target_registry` and the target
+ * axis are gone (B2-D1); an optional free-form `context` travels on eligibility
+ * for debugging only.
+ *
+ * - `event_name` (B2-D2): required when `status='active'` (in the CHECK).
+ * - `sampling_rate` (B2-D2): 0–1 probability the ask fires after the other gates.
+ * - `min_session_age_days` (B2-D2, renamed from `min_tenure_days`): the session-age gate.
+ * - one active workflow per (account_id, event_name): partial unique index (B2-D3).
+ */
+export const workflows = pgTable(
+  'workflows',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     accountId: uuid('account_id')
       .notNull()
       .references(() => accounts.id),
-    name: text('name').notNull(),
-    screenId: text('screen_id').notNull(),
-    triggerMechanism: triggerMechanismEnum('trigger_mechanism').notNull(),
-    integrationStatus: integrationStatusEnum('integration_status').notNull().default('not_sent'),
-  },
-  // screen_id is unique PER ACCOUNT now (B1-D6), not globally.
-  (t) => [uniqueIndex('target_registry_account_screen_unique').on(t.accountId, t.screenId)],
-);
-
-export const campaigns = pgTable(
-  'campaigns',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    accountId: uuid('account_id')
-      .notNull()
-      .references(() => accounts.id),
-    targetId: uuid('target_id').references(() => targetRegistry.id),
+    eventName: text('event_name'),
+    samplingRate: numeric('sampling_rate', { precision: 4, scale: 3 }).notNull().default('1.000'),
     metricType: metricTypeEnum('metric_type'),
     ratingType: ratingTypeEnum('rating_type'),
     ratingScaleMax: integer('rating_scale_max'),
@@ -111,21 +110,26 @@ export const campaigns = pgTable(
     otherAllowsImage: boolean('other_allows_image').notNull().default(false),
     onPositiveAction: onPositiveActionEnum('on_positive_action').notNull().default('none'),
     askFrequency: askFrequencyEnum('ask_frequency').notNull().default('after_7_days'),
-    minTenureDays: integer('min_tenure_days'),
-    status: campaignStatusEnum('status').notNull().default('draft'),
+    minSessionAgeDays: integer('min_session_age_days'),
+    status: workflowStatusEnum('status').notNull().default('draft'),
     createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index('campaigns_status_target_idx').on(t.status, t.targetId),
-    index('campaigns_account_idx').on(t.accountId),
-    // B1-D6: the active-complete CHECK drops its `client_ids >= 1` clause.
+    index('workflows_account_idx').on(t.accountId),
+    // B2-D3: at most one ACTIVE workflow per (account, event). Draft/paused/archived
+    // rows are unconstrained; the runtime tie-break (oldest created_at) still guards
+    // any transient overlap the partial index cannot catch.
+    uniqueIndex('workflows_active_event_unique')
+      .on(t.accountId, t.eventName)
+      .where(sql`${t.status} = 'active'`),
+    // B2-D2: the active-complete CHECK now also requires `event_name`.
     check(
-      'campaigns_active_complete',
+      'workflows_active_complete',
       sql`
         ${t.status} <> 'active' OR (
-          ${t.targetId} IS NOT NULL AND ${t.metricType} IS NOT NULL AND ${t.ratingType} IS NOT NULL
+          ${t.eventName} IS NOT NULL AND ${t.metricType} IS NOT NULL AND ${t.ratingType} IS NOT NULL
           AND ${t.ratingScaleMax} IS NOT NULL AND ${t.headerText} IS NOT NULL
           AND ${t.positiveThreshold} IS NOT NULL
         )
@@ -138,14 +142,14 @@ export const suppressionState = pgTable(
   'suppression_state',
   {
     userId: text('user_id').notNull(),
-    campaignId: uuid('campaign_id')
+    workflowId: uuid('workflow_id')
       .notNull()
-      .references(() => campaigns.id),
+      .references(() => workflows.id),
     lastShownAt: timestamp('last_shown_at', { withTimezone: true }).notNull(),
     lastAction: lastActionEnum('last_action'),
     nextEligibleAt: timestamp('next_eligible_at', { withTimezone: true }),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.campaignId] })],
+  (t) => [primaryKey({ columns: [t.userId, t.workflowId] })],
 );
 
 export const triggerLog = pgTable(
@@ -155,14 +159,16 @@ export const triggerLog = pgTable(
     accountId: uuid('account_id')
       .notNull()
       .references(() => accounts.id),
-    campaignId: uuid('campaign_id')
+    workflowId: uuid('workflow_id')
       .notNull()
-      .references(() => campaigns.id),
+      .references(() => workflows.id),
     userId: text('user_id').notNull(),
-    screenId: text('screen_id').notNull(),
+    // B2-D9: reporting groups by event; `context` is retained for drill-down only.
+    eventName: text('event_name').notNull(),
+    context: text('context'),
     shownAt: timestamp('shown_at', { withTimezone: true }).notNull(),
   },
-  (t) => [index('trigger_log_cap_idx').on(t.campaignId, t.userId, t.shownAt)],
+  (t) => [index('trigger_log_cap_idx').on(t.workflowId, t.userId, t.shownAt)],
 );
 
 export const responses = pgTable(
@@ -175,11 +181,12 @@ export const responses = pgTable(
     triggerId: uuid('trigger_id')
       .notNull()
       .references(() => triggerLog.id),
-    campaignId: uuid('campaign_id')
+    workflowId: uuid('workflow_id')
       .notNull()
-      .references(() => campaigns.id),
+      .references(() => workflows.id),
     userId: text('user_id').notNull(),
-    screenId: text('screen_id').notNull(),
+    eventName: text('event_name').notNull(),
+    context: text('context'),
     ratingValue: integer('rating_value').notNull(),
     chipSelected: text('chip_selected'),
     otherText: text('other_text'),
@@ -192,14 +199,14 @@ export const responses = pgTable(
     }>(),
     deviceOs: text('device_os').notNull(),
     appVersion: text('app_version').notNull(),
-    repTenureDays: integer('rep_tenure_days'),
+    sessionAgeDays: integer('session_age_days'),
     shownAt: timestamp('shown_at', { withTimezone: true }).notNull(),
     respondedAt: timestamp('responded_at', { withTimezone: true }).notNull(),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('responses_trigger_id_unique').on(t.triggerId),
-    index('responses_reporting_idx').on(t.campaignId, t.respondedAt),
+    index('responses_reporting_idx').on(t.workflowId, t.respondedAt),
   ],
 );
 

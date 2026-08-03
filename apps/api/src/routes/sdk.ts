@@ -21,9 +21,10 @@ export function sdkRoutes(deps: {
       }
       const config = await deps.eligibility.check({
         accountId: request.accountId as string,
-        screenId: parsed.data.screen_id,
+        eventName: parsed.data.event_name,
         userId: parsed.data.user_id,
-        repTenureDays: parsed.data.rep_tenure_days,
+        context: parsed.data.context,
+        sessionAgeDays: parsed.data.session_age_days,
       });
       if (!config) return reply.code(204).send();
       return reply.code(200).send(config);
@@ -44,7 +45,7 @@ export function sdkRoutes(deps: {
       if (result === 'invalid_rating')
         return reply
           .code(422)
-          .send({ error: { code: 'invalid_rating', message: 'rating outside campaign scale' } });
+          .send({ error: { code: 'invalid_rating', message: 'rating outside workflow scale' } });
       return reply.code(204).send();
     });
 
@@ -64,14 +65,14 @@ export function sdkRoutes(deps: {
     });
 
     // POST /internal/refresh-cache — operational/test hook that forces an
-    // immediate reload of active campaigns into the SDK cache, so a
+    // immediate reload of active workflows into the SDK cache, so a
     // publish/pause is reflected in `/eligibility` without waiting on the 60s
     // auto-refresh timer. It is idempotent (just reloads from the DB) and sits
     // inside this app-key-guarded SDK scope, so the same `X-Signal-App-Key`
     // header protects it. Used by the console end-to-end demo for a
     // deterministic build→publish→fire→pause loop.
     app.post('/internal/refresh-cache', async (request, reply) => {
-      await request.server.campaignCache.refresh();
+      await request.server.workflowCache.refresh();
       return reply.code(204).send();
     });
   };

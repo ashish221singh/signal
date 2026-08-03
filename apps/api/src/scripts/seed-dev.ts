@@ -1,10 +1,10 @@
 // apps/api/src/scripts/seed-dev.ts
-// Idempotent dev seed (B1). Bootstraps ONE dev account (`Signal Dev`) with an
+// Idempotent dev seed (B2). Bootstraps ONE dev account (`Signal Dev`) with an
 // admin user (admin@signal.dev / password: devpassword) and a `pk_test_*`
-// publishable key, then the sample campaigns under that account. Safe to re-run:
-// the account/user/key are upserted by their natural keys, and seed campaigns
-// (createdBy = 'seed') are cleared then reinserted on a disposable dev DB.
-// Prints the publishable key + a curl-ready campaign table.
+// publishable key, then sample event-keyed workflows under that account. Safe to
+// re-run: the account/user/key are upserted by their natural keys, and seed
+// workflows (createdBy = 'seed') are cleared then reinserted on a disposable dev
+// DB. Prints the publishable key + a curl-ready workflow table.
 // Run with: pnpm --filter @signal/api seed
 import { and, eq } from 'drizzle-orm';
 import { generateKey } from '../accounts/key.js';
@@ -18,27 +18,6 @@ const ACCOUNT_NAME = 'Signal Dev';
 const ADMIN_EMAIL = 'admin@signal.dev';
 const ADMIN_NAME = 'Signal Dev Admin';
 const ADMIN_PASSWORD = 'devpassword';
-
-const TARGETS = [
-  {
-    name: 'Order Completion',
-    screenId: 'order_completion',
-    triggerMechanism: 'action' as const,
-    integrationStatus: 'confirmed_live' as const,
-  },
-  {
-    name: 'New Customer Creation',
-    screenId: 'new_customer_creation',
-    triggerMechanism: 'action' as const,
-    integrationStatus: 'confirmed_live' as const,
-  },
-  {
-    name: 'Goal Monitoring Page',
-    screenId: 'goal_monitoring_page',
-    triggerMechanism: 'dwell' as const,
-    integrationStatus: 'confirmed_live' as const,
-  },
-];
 
 async function main(): Promise<void> {
   const env = parseEnv(process.env);
@@ -88,61 +67,35 @@ async function main(): Promise<void> {
       });
     }
 
-    // 4. Upsert targets (keyed on the unique (account, screenId)).
-    for (const target of TARGETS) {
-      await db
-        .insert(schema.targetRegistry)
-        .values({ accountId, ...target })
-        .onConflictDoUpdate({
-          target: [schema.targetRegistry.accountId, schema.targetRegistry.screenId],
-          set: {
-            name: target.name,
-            triggerMechanism: target.triggerMechanism,
-            integrationStatus: target.integrationStatus,
-          },
-        });
-    }
-
-    const targetRows = await db
-      .select()
-      .from(schema.targetRegistry)
-      .where(eq(schema.targetRegistry.accountId, accountId));
-    const targetIdByScreen = new Map(targetRows.map((t) => [t.screenId, t.id]));
-    const targetId = (screenId: string): string => {
-      const id = targetIdByScreen.get(screenId);
-      if (id === undefined) throw new Error(`Seed target missing for screenId: ${screenId}`);
-      return id;
-    };
-
-    // 5. Clear child tables (FK-safe order) then delete prior seed campaigns.
+    // 4. Clear child tables (FK-safe order) then delete prior seed workflows.
     await db.delete(schema.responses).where(eq(schema.responses.accountId, accountId));
     await db.delete(schema.triggerLog).where(eq(schema.triggerLog.accountId, accountId));
-    // suppression_state has no account_id; clear rows for this account's campaigns.
-    const seedCampaignIds = (
+    // suppression_state has no account_id; clear rows for this account's workflows.
+    const seedWorkflowIds = (
       await db
-        .select({ id: schema.campaigns.id })
-        .from(schema.campaigns)
-        .where(eq(schema.campaigns.accountId, accountId))
+        .select({ id: schema.workflows.id })
+        .from(schema.workflows)
+        .where(eq(schema.workflows.accountId, accountId))
     ).map((r) => r.id);
-    for (const cid of seedCampaignIds) {
-      await db.delete(schema.suppressionState).where(eq(schema.suppressionState.campaignId, cid));
+    for (const wid of seedWorkflowIds) {
+      await db.delete(schema.suppressionState).where(eq(schema.suppressionState.workflowId, wid));
     }
     await db
-      .delete(schema.campaigns)
+      .delete(schema.workflows)
       .where(
         and(
-          eq(schema.campaigns.accountId, accountId),
-          eq(schema.campaigns.createdBy, SEED_CREATED_BY),
+          eq(schema.workflows.accountId, accountId),
+          eq(schema.workflows.createdBy, SEED_CREATED_BY),
         ),
       );
 
-    // 6. Insert the demo campaigns (one active per target — B1 uniqueness rule).
+    // 5. Insert the demo workflows (one active per event — B2-D3 uniqueness rule).
     const inserted = await db
-      .insert(schema.campaigns)
+      .insert(schema.workflows)
       .values([
         {
           accountId,
-          targetId: targetId('order_completion'),
+          eventName: 'checkout_completed',
           metricType: 'CSAT',
           ratingType: 'star',
           ratingScaleMax: 5,
@@ -156,7 +109,7 @@ async function main(): Promise<void> {
         },
         {
           accountId,
-          targetId: targetId('new_customer_creation'),
+          eventName: 'customer_created',
           metricType: 'CSAT',
           ratingType: 'emoji',
           ratingScaleMax: 3,
@@ -164,13 +117,14 @@ async function main(): Promise<void> {
           positiveThreshold: 3,
           chipsOnNegative: ['Confusing form', 'Missing fields', 'Too slow'],
           askFrequency: 'after_7_days',
-          minTenureDays: 90,
+          minSessionAgeDays: 90,
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
         {
           accountId,
-          targetId: targetId('goal_monitoring_page'),
+          eventName: 'goal_viewed',
+          samplingRate: '0.500',
           metricType: 'CES',
           ratingType: 'effort_scale',
           ratingScaleMax: 3,
@@ -184,17 +138,17 @@ async function main(): Promise<void> {
       ])
       .returning();
 
-    // 7. Print the key + a campaign table for curl use.
-    const screenByTargetId = new Map(targetRows.map((t) => [t.id, t.screenId]));
+    // 6. Print the key + a workflow table for curl use.
     console.log(`Dev account:     ${account.name} (${accountId})`);
     console.log(`Admin login:     ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
     console.log(`Publishable key: ${publishableKey}`);
     console.table(
-      inserted.map((c) => ({
-        id: c.id,
-        screenId: (c.targetId && screenByTargetId.get(c.targetId)) ?? '(unknown)',
-        ratingType: c.ratingType,
-        askFrequency: c.askFrequency,
+      inserted.map((w) => ({
+        id: w.id,
+        eventName: w.eventName,
+        ratingType: w.ratingType,
+        samplingRate: w.samplingRate,
+        askFrequency: w.askFrequency,
       })),
     );
   } finally {

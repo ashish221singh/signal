@@ -9,7 +9,7 @@ import type {
 } from '@signal/contracts';
 import { and, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { campaigns, responses, targetRegistry, triggerLog } from '../db/schema.js';
+import { responses, triggerLog, workflows } from '../db/schema.js';
 
 /**
  * Attention-strip thresholds (M2-D11). Hard-coded named constants — NOT config.
@@ -31,9 +31,9 @@ export async function campaignOverview(
   campaignId: string,
 ): Promise<CampaignOverview | null> {
   const [campaign] = await db
-    .select({ positiveThreshold: campaigns.positiveThreshold })
-    .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.accountId, accountId)))
+    .select({ positiveThreshold: workflows.positiveThreshold })
+    .from(workflows)
+    .where(and(eq(workflows.id, campaignId), eq(workflows.accountId, accountId)))
     .limit(1);
   if (!campaign) return null;
 
@@ -42,7 +42,7 @@ export async function campaignOverview(
   const [triggerRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(triggerLog)
-    .where(eq(triggerLog.campaignId, campaignId));
+    .where(eq(triggerLog.workflowId, campaignId));
 
   const [responseRow] = await db
     .select({
@@ -53,7 +53,7 @@ export async function campaignOverview(
           : sql<number>`count(*) filter (where ${responses.ratingValue} >= ${threshold})::int`,
     })
     .from(responses)
-    .where(eq(responses.campaignId, campaignId));
+    .where(eq(responses.workflowId, campaignId));
 
   const triggers = triggerRow?.count ?? 0;
   const total = responseRow?.total ?? 0;
@@ -80,15 +80,15 @@ export async function campaignReasons(
   campaignId: string,
 ): Promise<Reasons | null> {
   const [campaign] = await db
-    .select({ id: campaigns.id })
-    .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.accountId, accountId)));
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(and(eq(workflows.id, campaignId), eq(workflows.accountId, accountId)));
   if (!campaign) return null;
 
   const rows = await db
     .select({ chip: responses.chipSelected, count: sql<number>`count(*)::int` })
     .from(responses)
-    .where(and(eq(responses.campaignId, campaignId), isNotNull(responses.chipSelected)))
+    .where(and(eq(responses.workflowId, campaignId), isNotNull(responses.chipSelected)))
     .groupBy(responses.chipSelected)
     .orderBy(desc(sql`count(*)`));
 
@@ -132,12 +132,12 @@ export async function campaignResponses(
   opts: { minRating?: number; maxRating?: number; cursor?: string; limit: number },
 ): Promise<{ items: ResponseFeedItem[]; next_cursor: string | null } | null> {
   const [campaign] = await db
-    .select({ id: campaigns.id })
-    .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.accountId, accountId)));
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(and(eq(workflows.id, campaignId), eq(workflows.accountId, accountId)));
   if (!campaign) return null;
 
-  const conds = [eq(responses.campaignId, campaignId)];
+  const conds = [eq(responses.workflowId, campaignId)];
   if (opts.minRating !== undefined) conds.push(gte(responses.ratingValue, opts.minRating));
   if (opts.maxRating !== undefined) conds.push(lte(responses.ratingValue, opts.maxRating));
 
@@ -186,9 +186,9 @@ export async function campaignTrend(
   now: Date,
 ): Promise<Trend | null> {
   const [campaign] = await db
-    .select({ positiveThreshold: campaigns.positiveThreshold })
-    .from(campaigns)
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.accountId, accountId)))
+    .select({ positiveThreshold: workflows.positiveThreshold })
+    .from(workflows)
+    .where(and(eq(workflows.id, campaignId), eq(workflows.accountId, accountId)))
     .limit(1);
   if (!campaign) return null;
 
@@ -213,7 +213,7 @@ export async function campaignTrend(
     .from(responses)
     .where(
       and(
-        eq(responses.campaignId, campaignId),
+        eq(responses.workflowId, campaignId),
         gte(responses.respondedAt, windowStart),
         lte(responses.respondedAt, windowEnd),
       ),
@@ -244,36 +244,42 @@ export async function dashboardSummary(
   const windowStartIso = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const windowStart = sql`${windowStartIso}::timestamptz`;
 
+  // Correlated-subquery references to the OUTER workflows row must be FULLY
+  // qualified: in a select context Drizzle renders `${workflows.id}` as a bare
+  // `"id"`, which inside the subquery would bind to the inner table's own `id`
+  // column instead of correlating. `"workflows"."id"` / `.positive_threshold`
+  // force the correlation.
+  const wfId = sql`"workflows"."id"`;
+  const wfThreshold = sql`"workflows"."positive_threshold"`;
+
   const triggers30d = sql<number>`(
     select count(*)::int from ${triggerLog} tl
-    where tl.campaign_id = ${campaigns.id} and tl.shown_at >= ${windowStart}
+    where tl.workflow_id = ${wfId} and tl.shown_at >= ${windowStart}
   )`;
   const responses30d = sql<number>`(
     select count(*)::int from ${responses} r
-    where r.campaign_id = ${campaigns.id} and r.responded_at >= ${windowStart}
+    where r.workflow_id = ${wfId} and r.responded_at >= ${windowStart}
   )`;
   const positive30d = sql<number>`(
     select count(*)::int from ${responses} r
-    where r.campaign_id = ${campaigns.id} and r.responded_at >= ${windowStart}
-      and ${campaigns.positiveThreshold} is not null
-      and r.rating_value >= ${campaigns.positiveThreshold}
+    where r.workflow_id = ${wfId} and r.responded_at >= ${windowStart}
+      and ${wfThreshold} is not null
+      and r.rating_value >= ${wfThreshold}
   )`;
 
   const rows = await db
     .select({
-      campaignId: campaigns.id,
-      header: campaigns.headerText,
-      status: campaigns.status,
-      integrationStatus: targetRegistry.integrationStatus,
-      hasThreshold: sql<boolean>`${campaigns.positiveThreshold} is not null`,
+      campaignId: workflows.id,
+      header: workflows.headerText,
+      status: workflows.status,
+      hasThreshold: sql<boolean>`${workflows.positiveThreshold} is not null`,
       triggers: triggers30d,
       responses: responses30d,
       positive: positive30d,
     })
-    .from(campaigns)
-    .leftJoin(targetRegistry, eq(campaigns.targetId, targetRegistry.id))
+    .from(workflows)
     .where(
-      and(eq(campaigns.accountId, accountId), sql`${campaigns.status} in ('active', 'paused')`),
+      and(eq(workflows.accountId, accountId), sql`${workflows.status} in ('active', 'paused')`),
     );
 
   const campaignHealth: CampaignHealth[] = [];
@@ -293,20 +299,16 @@ export async function dashboardSummary(
       campaign_id: row.campaignId,
       header: row.header,
       status: row.status,
-      integration_status: row.integrationStatus,
+      // B2-D1: the target/integration axis is gone; there is no integration
+      // status to report on a workflow, so it is always null (and the
+      // `target_not_live` attention rule no longer fires).
+      integration_status: null,
       triggers_30d: triggers,
       responses_30d: responsesCount,
       response_rate,
       positive_score,
     });
 
-    if (row.status === 'active' && row.integrationStatus !== 'confirmed_live') {
-      attention.push({
-        campaign_id: row.campaignId,
-        header: row.header,
-        reason: 'target_not_live',
-      });
-    }
     if (response_rate !== null && response_rate < RESPONSE_RATE_ATTENTION_THRESHOLD) {
       attention.push({
         campaign_id: row.campaignId,
@@ -336,8 +338,8 @@ export async function dashboardSummary(
   // active_campaigns: count of status='active' campaigns in this account.
   const [activeRow] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(campaigns)
-    .where(and(eq(campaigns.accountId, accountId), eq(campaigns.status, 'active')));
+    .from(workflows)
+    .where(and(eq(workflows.accountId, accountId), eq(workflows.status, 'active')));
 
   const avg_positive_score =
     activePositiveScores.length === 0

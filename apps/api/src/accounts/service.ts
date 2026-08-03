@@ -115,12 +115,23 @@ export class AccountsService {
    * layers a 60s in-memory cache over this so the hot path stays off the DB.
    */
   async lookupAccountByKey(key: string): Promise<string | null> {
+    const resolved = await this.resolveKey(key);
+    return resolved?.accountId ?? null;
+  }
+
+  /**
+   * Resolve a publishable key → `{ accountId, allowedOrigins }` (B2-D7). Returns
+   * null for an unknown/revoked key. `allowedOrigins` is the per-account browser
+   * origin allow-list — enforced by the SDK auth plugin only when an `Origin`
+   * header is present (native SDKs send none and pass).
+   */
+  async resolveKey(key: string): Promise<{ accountId: string; allowedOrigins: string[] } | null> {
     const [row] = await this.db
-      .select({ accountId: apiKeys.accountId })
+      .select({ accountId: apiKeys.accountId, allowedOrigins: apiKeys.allowedOrigins })
       .from(apiKeys)
       .where(and(eq(apiKeys.key, key), isNull(apiKeys.revokedAt)))
       .limit(1);
-    return row?.accountId ?? null;
+    return row ? { accountId: row.accountId, allowedOrigins: row.allowedOrigins } : null;
   }
 
   /** Revoke a key by stamping `revoked_at`. Idempotent (only revokes live keys). */

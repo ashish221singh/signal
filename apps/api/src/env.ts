@@ -13,6 +13,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  // SDK ingest rate limit per (publishableKey + user_id) per minute (B2-D7).
+  SDK_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   DATABASE_URL: z.url().optional(),
   SESSION_SECRET: z.string().min(16).optional(),
   S3_ENDPOINT: z.url().optional(),

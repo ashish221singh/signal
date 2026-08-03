@@ -22,7 +22,7 @@ describe('responseBodySchema', () => {
       other_text: 'kept timing out',
       other_image_url: 'https://cdn.example.com/x.jpg',
       location: { lat: 30.9, lng: 75.8, state: 'Punjab', country: 'IN' },
-      rep_tenure_days: 210,
+      session_age_days: 210,
     });
     expect(r.success).toBe(true);
   });

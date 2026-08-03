@@ -17,22 +17,14 @@ describe('schema', () => {
     accountId = await seedAccount(t.db);
   });
 
-  it('accepts a full account-scoped row cycle (account → target → campaign → trigger)', async () => {
-    const [target] = await t.db
-      .insert(s.targetRegistry)
+  async function seedActiveWorkflow(
+    overrides: Partial<typeof s.workflows.$inferInsert> = {},
+  ): Promise<typeof s.workflows.$inferSelect> {
+    const [row] = await t.db
+      .insert(s.workflows)
       .values({
         accountId,
-        name: 'Order Completion',
-        screenId: 'order_completion',
-        triggerMechanism: 'action',
-        integrationStatus: 'confirmed_live',
-      })
-      .returning();
-    const [campaign] = await t.db
-      .insert(s.campaigns)
-      .values({
-        accountId,
-        targetId: target!.id,
+        eventName: 'checkout_completed',
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
@@ -42,20 +34,30 @@ describe('schema', () => {
         askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
+        ...overrides,
       })
       .returning();
+    if (!row) throw new Error('workflow seed returned no row');
+    return row;
+  }
+
+  it('accepts a full account-scoped row cycle (account → workflow → trigger)', async () => {
+    const workflow = await seedActiveWorkflow();
     const [trigger] = await t.db
       .insert(s.triggerLog)
       .values({
         accountId,
-        campaignId: campaign!.id,
+        workflowId: workflow.id,
         userId: 'u_1',
-        screenId: 'order_completion',
+        eventName: 'checkout_completed',
+        context: 'OrderSummaryScreen',
         shownAt: new Date(),
       })
       .returning();
     expect(trigger!.id).toMatch(/[0-9a-f-]{36}/);
     expect(trigger!.accountId).toBe(accountId);
+    expect(trigger!.eventName).toBe('checkout_completed');
+    expect(trigger!.context).toBe('OrderSummaryScreen');
   });
 
   it('publishable keys are unique across accounts', async () => {
@@ -70,69 +72,88 @@ describe('schema', () => {
     ).rejects.toThrow();
   });
 
-  it('screen_id is unique per account but reusable across accounts', async () => {
-    const other = await seedAccount(t.db, 'Other');
-    await t.db.insert(s.targetRegistry).values({
-      accountId,
-      name: 'X',
-      screenId: 'x',
-      triggerMechanism: 'action',
-    });
-    // Same screen_id under a DIFFERENT account is fine.
-    await t.db.insert(s.targetRegistry).values({
-      accountId: other,
-      name: 'X',
-      screenId: 'x',
-      triggerMechanism: 'action',
-    });
-    // Same screen_id under the SAME account collides.
-    await expect(
-      t.db.insert(s.targetRegistry).values({
-        accountId,
-        name: 'X2',
-        screenId: 'x',
-        triggerMechanism: 'action',
-      }),
-    ).rejects.toThrow();
+  it('api_keys default allowed_origins to an empty array', async () => {
+    const [row] = await t.db
+      .insert(s.apiKeys)
+      .values({ accountId, key: 'pk_test_origins', label: 'a', environment: 'test' })
+      .returning();
+    expect(row!.allowedOrigins).toEqual([]);
   });
 
-  it('rejects a second response for the same trigger_id (unique constraint)', async () => {
-    const [target] = await t.db
-      .insert(s.targetRegistry)
-      .values({ accountId, name: 'X', screenId: 'x', triggerMechanism: 'action' })
-      .returning();
-    const [campaign] = await t.db
-      .insert(s.campaigns)
+  // B2-D3: partial unique index — at most one ACTIVE workflow per (account, event).
+  it('rejects a second ACTIVE workflow on the same (account, event_name)', async () => {
+    await seedActiveWorkflow({ eventName: 'checkout_completed' });
+    await expect(seedActiveWorkflow({ eventName: 'checkout_completed' })).rejects.toThrow();
+  });
+
+  it('allows a second ACTIVE workflow on a DIFFERENT event_name', async () => {
+    await seedActiveWorkflow({ eventName: 'checkout_completed' });
+    const second = await seedActiveWorkflow({ eventName: 'customer_created' });
+    expect(second.status).toBe('active');
+  });
+
+  it('the same (account, event_name) may repeat across NON-active workflows', async () => {
+    await seedActiveWorkflow({ eventName: 'checkout_completed', status: 'draft' });
+    const paused = await seedActiveWorkflow({ eventName: 'checkout_completed', status: 'paused' });
+    expect(paused.status).toBe('paused');
+  });
+
+  it('the same event_name is reusable across different accounts', async () => {
+    await seedActiveWorkflow({ eventName: 'checkout_completed' });
+    const other = await seedAccount(t.db, 'Other');
+    const [row] = await t.db
+      .insert(s.workflows)
       .values({
-        accountId,
-        targetId: target!.id,
+        accountId: other,
+        eventName: 'checkout_completed',
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
         headerText: 'h',
         positiveThreshold: 4,
-        chipsOnNegative: [],
         askFrequency: 'after_7_days',
         status: 'active',
         createdBy: 'test',
       })
       .returning();
+    expect(row!.status).toBe('active');
+  });
+
+  // B2-D2: the active-complete CHECK now also requires event_name.
+  it('rejects an ACTIVE workflow with a NULL event_name (CHECK)', async () => {
+    await expect(
+      t.db.insert(s.workflows).values({
+        accountId,
+        // eventName omitted -> NULL -> CHECK violation for status=active
+        metricType: 'CSAT',
+        ratingType: 'star',
+        ratingScaleMax: 5,
+        headerText: 'h',
+        positiveThreshold: 4,
+        status: 'active',
+        createdBy: 'test',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a second response for the same trigger_id (unique constraint)', async () => {
+    const workflow = await seedActiveWorkflow();
     const [trigger] = await t.db
       .insert(s.triggerLog)
       .values({
         accountId,
-        campaignId: campaign!.id,
+        workflowId: workflow.id,
         userId: 'u',
-        screenId: 'x',
+        eventName: 'checkout_completed',
         shownAt: new Date(),
       })
       .returning();
     const row = {
       accountId,
       triggerId: trigger!.id,
-      campaignId: campaign!.id,
+      workflowId: workflow.id,
       userId: 'u',
-      screenId: 'x',
+      eventName: 'checkout_completed',
       ratingValue: 5,
       deviceOs: 'Android',
       appVersion: '1',

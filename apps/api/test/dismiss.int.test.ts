@@ -2,13 +2,13 @@
 import type { DismissBody } from '@signal/contracts';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { CampaignCache } from '../src/campaigns/cache.js';
-import { makeDbCampaignLoader } from '../src/campaigns/loader.js';
 import type { Clock } from '../src/clock.js';
 import * as s from '../src/db/schema.js';
 import { EligibilityService } from '../src/eligibility/service.js';
 import { recordDismiss } from '../src/feedback/dismiss.js';
 import { recordResponse } from '../src/feedback/respond.js';
+import { WorkflowCache } from '../src/workflows/cache.js';
+import { makeDbWorkflowLoader } from '../src/workflows/loader.js';
 import { seedAccount, startTestDb } from './testDb.js';
 
 class FakeClock implements Clock {
@@ -25,7 +25,7 @@ describe('recordDismiss (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let clock: FakeClock;
   let service: EligibilityService;
-  let cache: CampaignCache;
+  let cache: WorkflowCache;
   let accountId: string;
 
   beforeAll(async () => {
@@ -39,28 +39,17 @@ describe('recordDismiss (real Postgres)', () => {
     await t.truncateAll();
     accountId = await seedAccount(t.db);
     clock = new FakeClock(new Date('2026-07-08T10:00:00Z'));
-    cache = new CampaignCache(makeDbCampaignLoader(t.db));
+    cache = new WorkflowCache(makeDbWorkflowLoader(t.db));
     // Same clock instance flows into both the service and dismiss so "server now" is the fake time.
-    service = new EligibilityService(t.db, cache, clock);
+    service = new EligibilityService(t.db, cache, clock, () => 0);
   });
 
-  async function seedCampaign(overrides: Partial<typeof s.campaigns.$inferInsert> = {}) {
-    const [target] = await t.db
-      .insert(s.targetRegistry)
+  async function seedWorkflow(overrides: Partial<typeof s.workflows.$inferInsert> = {}) {
+    const [workflow] = await t.db
+      .insert(s.workflows)
       .values({
         accountId,
-        name: 'Order Completion',
-        screenId: 'order_completion',
-        triggerMechanism: 'action',
-        integrationStatus: 'confirmed_live',
-      })
-      .onConflictDoNothing()
-      .returning();
-    const [campaign] = await t.db
-      .insert(s.campaigns)
-      .values({
-        accountId,
-        targetId: target!.id,
+        eventName: 'checkout_completed',
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
@@ -74,10 +63,10 @@ describe('recordDismiss (real Postgres)', () => {
       })
       .returning();
     await cache.refresh();
-    return campaign!;
+    return workflow!;
   }
 
-  const q = () => ({ accountId, screenId: 'order_completion', userId: 'u_1' }) as const;
+  const q = () => ({ accountId, eventName: 'checkout_completed', userId: 'u_1' }) as const;
 
   /** Grant a real trigger via the eligibility service and return its trigger_id. */
   async function grantTrigger(): Promise<string> {
@@ -94,24 +83,24 @@ describe('recordDismiss (real Postgres)', () => {
     };
   }
 
-  async function suppRow(campaignId: string) {
+  async function suppRow(workflowId: string) {
     const [row] = await t.db
       .select()
       .from(s.suppressionState)
       .where(
-        and(eq(s.suppressionState.userId, 'u_1'), eq(s.suppressionState.campaignId, campaignId)),
+        and(eq(s.suppressionState.userId, 'u_1'), eq(s.suppressionState.workflowId, workflowId)),
       );
     return row!;
   }
 
   it('dismiss sets cooldown from server now; suppressed until it ends (M1-D5/D10)', async () => {
-    const campaign = await seedCampaign();
+    const workflow = await seedWorkflow();
     const triggerId = await grantTrigger();
     const serverNow = clock.now();
 
     expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
-    const row = await suppRow(campaign.id);
+    const row = await suppRow(workflow.id);
     expect(row.lastAction).toBe('dismissed');
     // after_7_days campaign → +168h from server now.
     expect(row.nextEligibleAt).toEqual(new Date(serverNow.getTime() + 168 * 3_600_000));
@@ -124,7 +113,7 @@ describe('recordDismiss (real Postgres)', () => {
   });
 
   it('idempotent: second dismiss is a no-op, cooldown stays anchored to first dismiss', async () => {
-    const campaign = await seedCampaign();
+    const workflow = await seedWorkflow();
     const triggerId = await grantTrigger();
     const firstNow = clock.now();
 
@@ -134,20 +123,20 @@ describe('recordDismiss (real Postgres)', () => {
     clock.advanceHours(3);
     expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
-    const row = await suppRow(campaign.id);
+    const row = await suppRow(workflow.id);
     // Anchored to the FIRST dismiss (+168h), NOT the second (which would be +171h).
     expect(row.nextEligibleAt).toEqual(new Date(firstNow.getTime() + 168 * 3_600_000));
     expect(row.nextEligibleAt).not.toEqual(new Date(firstNow.getTime() + (168 + 3) * 3_600_000));
   });
 
   it('unknown trigger → unknown_trigger', async () => {
-    await seedCampaign();
+    await seedWorkflow();
     const random = '00000000-0000-4000-8000-000000000000';
     expect(await recordDismiss(t.db, clock, dismissBody(random))).toBe('unknown_trigger');
   });
 
   it('submitted wins: dismiss after a recorded response is a no-op', async () => {
-    const campaign = await seedCampaign();
+    const workflow = await seedWorkflow();
     const triggerId = await grantTrigger();
 
     // Record a real response first → last_action='submitted', next_eligible_at=NULL.
@@ -162,7 +151,7 @@ describe('recordDismiss (real Postgres)', () => {
       }),
     ).toBe('ok');
 
-    const before = await suppRow(campaign.id);
+    const before = await suppRow(workflow.id);
     expect(before.lastAction).toBe('submitted');
     expect(before.nextEligibleAt).toBeNull();
 
@@ -170,7 +159,7 @@ describe('recordDismiss (real Postgres)', () => {
     clock.advanceHours(1);
     expect(await recordDismiss(t.db, clock, dismissBody(triggerId))).toBe('ok');
 
-    const after = await suppRow(campaign.id);
+    const after = await suppRow(workflow.id);
     expect(after.lastAction).toBe('submitted');
     expect(after.nextEligibleAt).toBeNull();
   });

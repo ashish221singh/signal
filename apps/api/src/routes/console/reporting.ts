@@ -23,10 +23,10 @@ import {
 export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginAsync {
   const clock = deps.clock ?? systemClock;
   return async (app) => {
-    // GET /campaigns/:id/overview — trigger/response counts + derived ratios.
-    // A distinct, more-specific path than campaignRoutes' /campaigns/:id, so the
+    // GET /workflows/:id/overview — trigger/response counts + derived ratios.
+    // A distinct, more-specific path than workflowRoutes' /workflows/:id, so the
     // two encapsulated plugins don't collide.
-    app.get<{ Params: { id: string } }>('/campaigns/:id/overview', async (request, reply) => {
+    app.get<{ Params: { id: string } }>('/workflows/:id/overview', async (request, reply) => {
       const overview = await campaignOverview(
         deps.db,
         request.accountId as string,
@@ -42,7 +42,7 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
 
     // GET /campaigns/:id/reasons — ranked non-null chip selections with shares
     // (M4, Task 2). Unknown campaign → 404 campaign_not_found (M4-D12).
-    app.get<{ Params: { id: string } }>('/campaigns/:id/reasons', async (request, reply) => {
+    app.get<{ Params: { id: string } }>('/workflows/:id/reasons', async (request, reply) => {
       const reasons = await campaignReasons(
         deps.db,
         request.accountId as string,
@@ -59,7 +59,7 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // GET /campaigns/:id/responses — cursor-paginated, newest-first response
     // drill-down for the Responses tab (M4, Task 4), filterable by an inclusive
     // score band. Bad query → 422 invalid_query; unknown campaign → 404 (M4-D12).
-    app.get<{ Params: { id: string } }>('/campaigns/:id/responses', async (request, reply) => {
+    app.get<{ Params: { id: string } }>('/workflows/:id/responses', async (request, reply) => {
       const parsed = responseFeedQuerySchema.safeParse(request.query);
       if (!parsed.success) {
         return reply.code(422).send({
@@ -88,7 +88,7 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     // GET /campaigns/:id/trend — 30-day per-UTC-day positive-score trend for the
     // Trend tab (M4, Task 5). Uses the same threaded clock as /dashboard so the
     // rolling window has a deterministic "now". Unknown campaign → 404 (M4-D12).
-    app.get<{ Params: { id: string } }>('/campaigns/:id/trend', async (request, reply) => {
+    app.get<{ Params: { id: string } }>('/workflows/:id/trend', async (request, reply) => {
       const trend = await campaignTrend(
         deps.db,
         request.accountId as string,

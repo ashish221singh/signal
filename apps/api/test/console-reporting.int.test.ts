@@ -26,28 +26,23 @@ const env = parseEnv({ NODE_ENV: 'test' });
 
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000';
 
-/** Seed an active campaign with a known positive_threshold; returns its id. */
-async function seedActiveCampaign(
+let eventSeq = 0;
+function nextEvent(): string {
+  eventSeq += 1;
+  return `event_${eventSeq}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Seed an active workflow with a known positive_threshold; returns its id. */
+async function seedActiveWorkflow(
   db: Db,
   accountId: string,
-  overrides: Partial<typeof s.campaigns.$inferInsert> = {},
+  overrides: Partial<typeof s.workflows.$inferInsert> = {},
 ): Promise<string> {
-  const [target] = await db
-    .insert(s.targetRegistry)
-    .values({
-      accountId,
-      name: 'Alpha Screen',
-      screenId: `alpha-${Math.random().toString(36).slice(2, 8)}`,
-      triggerMechanism: 'action',
-      integrationStatus: 'confirmed_live',
-    })
-    .returning();
-  if (!target) throw new Error('target seed returned no row');
   const [row] = await db
-    .insert(s.campaigns)
+    .insert(s.workflows)
     .values({
       accountId,
-      targetId: target.id,
+      eventName: nextEvent(),
       metricType: 'CSAT',
       ratingType: 'star',
       ratingScaleMax: 5,
@@ -58,34 +53,34 @@ async function seedActiveCampaign(
       ...overrides,
     })
     .returning();
-  if (!row) throw new Error('campaign seed returned no row');
+  if (!row) throw new Error('workflow seed returned no row');
   return row.id;
 }
 
-/** Insert one trigger_log row for a campaign; returns its id. */
-async function seedTrigger(db: Db, accountId: string, campaignId: string): Promise<string> {
+/** Insert one trigger_log row for a workflow; returns its id. */
+async function seedTrigger(db: Db, accountId: string, workflowId: string): Promise<string> {
   const [trigger] = await db
     .insert(s.triggerLog)
-    .values({ accountId, campaignId, userId: 'u', screenId: 'alpha', shownAt: new Date() })
+    .values({ accountId, workflowId, userId: 'u', eventName: 'e', shownAt: new Date() })
     .returning();
   if (!trigger) throw new Error('trigger seed returned no row');
   return trigger.id;
 }
 
-/** Insert a trigger + a response with a KNOWN rating_value for a campaign. */
+/** Insert a trigger + a response with a KNOWN rating_value for a workflow. */
 async function seedResponseWithRating(
   db: Db,
   accountId: string,
-  campaignId: string,
+  workflowId: string,
   ratingValue: number,
 ): Promise<void> {
-  const triggerId = await seedTrigger(db, accountId, campaignId);
+  const triggerId = await seedTrigger(db, accountId, workflowId);
   await db.insert(s.responses).values({
     accountId,
     triggerId,
-    campaignId,
+    workflowId,
     userId: 'u',
-    screenId: 'alpha',
+    eventName: 'e',
     ratingValue,
     deviceOs: 'Android',
     appVersion: '1',
@@ -94,21 +89,21 @@ async function seedResponseWithRating(
   });
 }
 
-/** Insert a trigger + a response with a KNOWN chip_selected value for a campaign. */
+/** Insert a trigger + a response with a KNOWN chip_selected value for a workflow. */
 async function seedResponseWithChip(
   db: Db,
   accountId: string,
-  campaignId: string,
+  workflowId: string,
   ratingValue: number,
   chip: string | null,
 ): Promise<void> {
-  const triggerId = await seedTrigger(db, accountId, campaignId);
+  const triggerId = await seedTrigger(db, accountId, workflowId);
   await db.insert(s.responses).values({
     accountId,
     triggerId,
-    campaignId,
+    workflowId,
     userId: 'u',
-    screenId: 'alpha',
+    eventName: 'e',
     ratingValue,
     chipSelected: chip,
     deviceOs: 'Android',
@@ -118,7 +113,7 @@ async function seedResponseWithChip(
   });
 }
 
-describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
+describe('GET /v1/console/workflows/:id/overview (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
@@ -145,7 +140,7 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
   it('without a cookie → 401', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/overview`,
+      url: `/v1/console/workflows/${UNKNOWN_ID}/overview`,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -153,7 +148,7 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
   it('unknown id → 404 not_found', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/overview`,
+      url: `/v1/console/workflows/${UNKNOWN_ID}/overview`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(404);
@@ -161,7 +156,7 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
   });
 
   it('counts triggers/responses and computes response_rate + positive_score', async () => {
-    const id = await seedActiveCampaign(t.db, accountId, { positiveThreshold: 4 });
+    const id = await seedActiveWorkflow(t.db, accountId, { positiveThreshold: 4 });
     await seedTrigger(t.db, accountId, id);
     await seedTrigger(t.db, accountId, id);
     await seedResponseWithRating(t.db, accountId, id, 5);
@@ -170,7 +165,7 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/overview`,
+      url: `/v1/console/workflows/${id}/overview`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(200);
@@ -183,10 +178,10 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
   });
 
   it('zero triggers and zero responses → response_rate=null, positive_score=null', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+    const id = await seedActiveWorkflow(t.db, accountId);
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/overview`,
+      url: `/v1/console/workflows/${id}/overview`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
@@ -194,15 +189,15 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
     expect(body.positive_score).toBeNull();
   });
 
-  it('a campaign with a null positive_threshold → positive_score=null even with responses', async () => {
-    const id = await seedActiveCampaign(t.db, accountId, {
+  it('a workflow with a null positive_threshold → positive_score=null even with responses', async () => {
+    const id = await seedActiveWorkflow(t.db, accountId, {
       status: 'draft',
       positiveThreshold: null,
     });
     await seedResponseWithRating(t.db, accountId, id, 5);
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/overview`,
+      url: `/v1/console/workflows/${id}/overview`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
@@ -210,12 +205,12 @@ describe('GET /v1/console/campaigns/:id/overview (real Postgres)', () => {
     expect(body.response_rate).toBe(1);
   });
 
-  it("isolation: A cannot read B's campaign overview → 404", async () => {
+  it("isolation: A cannot read B's workflow overview → 404", async () => {
     const b = await seedAccountWithUser(t.db, { accountName: 'B', email: 'b@example.com' });
-    const bId = await seedActiveCampaign(t.db, b.accountId);
+    const bId = await seedActiveWorkflow(t.db, b.accountId);
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${bId}/overview`,
+      url: `/v1/console/workflows/${bId}/overview`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(404);
@@ -233,61 +228,33 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
   let cookieHeader: string;
   let accountId: string;
 
-  async function seedCampaign(
-    integrationStatus: (typeof s.targetRegistry.$inferInsert)['integrationStatus'],
-    overrides: Partial<typeof s.campaigns.$inferInsert> = {},
+  async function seedWorkflow(
+    overrides: Partial<typeof s.workflows.$inferInsert> = {},
   ): Promise<string> {
-    const [target] = await t.db
-      .insert(s.targetRegistry)
-      .values({
-        accountId,
-        name: 'Screen',
-        screenId: `scr-${Math.random().toString(36).slice(2, 10)}`,
-        triggerMechanism: 'action',
-        integrationStatus,
-      })
-      .returning();
-    if (!target) throw new Error('target seed returned no row');
-    const [row] = await t.db
-      .insert(s.campaigns)
-      .values({
-        accountId,
-        targetId: target.id,
-        metricType: 'CSAT',
-        ratingType: 'star',
-        ratingScaleMax: 5,
-        headerText: 'How was it?',
-        positiveThreshold: 4,
-        status: 'active',
-        createdBy: 'seed',
-        ...overrides,
-      })
-      .returning();
-    if (!row) throw new Error('campaign seed returned no row');
-    return row.id;
+    return seedActiveWorkflow(t.db, accountId, overrides);
   }
 
-  async function seedTriggerAt(campaignId: string, shownAt: Date): Promise<string> {
+  async function seedTriggerAt(workflowId: string, shownAt: Date): Promise<string> {
     const [trigger] = await t.db
       .insert(s.triggerLog)
-      .values({ accountId, campaignId, userId: 'u', screenId: 'scr', shownAt })
+      .values({ accountId, workflowId, userId: 'u', eventName: 'e', shownAt })
       .returning();
     if (!trigger) throw new Error('trigger seed returned no row');
     return trigger.id;
   }
 
   async function seedResponseAt(
-    campaignId: string,
+    workflowId: string,
     ratingValue: number,
     respondedAt: Date,
   ): Promise<void> {
-    const triggerId = await seedTriggerAt(campaignId, respondedAt);
+    const triggerId = await seedTriggerAt(workflowId, respondedAt);
     await t.db.insert(s.responses).values({
       accountId,
       triggerId,
-      campaignId,
+      workflowId,
       userId: 'u',
-      screenId: 'scr',
+      eventName: 'e',
       ratingValue,
       deviceOs: 'Android',
       appVersion: '1',
@@ -319,19 +286,19 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('KPIs count active campaigns and only in-window triggers/scores', async () => {
-    const a = await seedCampaign('confirmed_live');
+  it('KPIs count active workflows and only in-window triggers/scores', async () => {
+    const a = await seedWorkflow();
     await seedTriggerAt(a, IN_WINDOW);
     await seedTriggerAt(a, IN_WINDOW);
     await seedTriggerAt(a, OUT_WINDOW);
     await seedResponseAt(a, 5, IN_WINDOW);
     await seedResponseAt(a, 4, IN_WINDOW);
 
-    const b = await seedCampaign('confirmed_live');
+    const b = await seedWorkflow();
     await seedResponseAt(b, 2, IN_WINDOW);
     await seedResponseAt(b, 2, IN_WINDOW);
 
-    await seedCampaign('confirmed_live', { status: 'draft' });
+    await seedWorkflow({ status: 'draft' });
 
     const res = await app.inject({
       method: 'GET',
@@ -346,35 +313,32 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
     expect(body.kpis.avg_positive_score).toBeCloseTo(0.5, 10);
   });
 
-  it('active campaigns on non-live targets appear with target_not_live', async () => {
-    const notSent = await seedCampaign('not_sent');
-    const toEng = await seedCampaign('sent_to_engineering');
-    const live = await seedCampaign('confirmed_live');
-
+  it('integration_status is null and target_not_live never appears (B2 dropped targets)', async () => {
+    await seedWorkflow();
     const res = await app.inject({
       method: 'GET',
       url: '/v1/console/dashboard',
       headers: { cookie: cookieHeader },
     });
-    const notLive = res
-      .json()
-      .attention.filter((a: { reason: string }) => a.reason === 'target_not_live')
-      .map((a: { campaign_id: string }) => a.campaign_id);
-    expect(notLive).toContain(notSent);
-    expect(notLive).toContain(toEng);
-    expect(notLive).not.toContain(live);
+    const body = res.json();
+    expect(
+      body.campaigns.every((c: { integration_status: unknown }) => c.integration_status === null),
+    ).toBe(true);
+    expect(body.attention.every((a: { reason: string }) => a.reason !== 'target_not_live')).toBe(
+      true,
+    );
   });
 
   it('low response rate and low score surface as attention (can co-occur)', async () => {
-    const lr = await seedCampaign('confirmed_live');
+    const lr = await seedWorkflow();
     for (let i = 0; i < 18; i++) await seedTriggerAt(lr, IN_WINDOW);
     await seedResponseAt(lr, 5, IN_WINDOW);
     await seedResponseAt(lr, 5, IN_WINDOW);
 
-    const ls = await seedCampaign('confirmed_live');
+    const ls = await seedWorkflow();
     for (let i = 0; i < 4; i++) await seedResponseAt(ls, 2, IN_WINDOW);
 
-    const both = await seedCampaign('confirmed_live');
+    const both = await seedWorkflow();
     for (let i = 0; i < 18; i++) await seedTriggerAt(both, IN_WINDOW);
     await seedResponseAt(both, 2, IN_WINDOW);
     await seedResponseAt(both, 2, IN_WINDOW);
@@ -398,10 +362,10 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
   });
 
   it('health list includes paused, excludes draft and archived', async () => {
-    const active = await seedCampaign('confirmed_live');
-    const paused = await seedCampaign('confirmed_live', { status: 'paused' });
-    const draft = await seedCampaign('confirmed_live', { status: 'draft' });
-    const archived = await seedCampaign('confirmed_live', { status: 'archived' });
+    const active = await seedWorkflow();
+    const paused = await seedWorkflow({ status: 'paused' });
+    const draft = await seedWorkflow({ status: 'draft' });
+    const archived = await seedWorkflow({ status: 'archived' });
 
     const res = await app.inject({
       method: 'GET',
@@ -416,11 +380,10 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
   });
 
   it('isolation: the dashboard only reflects the caller account', async () => {
-    // A owns one active campaign; B owns two — A's dashboard must ignore B's.
-    await seedCampaign('confirmed_live');
+    await seedWorkflow();
     const b = await seedAccountWithUser(t.db, { accountName: 'B', email: 'b@example.com' });
-    await seedActiveCampaign(t.db, b.accountId);
-    await seedActiveCampaign(t.db, b.accountId);
+    await seedActiveWorkflow(t.db, b.accountId);
+    await seedActiveWorkflow(t.db, b.accountId);
 
     const res = await app.inject({
       method: 'GET',
@@ -431,7 +394,7 @@ describe('GET /v1/console/dashboard (real Postgres)', () => {
   });
 });
 
-describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
+describe('GET /v1/console/workflows/:id/reasons (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
@@ -458,7 +421,7 @@ describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
   it('unknown id → 404 campaign_not_found', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/reasons`,
+      url: `/v1/console/workflows/${UNKNOWN_ID}/reasons`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(404);
@@ -466,7 +429,7 @@ describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
   });
 
   it('ranks non-null chip selections desc with shares and ignores null chips', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+    const id = await seedActiveWorkflow(t.db, accountId);
     await seedResponseWithChip(t.db, accountId, id, 5, 'A');
     await seedResponseWithChip(t.db, accountId, id, 4, 'A');
     await seedResponseWithChip(t.db, accountId, id, 3, 'A');
@@ -476,7 +439,7 @@ describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/reasons`,
+      url: `/v1/console/workflows/${id}/reasons`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(200);
@@ -490,7 +453,7 @@ describe('GET /v1/console/campaigns/:id/reasons (real Postgres)', () => {
   });
 });
 
-describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
+describe('GET /v1/console/workflows/:id/responses (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let cookieHeader: string;
@@ -498,20 +461,20 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
 
   async function seedResponseAt(
     db: Db,
-    campaignId: string,
+    workflowId: string,
     ratingValue: number,
     respondedAt: Date,
     extra: Partial<typeof s.responses.$inferInsert> = {},
   ): Promise<string> {
-    const triggerId = await seedTrigger(db, accountId, campaignId);
+    const triggerId = await seedTrigger(db, accountId, workflowId);
     const [row] = await db
       .insert(s.responses)
       .values({
         accountId,
         triggerId,
-        campaignId,
+        workflowId,
         userId: 'u',
-        screenId: 'alpha',
+        eventName: 'e',
         ratingValue,
         deviceOs: 'Android',
         appVersion: '1',
@@ -545,7 +508,7 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
   it('unknown id → 404 campaign_not_found', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${UNKNOWN_ID}/responses`,
+      url: `/v1/console/workflows/${UNKNOWN_ID}/responses`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(404);
@@ -553,10 +516,10 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
   });
 
   it('a bad range (min_rating>5) → 422 invalid_query', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+    const id = await seedActiveWorkflow(t.db, accountId);
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/responses?min_rating=9`,
+      url: `/v1/console/workflows/${id}/responses?min_rating=9`,
       headers: { cookie: cookieHeader },
     });
     expect(res.statusCode).toBe(422);
@@ -564,14 +527,14 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
   });
 
   it('returns all items newest-first with next_cursor null', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+    const id = await seedActiveWorkflow(t.db, accountId);
     const base = new Date('2026-07-01T00:00:00.000Z').getTime();
     for (let r = 1; r <= 5; r++) {
       await seedResponseAt(t.db, id, r, new Date(base + r * 60_000));
     }
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/responses`,
+      url: `/v1/console/workflows/${id}/responses`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
@@ -583,14 +546,14 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
   });
 
   it('paginates via cursor with no overlap and continued ordering', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+    const id = await seedActiveWorkflow(t.db, accountId);
     const base = new Date('2026-07-01T00:00:00.000Z').getTime();
     for (let r = 1; r <= 5; r++) {
       await seedResponseAt(t.db, id, r, new Date(base + r * 60_000));
     }
     const first = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/responses?limit=2`,
+      url: `/v1/console/workflows/${id}/responses?limit=2`,
       headers: { cookie: cookieHeader },
     });
     const page1 = first.json();
@@ -599,15 +562,15 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
 
     const second = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/responses?limit=2&cursor=${encodeURIComponent(page1.next_cursor)}`,
+      url: `/v1/console/workflows/${id}/responses?limit=2&cursor=${encodeURIComponent(page1.next_cursor)}`,
       headers: { cookie: cookieHeader },
     });
     const page2 = second.json();
     expect(page2.items.map((i: { rating_value: number }) => i.rating_value)).toEqual([3, 2]);
   });
 
-  it('surfaces chip/other/location fields on an item (no client_id after B1)', async () => {
-    const id = await seedActiveCampaign(t.db, accountId);
+  it('surfaces chip/other/location fields on an item', async () => {
+    const id = await seedActiveWorkflow(t.db, accountId);
     await seedResponseAt(t.db, id, 3, new Date('2026-07-01T00:00:00.000Z'), {
       chipSelected: 'slow',
       otherText: 'it was laggy',
@@ -616,7 +579,7 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
     });
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/responses`,
+      url: `/v1/console/workflows/${id}/responses`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
@@ -625,11 +588,10 @@ describe('GET /v1/console/campaigns/:id/responses (real Postgres)', () => {
     expect(item.chip_selected).toBe('slow');
     expect(item.other_text).toBe('it was laggy');
     expect(item.location).toEqual({ lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' });
-    expect(item).not.toHaveProperty('client_id');
   });
 });
 
-describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
+describe('GET /v1/console/workflows/:id/trend (real Postgres)', () => {
   const NOW = new Date('2026-07-09T12:00:00.000Z');
   const clock = new FixedClock(NOW);
 
@@ -639,17 +601,17 @@ describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
   let accountId: string;
 
   async function seedResponseAt(
-    campaignId: string,
+    workflowId: string,
     ratingValue: number,
     respondedAt: Date,
   ): Promise<void> {
-    const triggerId = await seedTrigger(t.db, accountId, campaignId);
+    const triggerId = await seedTrigger(t.db, accountId, workflowId);
     await t.db.insert(s.responses).values({
       accountId,
       triggerId,
-      campaignId,
+      workflowId,
       userId: 'u',
-      screenId: 'alpha',
+      eventName: 'e',
       ratingValue,
       deviceOs: 'Android',
       appVersion: '1',
@@ -677,7 +639,7 @@ describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
   });
 
   it('one point per UTC day with per-day responses count and positive_score', async () => {
-    const id = await seedActiveCampaign(t.db, accountId, { positiveThreshold: 4 });
+    const id = await seedActiveWorkflow(t.db, accountId, { positiveThreshold: 4 });
     await seedResponseAt(id, 5, new Date('2026-07-01T02:00:00.000Z'));
     await seedResponseAt(id, 4, new Date('2026-07-01T20:00:00.000Z'));
     await seedResponseAt(id, 5, new Date('2026-07-03T01:00:00.000Z'));
@@ -687,7 +649,7 @@ describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/trend`,
+      url: `/v1/console/workflows/${id}/trend`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
@@ -707,14 +669,14 @@ describe('GET /v1/console/campaigns/:id/trend (real Postgres)', () => {
   });
 
   it('out-of-window responses excluded', async () => {
-    const id = await seedActiveCampaign(t.db, accountId, { positiveThreshold: 4 });
+    const id = await seedActiveWorkflow(t.db, accountId, { positiveThreshold: 4 });
     await seedResponseAt(id, 2, new Date('2026-07-08T04:00:00.000Z'));
     await seedResponseAt(id, 1, new Date('2026-07-08T18:00:00.000Z'));
     await seedResponseAt(id, 5, new Date('2026-05-30T12:00:00.000Z'));
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/console/campaigns/${id}/trend`,
+      url: `/v1/console/workflows/${id}/trend`,
       headers: { cookie: cookieHeader },
     });
     const body = res.json();
