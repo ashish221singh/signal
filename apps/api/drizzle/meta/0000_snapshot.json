@@ -124,12 +124,8 @@
           "name": "api_keys_account_id_accounts_id_fk",
           "tableFrom": "api_keys",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -310,12 +306,8 @@
           "name": "campaigns_account_id_accounts_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -323,12 +315,8 @@
           "name": "campaigns_target_id_target_registry_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "target_registry",
-          "columnsFrom": [
-            "target_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["target_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -401,12 +389,8 @@
           "name": "console_users_account_id_accounts_id_fk",
           "tableFrom": "console_users",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -416,9 +400,7 @@
         "console_users_email_unique": {
           "name": "console_users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -577,12 +559,8 @@
           "name": "responses_account_id_accounts_id_fk",
           "tableFrom": "responses",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -590,12 +568,8 @@
           "name": "responses_trigger_id_trigger_log_id_fk",
           "tableFrom": "responses",
           "tableTo": "trigger_log",
-          "columnsFrom": [
-            "trigger_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trigger_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -603,12 +577,8 @@
           "name": "responses_campaign_id_campaigns_id_fk",
           "tableFrom": "responses",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -661,12 +631,8 @@
           "name": "suppression_state_campaign_id_campaigns_id_fk",
           "tableFrom": "suppression_state",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -674,10 +640,7 @@
       "compositePrimaryKeys": {
         "suppression_state_user_id_campaign_id_pk": {
           "name": "suppression_state_user_id_campaign_id_pk",
-          "columns": [
-            "user_id",
-            "campaign_id"
-          ]
+          "columns": ["user_id", "campaign_id"]
         }
       },
       "uniqueConstraints": {},
@@ -758,12 +721,8 @@
           "name": "target_registry_account_id_accounts_id_fk",
           "tableFrom": "target_registry",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -850,12 +809,8 @@
           "name": "trigger_log_account_id_accounts_id_fk",
           "tableFrom": "trigger_log",
           "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["account_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -863,12 +818,8 @@
           "name": "trigger_log_campaign_id_campaigns_id_fk",
           "tableFrom": "trigger_log",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -884,87 +835,52 @@
     "public.api_key_environment": {
       "name": "api_key_environment",
       "schema": "public",
-      "values": [
-        "live",
-        "test"
-      ]
+      "values": ["live", "test"]
     },
     "public.ask_frequency": {
       "name": "ask_frequency",
       "schema": "public",
-      "values": [
-        "after_7_days",
-        "after_30_days",
-        "after_60_days"
-      ]
+      "values": ["after_7_days", "after_30_days", "after_60_days"]
     },
     "public.campaign_status": {
       "name": "campaign_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "active",
-        "paused",
-        "archived"
-      ]
+      "values": ["draft", "active", "paused", "archived"]
     },
     "public.console_user_role": {
       "name": "console_user_role",
       "schema": "public",
-      "values": [
-        "admin",
-        "editor"
-      ]
+      "values": ["admin", "editor"]
     },
     "public.integration_status": {
       "name": "integration_status",
       "schema": "public",
-      "values": [
-        "not_sent",
-        "sent_to_engineering",
-        "confirmed_live"
-      ]
+      "values": ["not_sent", "sent_to_engineering", "confirmed_live"]
     },
     "public.last_action": {
       "name": "last_action",
       "schema": "public",
-      "values": [
-        "dismissed",
-        "submitted"
-      ]
+      "values": ["dismissed", "submitted"]
     },
     "public.metric_type": {
       "name": "metric_type",
       "schema": "public",
-      "values": [
-        "CSAT",
-        "CES"
-      ]
+      "values": ["CSAT", "CES"]
     },
     "public.on_positive_action": {
       "name": "on_positive_action",
       "schema": "public",
-      "values": [
-        "none",
-        "play_store_review"
-      ]
+      "values": ["none", "play_store_review"]
     },
     "public.rating_type": {
       "name": "rating_type",
       "schema": "public",
-      "values": [
-        "star",
-        "emoji",
-        "effort_scale"
-      ]
+      "values": ["star", "emoji", "effort_scale"]
     },
     "public.trigger_mechanism": {
       "name": "trigger_mechanism",
       "schema": "public",
-      "values": [
-        "action",
-        "dwell"
-      ]
+      "values": ["action", "dwell"]
     }
   },
   "schemas": {},

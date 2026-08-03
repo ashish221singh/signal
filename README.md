@@ -15,18 +15,23 @@ In-app CSAT/CES feedback system for BeatRoute's field-rep app. One system, three
 ## Status
 
 - **Spec:** locked (v1.1, 2026-07-08)
-- **Build:** Milestone 1 (backend walking skeleton) complete — the full core loop runs against real Postgres
-- Open decisions before/during build: spec §13
-- Items requiring BeatRoute engineering (OAuth creds, client-list API details): spec §14.2 — use placeholder env vars (`BEATROUTE_CLIENT_ID`, `BEATROUTE_CLIENT_SECRET`, `BEATROUTE_TOKEN_URL`, `BEATROUTE_CLIENTS_API_URL`), never hardcode
+- **Build:** B1 (Accounts & Tenancy Core) complete — the backend is now **multi-account**:
+  anyone can sign up and gets an Account with its own publishable API key; every row is
+  owned by an `account_id` and every query is filtered by it. All BeatRoute-specific
+  machinery (the `clients` table, OAuth client-sync) has been removed. The proven core
+  loop (eligibility → response → dismiss → suppression) keeps working, now account-scoped.
+- **Not yet:** event re-key (B2), the agentic surface (B3), and reporting/CORS/deploy
+  hardening (B4). No web UI yet (frontend phase).
 
 ## Planned layout (per spec §12 build sequence)
 
 ```
 Signal/
 ├── docs/          specs, plans, API contracts
-├── backend/       Signal Backend service (data model, /eligibility /response /dismiss, campaign CRUD, reporting, client sync)
+├── apps/api/      Signal Backend service — accounts, publishable keys, /eligibility /response /dismiss, campaign CRUD, reporting
+├── packages/contracts/  shared Zod API schemas
 ├── sdk-android/   com.beatroute:signal-sdk (bottom sheet, hooks, networking, local suppression cache)
-└── console/       Signal Console (campaign builder + reporting dashboard)
+└── console/       Signal Console (campaign builder + reporting dashboard — frontend phase)
 ```
 
 Subfolders are created as each build phase starts — the API contract (spec §8) gets locked first.
@@ -54,10 +59,14 @@ suppressed → correctly re-eligible or never again — against real Postgres:
 
 ```bash
 docker compose up -d
-pnpm --filter @signal/api db:migrate && pnpm --filter @signal/api seed
+pnpm --filter @signal/api db:migrate
 pnpm --filter @signal/api dev &
 ./scripts/demo-loop.sh   # prints ALL SCENARIOS PASSED
 ```
+
+`demo-loop.sh` is self-contained: it signs up a fresh account to obtain a real
+publishable key, builds + publishes campaigns under that account through the
+Console API, then drives the full SDK loop with that key — no pre-seed needed.
 
 ## Console API
 
@@ -66,28 +75,50 @@ admin surface PMs use to build and manage campaigns. All routes live under
 `/v1/console/*`. Everything except `/v1/console/auth/*` requires a valid session
 cookie.
 
-### First admin
+### Accounts & signup
 
-There is no signup UI. Seed (or refresh) the first admin from the CLI:
+Signup is open (rate-limited 5/min/IP). It creates an **account**, its first
+**admin** user, and a default **publishable key** (`pk_live_…`) in one transaction,
+then issues a session:
 
 ```bash
-pnpm --filter @signal/api create-admin -- \
-  --email pm@signal.local --name PM --password changeme123
+curl -X POST http://localhost:3000/v1/console/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"pm@signal.local","password":"changeme123","name":"PM","account_name":"Acme"}'
+# → { account, user, publishable_key }
 ```
 
-It upserts by email: re-running refreshes the password and name for an existing
-user (it never changes their role). Password must be at least 10 characters.
+Email is globally unique (a duplicate → `409 email_taken`); password must be at
+least 8 characters. To bootstrap an account from the CLI instead:
+
+```bash
+pnpm --filter @signal/api create-account -- \
+  --email pm@signal.local --name PM --password changeme123 --account Acme
+```
+
+Publishable keys are **not secrets** (they ship in client apps): stored plaintext,
+unique-indexed, format `pk_<live|test>_<24>`, with `revoked_at` for rotation.
 
 ### Auth (cookie session)
 
+- `POST /v1/console/auth/signup` `{ email, password, name, account_name }` → creates
+  the account + admin + key, sets the session cookie, returns the above. 5/min/IP.
 - `POST /v1/console/auth/login` `{ email, password }` → on success sets a signed,
   httpOnly cookie `signal_session` (`sameSite=strict`, `secure` in production,
   12h expiry) and returns the user. Rate-limited to **5/min/IP**.
 - `POST /v1/console/auth/logout` → clears the cookie (204).
 - `GET /v1/console/auth/me` → the current user, or 401.
 
-No user enumeration: a wrong password and an unknown email both return
-`401 invalid_credentials`.
+The session guard resolves the caller's `account_id` from their user, and every
+`/v1/console/*` query is filtered by it. No user enumeration: a wrong password and
+an unknown email both return `401 invalid_credentials`.
+
+### SDK auth (publishable key)
+
+`/v1/sdk/*` authenticates by the account's publishable key in the
+`X-Signal-App-Key` header (unknown/revoked → 401). The key resolves to an
+`account_id` (cached 60s) and every SDK query — eligibility, response, dismiss —
+is scoped to that account.
 
 ### Endpoint map
 
@@ -96,25 +127,24 @@ session cookie; the session guard returns 401 without one.
 
 | Method | Path | Notes |
 | --- | --- | --- |
+| `POST` | `/v1/console/auth/signup` | creates account + admin + key; sets `signal_session`; 5/min/IP; `409 email_taken` on dup |
 | `POST` | `/v1/console/auth/login` | sets `signal_session`; rate-limited 5/min/IP |
 | `POST` | `/v1/console/auth/logout` | clears the cookie |
 | `GET` | `/v1/console/auth/me` | current user or 401 |
-| `GET` | `/v1/console/targets` | list targets |
-| `POST` | `/v1/console/targets` | create; server-side slug, `422 slug_conflict` on collision (no auto-suffix) |
+| `GET` | `/v1/console/targets` | list the account's targets |
+| `POST` | `/v1/console/targets` | create; server-side slug, `422 slug_conflict` on collision (per account, no auto-suffix) |
 | `PATCH` | `/v1/console/targets/:id/integration-status` | transition; `422 illegal_transition` off the transition table |
-| `GET` | `/v1/console/clients` | list clients |
 | `GET` | `/v1/console/campaigns` | list (archived excluded unless `?include=archived`) |
 | `POST` | `/v1/console/campaigns` | create a draft |
 | `GET` | `/v1/console/campaigns/:id` | full campaign or 404 |
 | `PATCH` | `/v1/console/campaigns/:id` | update draft; semantic fields lock to `422 semantic_locked` after the first response |
-| `POST` | `/v1/console/campaigns/:id/publish` | draft → active; `422 incomplete` (with `missing`) / `409 overlap` (with `conflict`) |
+| `POST` | `/v1/console/campaigns/:id/publish` | draft → active; `422 incomplete` (with `missing`) / `409 overlap` (one active per account+target, with `conflict`) |
 | `POST` | `/v1/console/campaigns/:id/pause` | active → paused |
 | `POST` | `/v1/console/campaigns/:id/resume` | paused → active (re-runs the overlap check) |
 | `POST` | `/v1/console/campaigns/:id/archive` | any non-archived state → archived |
 | `DELETE` | `/v1/console/campaigns/:id` | hard-delete a draft with no history only, else `409 has_history` |
 | `GET` | `/v1/console/campaigns/:id/overview` | trigger/response counts, response rate, positive score |
 | `GET` | `/v1/console/campaigns/:id/reasons` | ranked top complaint reasons — non-null `chip_selected` counts with `share`; `total_chip_responses` + `chips[]` |
-| `GET` | `/v1/console/campaigns/:id/clients` | per-client breakdown — `triggers`, `responses`, `response_rate`, `positive_score` |
 | `GET` | `/v1/console/campaigns/:id/responses` | cursor-paginated response feed (`?min_rating=&max_rating=&cursor=&limit=`) |
 | `GET` | `/v1/console/campaigns/:id/trend` | 30-day daily positive-score series (`points[]` of `{date, responses, positive_score}`) |
 | `GET` | `/v1/console/dashboard` | landing summary — KPIs, attention rules, campaign-health list |
@@ -125,83 +155,32 @@ publish is **never** blocked by a target's `integration_status` (M2-D7).
 
 ### Reporting (per-campaign tabs)
 
-The four per-campaign reporting endpoints back the Console's Reasons / Clients /
-Responses / Trend tabs. They are API-only (no dashboard aggregation) and, like the
-rest of `/v1/console/*`, require the session cookie. An unknown campaign id returns
-`404 campaign_not_found`, and every ratio is null-safe — a zero denominator yields
-`null` (never `0`).
+The per-campaign reporting endpoints back the Console's Reasons / Responses / Trend
+tabs. They are API-only (no dashboard aggregation), account-scoped, and, like the
+rest of `/v1/console/*`, require the session cookie. An unknown campaign id (or one
+owned by another account) returns `404 campaign_not_found`, and every ratio is
+null-safe — a zero denominator yields `null` (never `0`).
 
 - `GET /v1/console/campaigns/:id/reasons` — the top complaint reasons: ranked,
   non-null `chip_selected` counts each with a `share`. Returns `total_chip_responses`
   and `chips[]` (`{ chip, count, share }`).
-- `GET /v1/console/campaigns/:id/clients` — per-client breakdown: `client_id`,
-  `triggers`, `responses`, `response_rate`, `positive_score`.
 - `GET /v1/console/campaigns/:id/responses?min_rating=&max_rating=&cursor=&limit=` —
   the cursor-paginated response feed, newest-first (`limit` defaults to 50, max 200),
   filterable by an inclusive score range. Each item carries `rating_value`,
-  `chip_selected`, `other_text`, `other_image_url`, `location`, `client_id`,
-  `device_os`, `app_version`, `shown_at`/`responded_at`, plus a top-level
-  `next_cursor`.
+  `chip_selected`, `other_text`, `other_image_url`, `location`, `device_os`,
+  `app_version`, `shown_at`/`responded_at`, plus a top-level `next_cursor`.
 - `GET /v1/console/campaigns/:id/trend` — the 30-day daily positive-score series:
   `points[]` of `{ date, responses, positive_score }` (one point per UTC day).
 
-### Console demo
+The per-client breakdown tab was removed with the `clients` table (B1-D6).
 
-`scripts/console-demo.sh` is the Milestone 2 exit-proof. It logs in as the seeded
-admin, registers a target, builds and publishes a CSAT campaign, and then shows
-that same Console-built campaign firing through the Milestone 1
-`/v1/sdk/eligibility` engine — proving build → publish → fire → report end to end
-across M1 and M2. It also exercises the overlap `409` and pause suppression.
+### End-to-end demo
 
-```bash
-docker compose up -d
-pnpm --filter @signal/api db:migrate && pnpm --filter @signal/api seed
-pnpm --filter @signal/api create-admin -- \
-  --email pm@signal.local --name PM --password changeme123
-pnpm --filter @signal/api dev &
-ADMIN_EMAIL=pm@signal.local ADMIN_PASSWORD=changeme123 ./scripts/console-demo.sh
-# prints ALL CONSOLE SCENARIOS PASSED
-```
-
-## Client sync
-
-The `clients` table is a read-only cache of BeatRoute's client roster, kept fresh by
-a one-shot CLI:
-
-```bash
-pnpm --filter @signal/api sync-clients
-```
-
-Each run does an OAuth2 client-credentials pull from BeatRoute, then an **idempotent**
-upsert into `clients`: it inserts new clients, updates the `name`/`status` of existing
-ones, deactivates any client absent from the source (sets `status = inactive`), and
-**never deletes** a row. Touched rows have their `last_synced_at` bumped. On any
-failure (token or client-list fetch) it logs which step failed, leaves the `clients`
-cache **untouched**, and exits non-zero so alerting notices.
-
-Configuration is via `BEATROUTE_*` env placeholders:
-
-| Var | Purpose |
-| --- | --- |
-| `BEATROUTE_TOKEN_URL` | OAuth2 token endpoint |
-| `BEATROUTE_CLIENTS_API_URL` | client-list endpoint |
-| `BEATROUTE_CLIENT_ID` | client-credentials id |
-| `BEATROUTE_CLIENT_SECRET` | client-credentials secret |
-| `BEATROUTE_OAUTH_SCOPE` | OAuth scope (default `clients:read`) |
-
-In dev/test these default to a local mock (`http://localhost:4599/...`). In production
-they are **required** — missing values fail fast at startup. The secret originates
-from a secrets manager in prod; **never commit a real secret**.
-
-**Asks for BeatRoute engineering** (spec §14.2):
-
-- register a `signal-backend` client-credentials app,
-- issue a client id/secret scoped `clients:read`,
-- confirm the token URL and the client-list response shape:
-  `[{ id | client_id, name, status }]`.
-
-The command itself is stateless — the nightly cadence is owned by an **external
-scheduler** set up in the deploy milestone, not by this repo.
+`scripts/demo-loop.sh` (above) is the B1 exit-proof: it signs up an account,
+builds + publishes campaigns through the Console API under that account, and drives
+the full SDK loop with the returned publishable key — proving signup →
+build/publish → eligibility → response/dismiss → suppression end to end, all
+account-scoped.
 
 ## Android SDK
 

@@ -9,8 +9,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx src/scripts/seed-dev.ts",
-    "create-admin": "tsx src/scripts/create-admin.ts",
-    "sync-clients": "tsx src/scripts/sync-clients.ts"
+    "create-account": "tsx src/scripts/create-account.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",

@@ -1,16 +1,15 @@
-// apps/api/src/scripts/create-admin.ts
-// Operational CLI to seed/refresh a console admin. Upserts into console_users by
-// email: on conflict it updates passwordHash + name only (never demotes/changes
-// role). Reads --email/--name/--password from argv (flags after `--` when run via
-// pnpm) or falls back to ADMIN_EMAIL/ADMIN_NAME/ADMIN_PASSWORD env vars.
-// Run with: pnpm --filter @signal/api create-admin -- --email x --name y --password z
+// apps/api/src/scripts/create-account.ts
+// Operational CLI to bootstrap a new account + its first admin user + a default
+// publishable key, all in one transaction (B1-D2). Reads --email/--name/
+// --password/--account from argv (flags after `--` when run via pnpm) or falls
+// back to ADMIN_EMAIL/ADMIN_NAME/ADMIN_PASSWORD/ACCOUNT_NAME env vars.
+// Run: pnpm --filter @signal/api create-account -- --email x --name y --password z --account "Acme"
 import { z } from 'zod';
-import { hashPassword } from '../auth/password.js';
+import { AccountsService } from '../accounts/service.js';
 import { createDb } from '../db/client.js';
-import * as schema from '../db/schema.js';
 import { parseEnv } from '../env.js';
 
-const MIN_PASSWORD_LENGTH = 10;
+const MIN_PASSWORD_LENGTH = 8;
 
 const inputSchema = z.object({
   email: z.email('must be a valid email address'),
@@ -18,6 +17,7 @@ const inputSchema = z.object({
   password: z
     .string()
     .min(MIN_PASSWORD_LENGTH, `must be at least ${MIN_PASSWORD_LENGTH} characters`),
+  account: z.string().trim().min(1, 'is required'),
 });
 
 /** Parse `--flag value` pairs from argv; unknown flags are ignored. */
@@ -38,7 +38,7 @@ function parseArgs(argv: readonly string[]): Record<string, string> {
 }
 
 function fail(message: string): never {
-  console.error(`create-admin: ${message}`);
+  console.error(`create-account: ${message}`);
   process.exit(1);
 }
 
@@ -49,6 +49,7 @@ async function main(): Promise<void> {
     email: args.email ?? process.env.ADMIN_EMAIL,
     name: args.name ?? process.env.ADMIN_NAME,
     password: args.password ?? process.env.ADMIN_PASSWORD,
+    account: args.account ?? process.env.ACCOUNT_NAME,
   };
 
   const parsed = inputSchema.safeParse(raw);
@@ -59,24 +60,23 @@ async function main(): Promise<void> {
     fail(details);
   }
 
-  const { email, name, password } = parsed.data;
-  const passwordHash = await hashPassword(password);
-
   const env = parseEnv(process.env);
   const { db, close } = createDb(env.DATABASE_URL);
+  const accounts = new AccountsService(db);
 
   try {
-    const [row] = await db
-      .insert(schema.consoleUsers)
-      .values({ email, name, passwordHash })
-      .onConflictDoUpdate({
-        target: schema.consoleUsers.email,
-        // Refresh credentials/name only; never overwrite role on re-run.
-        set: { passwordHash, name },
-      })
-      .returning({ email: schema.consoleUsers.email, role: schema.consoleUsers.role });
-
-    console.log(`Admin upserted: ${row?.email} (role: ${row?.role})`);
+    const result = await accounts.signup(
+      {
+        email: parsed.data.email,
+        password: parsed.data.password,
+        name: parsed.data.name,
+        accountName: parsed.data.account,
+      },
+      'live',
+    );
+    console.log(`Account created: ${result.account.name} (${result.account.id})`);
+    console.log(`Admin user:      ${result.user.email} (role: ${result.user.role})`);
+    console.log(`Publishable key: ${result.publishableKey}`);
   } finally {
     await close();
   }
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
 main().then(
   () => process.exit(0),
   (error: unknown) => {
-    console.error('create-admin failed:', error);
+    console.error('create-account failed:', error);
     process.exit(1);
   },
 );

@@ -1,20 +1,23 @@
 // apps/api/src/scripts/seed-dev.ts
-// Idempotent dev seed. Safe to re-run: clients/targets are upserted, and seed
-// campaigns (createdBy = 'seed') are deleted then reinserted. Child tables that
-// FK-reference campaigns are cleared first so re-runs stay clean on a
-// disposable dev DB. Run with: pnpm --filter @signal/api seed
-import { eq } from 'drizzle-orm';
+// Idempotent dev seed (B1). Bootstraps ONE dev account (`Signal Dev`) with an
+// admin user (admin@signal.dev / password: devpassword) and a `pk_test_*`
+// publishable key, then the sample campaigns under that account. Safe to re-run:
+// the account/user/key are upserted by their natural keys, and seed campaigns
+// (createdBy = 'seed') are cleared then reinserted on a disposable dev DB.
+// Prints the publishable key + a curl-ready campaign table.
+// Run with: pnpm --filter @signal/api seed
+import { and, eq } from 'drizzle-orm';
+import { generateKey } from '../accounts/key.js';
+import { hashPassword } from '../auth/password.js';
 import { createDb } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { parseEnv } from '../env.js';
 
 const SEED_CREATED_BY = 'seed';
-
-const CLIENTS = [
-  { id: 'cl_A', name: 'Acme Distribution', status: 'active' as const },
-  { id: 'cl_B', name: 'Bharat FMCG', status: 'active' as const },
-  { id: 'cl_X', name: 'Churned Co', status: 'inactive' as const },
-];
+const ACCOUNT_NAME = 'Signal Dev';
+const ADMIN_EMAIL = 'admin@signal.dev';
+const ADMIN_NAME = 'Signal Dev Admin';
+const ADMIN_PASSWORD = 'devpassword';
 
 const TARGETS = [
   {
@@ -42,24 +45,56 @@ async function main(): Promise<void> {
   const { db, close } = createDb(env.DATABASE_URL);
 
   try {
-    // 1. Upsert clients.
-    for (const client of CLIENTS) {
-      await db
-        .insert(schema.clients)
-        .values(client)
-        .onConflictDoUpdate({
-          target: schema.clients.id,
-          set: { name: client.name, status: client.status },
-        });
+    // 1. Upsert the dev account (keyed by name — good enough for a single dev row).
+    let [account] = await db
+      .select()
+      .from(schema.accounts)
+      .where(eq(schema.accounts.name, ACCOUNT_NAME))
+      .limit(1);
+    if (!account) {
+      [account] = await db.insert(schema.accounts).values({ name: ACCOUNT_NAME }).returning();
+    }
+    if (!account) throw new Error('failed to create dev account');
+    const accountId = account.id;
+
+    // 2. Upsert the admin user (email globally unique).
+    await db
+      .insert(schema.consoleUsers)
+      .values({
+        accountId,
+        email: ADMIN_EMAIL,
+        passwordHash: await hashPassword(ADMIN_PASSWORD),
+        name: ADMIN_NAME,
+        role: 'admin',
+      })
+      .onConflictDoUpdate({
+        target: schema.consoleUsers.email,
+        set: { name: ADMIN_NAME },
+      });
+
+    // 3. Ensure exactly one active pk_test key for this account (rotate-free reuse).
+    const existingKeys = await db
+      .select()
+      .from(schema.apiKeys)
+      .where(and(eq(schema.apiKeys.accountId, accountId), eq(schema.apiKeys.environment, 'test')));
+    let publishableKey = existingKeys.find((k) => k.revokedAt === null)?.key;
+    if (!publishableKey) {
+      publishableKey = generateKey('test');
+      await db.insert(schema.apiKeys).values({
+        accountId,
+        key: publishableKey,
+        label: 'dev',
+        environment: 'test',
+      });
     }
 
-    // 2. Upsert targets (keyed on the unique screenId).
+    // 4. Upsert targets (keyed on the unique (account, screenId)).
     for (const target of TARGETS) {
       await db
         .insert(schema.targetRegistry)
-        .values(target)
+        .values({ accountId, ...target })
         .onConflictDoUpdate({
-          target: schema.targetRegistry.screenId,
+          target: [schema.targetRegistry.accountId, schema.targetRegistry.screenId],
           set: {
             name: target.name,
             triggerMechanism: target.triggerMechanism,
@@ -68,32 +103,46 @@ async function main(): Promise<void> {
         });
     }
 
-    // Resolve target ids by screenId.
-    const targetRows = await db.select().from(schema.targetRegistry);
+    const targetRows = await db
+      .select()
+      .from(schema.targetRegistry)
+      .where(eq(schema.targetRegistry.accountId, accountId));
     const targetIdByScreen = new Map(targetRows.map((t) => [t.screenId, t.id]));
     const targetId = (screenId: string): string => {
       const id = targetIdByScreen.get(screenId);
-      if (id === undefined) {
-        throw new Error(`Seed target missing for screenId: ${screenId}`);
-      }
+      if (id === undefined) throw new Error(`Seed target missing for screenId: ${screenId}`);
       return id;
     };
 
-    // 3. Clear child tables (FK-safe order) then delete prior seed campaigns.
-    // On a disposable dev DB this keeps re-runs idempotent and duplicate-free.
-    await db.delete(schema.responses);
-    await db.delete(schema.triggerLog);
-    await db.delete(schema.suppressionState);
-    await db.delete(schema.campaigns).where(eq(schema.campaigns.createdBy, SEED_CREATED_BY));
+    // 5. Clear child tables (FK-safe order) then delete prior seed campaigns.
+    await db.delete(schema.responses).where(eq(schema.responses.accountId, accountId));
+    await db.delete(schema.triggerLog).where(eq(schema.triggerLog.accountId, accountId));
+    // suppression_state has no account_id; clear rows for this account's campaigns.
+    const seedCampaignIds = (
+      await db
+        .select({ id: schema.campaigns.id })
+        .from(schema.campaigns)
+        .where(eq(schema.campaigns.accountId, accountId))
+    ).map((r) => r.id);
+    for (const cid of seedCampaignIds) {
+      await db.delete(schema.suppressionState).where(eq(schema.suppressionState.campaignId, cid));
+    }
+    await db
+      .delete(schema.campaigns)
+      .where(
+        and(
+          eq(schema.campaigns.accountId, accountId),
+          eq(schema.campaigns.createdBy, SEED_CREATED_BY),
+        ),
+      );
 
-    // 4. Insert the four demo campaigns.
+    // 6. Insert the demo campaigns (one active per target — B1 uniqueness rule).
     const inserted = await db
       .insert(schema.campaigns)
       .values([
         {
-          // Star / 7-day cooldown — the flagship CSAT campaign with a play-store nudge.
+          accountId,
           targetId: targetId('order_completion'),
-          clientIds: ['cl_A', 'cl_B'],
           metricType: 'CSAT',
           ratingType: 'star',
           ratingScaleMax: 5,
@@ -106,9 +155,8 @@ async function main(): Promise<void> {
           createdBy: SEED_CREATED_BY,
         },
         {
-          // Emoji / 7-day cooldown — occupies new_customer_creation x cl_A.
+          accountId,
           targetId: targetId('new_customer_creation'),
-          clientIds: ['cl_A'],
           metricType: 'CSAT',
           ratingType: 'emoji',
           ratingScaleMax: 3,
@@ -116,13 +164,13 @@ async function main(): Promise<void> {
           positiveThreshold: 3,
           chipsOnNegative: ['Confusing form', 'Missing fields', 'Too slow'],
           askFrequency: 'after_7_days',
+          minTenureDays: 90,
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
         {
-          // Effort(3) / 30-day cooldown — CES on a dwell target.
+          accountId,
           targetId: targetId('goal_monitoring_page'),
-          clientIds: ['cl_A'],
           metricType: 'CES',
           ratingType: 'effort_scale',
           ratingScaleMax: 3,
@@ -133,38 +181,23 @@ async function main(): Promise<void> {
           status: 'active',
           createdBy: SEED_CREATED_BY,
         },
-        {
-          // Star / 7-day cooldown with a tenure gate — cl_B on new_customer_creation
-          // (cl_A is already taken there by the emoji campaign, so one active
-          // campaign per (target, client) is respected).
-          targetId: targetId('new_customer_creation'),
-          clientIds: ['cl_B'],
-          metricType: 'CSAT',
-          ratingType: 'star',
-          ratingScaleMax: 5,
-          headerText: 'How satisfied were you? (tenured)',
-          positiveThreshold: 4,
-          chipsOnNegative: ['Slow to load', 'Items hard to find', 'Sync failed'],
-          minTenureDays: 90,
-          askFrequency: 'after_7_days',
-          status: 'active',
-          createdBy: SEED_CREATED_BY,
-        },
       ])
       .returning();
 
-    // 5. Print a table for curl use.
+    // 7. Print the key + a campaign table for curl use.
     const screenByTargetId = new Map(targetRows.map((t) => [t.id, t.screenId]));
-    const table = inserted.map((c) => ({
-      id: c.id,
-      screenId: (c.targetId && screenByTargetId.get(c.targetId)) ?? '(unknown)',
-      clientIds: c.clientIds.join(','),
-      ratingType: c.ratingType,
-      askFrequency: c.askFrequency,
-    }));
-    console.table(table);
+    console.log(`Dev account:     ${account.name} (${accountId})`);
+    console.log(`Admin login:     ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+    console.log(`Publishable key: ${publishableKey}`);
+    console.table(
+      inserted.map((c) => ({
+        id: c.id,
+        screenId: (c.targetId && screenByTargetId.get(c.targetId)) ?? '(unknown)',
+        ratingType: c.ratingType,
+        askFrequency: c.askFrequency,
+      })),
+    );
   } finally {
-    // 6. Always close the connection.
     await close();
   }
 }

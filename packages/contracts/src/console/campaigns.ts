@@ -22,7 +22,7 @@ const timestampSchema = z.union([z.date(), z.iso.datetime()]);
 
 /**
  * POST /campaigns body. A draft is created empty (no client targeting in B1 —
- * clients were removed with the BeatRoute pivot, B1-D6). Minimal is `{}`.
+ * clients were removed with the generic-SaaS pivot, B1-D6). Minimal is `{}`.
  */
 export const campaignDraftCreateSchema = z.object({});
 export type CampaignDraftCreate = z.infer<typeof campaignDraftCreateSchema>;
