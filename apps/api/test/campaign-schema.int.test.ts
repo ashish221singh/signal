@@ -2,10 +2,11 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as s from '../src/db/schema.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, startTestDb } from './testDb.js';
 
 describe('campaign draft-friendly schema', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
+  let accountId: string;
   let targetId: string;
 
   beforeAll(async () => {
@@ -17,9 +18,11 @@ describe('campaign draft-friendly schema', () => {
 
   beforeEach(async () => {
     await t.truncateAll();
+    accountId = await seedAccount(t.db);
     const [target] = await t.db
       .insert(s.targetRegistry)
       .values({
+        accountId,
         name: 'Order Completion',
         screenId: 'order_completion',
         triggerMechanism: 'action',
@@ -33,11 +36,12 @@ describe('campaign draft-friendly schema', () => {
     const [campaign] = await t.db
       .insert(s.campaigns)
       .values({
+        accountId,
         status: 'draft',
         createdBy: 'test',
         // targetId, metricType, ratingType, ratingScaleMax, headerText,
         // positiveThreshold all omitted -> NULL
-        // clientIds, chipsOnNegative, askFrequency omitted -> defaults
+        // chipsOnNegative, askFrequency omitted -> defaults
       })
       .returning();
 
@@ -48,7 +52,6 @@ describe('campaign draft-friendly schema', () => {
     expect(campaign!.ratingScaleMax).toBeNull();
     expect(campaign!.headerText).toBeNull();
     expect(campaign!.positiveThreshold).toBeNull();
-    expect(campaign!.clientIds).toEqual([]);
     expect(campaign!.chipsOnNegative).toEqual([]);
     expect(campaign!.askFrequency).toBe('after_7_days');
   });
@@ -56,9 +59,9 @@ describe('campaign draft-friendly schema', () => {
   it('rejects an INSERT of status=active with a NULL required field', async () => {
     await expect(
       t.db.insert(s.campaigns).values({
+        accountId,
         status: 'active',
         targetId,
-        clientIds: ['cl_A'],
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
@@ -71,42 +74,13 @@ describe('campaign draft-friendly schema', () => {
     ).rejects.toThrow();
   });
 
-  it('rejects an INSERT of status=active with empty client_ids', async () => {
-    await expect(
-      t.db.insert(s.campaigns).values({
-        status: 'active',
-        targetId,
-        clientIds: [],
-        metricType: 'CSAT',
-        ratingType: 'star',
-        ratingScaleMax: 5,
-        headerText: 'How was it?',
-        positiveThreshold: 4,
-        chipsOnNegative: [],
-        askFrequency: 'after_7_days',
-        createdBy: 'test',
-      }),
-    ).rejects.toThrow();
-  });
-
-  it('rejects an UPDATE of a draft to status=active while content is NULL', async () => {
-    const [draft] = await t.db
-      .insert(s.campaigns)
-      .values({ status: 'draft', createdBy: 'test' })
-      .returning();
-
-    await expect(
-      t.db.update(s.campaigns).set({ status: 'active' }).where(eq(s.campaigns.id, draft!.id)),
-    ).rejects.toThrow();
-  });
-
-  it('accepts status=active with all required fields present and non-empty client_ids', async () => {
+  it('accepts status=active WITHOUT any client_ids clause (B1-D6 dropped it)', async () => {
     const [campaign] = await t.db
       .insert(s.campaigns)
       .values({
+        accountId,
         status: 'active',
         targetId,
-        clientIds: ['cl_A'],
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
@@ -117,15 +91,24 @@ describe('campaign draft-friendly schema', () => {
         createdBy: 'test',
       })
       .returning();
-
     expect(campaign!.status).toBe('active');
-    expect(campaign!.clientIds).toEqual(['cl_A']);
+  });
+
+  it('rejects an UPDATE of a draft to status=active while content is NULL', async () => {
+    const [draft] = await t.db
+      .insert(s.campaigns)
+      .values({ accountId, status: 'draft', createdBy: 'test' })
+      .returning();
+
+    await expect(
+      t.db.update(s.campaigns).set({ status: 'active' }).where(eq(s.campaigns.id, draft!.id)),
+    ).rejects.toThrow();
   });
 
   it('accepts archiving a draft with NULL content (archived is unconstrained)', async () => {
     const [draft] = await t.db
       .insert(s.campaigns)
-      .values({ status: 'draft', createdBy: 'test' })
+      .values({ accountId, status: 'draft', createdBy: 'test' })
       .returning();
 
     const [archived] = await t.db

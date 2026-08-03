@@ -36,23 +36,68 @@ export const campaignStatusEnum = pgEnum('campaign_status', [
   'archived',
 ]);
 export const lastActionEnum = pgEnum('last_action', ['dismissed', 'submitted']);
-export const clientStatusEnum = pgEnum('client_status', ['active', 'inactive']);
 export const consoleUserRoleEnum = pgEnum('console_user_role', ['admin', 'editor']);
+export const apiKeyEnvironmentEnum = pgEnum('api_key_environment', ['live', 'test']);
 
-export const targetRegistry = pgTable('target_registry', {
+/**
+ * Accounts (B1-D2): the tenant root. Every owned row FK-references an account.
+ * A single-owner model in B1 — one admin console user per account, no
+ * memberships table (YAGNI until teams).
+ */
+export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  screenId: text('screen_id').notNull().unique(),
-  triggerMechanism: triggerMechanismEnum('trigger_mechanism').notNull(),
-  integrationStatus: integrationStatusEnum('integration_status').notNull().default('not_sent'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Publishable API keys (B1-D3): NOT secrets. Stored plaintext and unique-indexed
+ * for O(1) key→account lookup on the SDK hot path. Format `pk_<env>_<base62(24)>`.
+ * Multiple keys per account allowed; `revoked_at` supports downtime-free rotation.
+ */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+    environment: apiKeyEnvironmentEnum('environment').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('api_keys_key_unique').on(t.key),
+    index('api_keys_account_idx').on(t.accountId),
+  ],
+);
+
+export const targetRegistry = pgTable(
+  'target_registry',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    name: text('name').notNull(),
+    screenId: text('screen_id').notNull(),
+    triggerMechanism: triggerMechanismEnum('trigger_mechanism').notNull(),
+    integrationStatus: integrationStatusEnum('integration_status').notNull().default('not_sent'),
+  },
+  // screen_id is unique PER ACCOUNT now (B1-D6), not globally.
+  (t) => [uniqueIndex('target_registry_account_screen_unique').on(t.accountId, t.screenId)],
+);
 
 export const campaigns = pgTable(
   'campaigns',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
     targetId: uuid('target_id').references(() => targetRegistry.id),
-    clientIds: jsonb('client_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     metricType: metricTypeEnum('metric_type'),
     ratingType: ratingTypeEnum('rating_type'),
     ratingScaleMax: integer('rating_scale_max'),
@@ -74,13 +119,15 @@ export const campaigns = pgTable(
   },
   (t) => [
     index('campaigns_status_target_idx').on(t.status, t.targetId),
+    index('campaigns_account_idx').on(t.accountId),
+    // B1-D6: the active-complete CHECK drops its `client_ids >= 1` clause.
     check(
       'campaigns_active_complete',
       sql`
         ${t.status} <> 'active' OR (
           ${t.targetId} IS NOT NULL AND ${t.metricType} IS NOT NULL AND ${t.ratingType} IS NOT NULL
           AND ${t.ratingScaleMax} IS NOT NULL AND ${t.headerText} IS NOT NULL
-          AND ${t.positiveThreshold} IS NOT NULL AND jsonb_array_length(${t.clientIds}) >= 1
+          AND ${t.positiveThreshold} IS NOT NULL
         )
       `,
     ),
@@ -105,11 +152,13 @@ export const triggerLog = pgTable(
   'trigger_log',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
     campaignId: uuid('campaign_id')
       .notNull()
       .references(() => campaigns.id),
     userId: text('user_id').notNull(),
-    clientId: text('client_id').notNull(),
     screenId: text('screen_id').notNull(),
     shownAt: timestamp('shown_at', { withTimezone: true }).notNull(),
   },
@@ -120,6 +169,9 @@ export const responses = pgTable(
   'responses',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
     triggerId: uuid('trigger_id')
       .notNull()
       .references(() => triggerLog.id),
@@ -127,7 +179,6 @@ export const responses = pgTable(
       .notNull()
       .references(() => campaigns.id),
     userId: text('user_id').notNull(),
-    clientId: text('client_id').notNull(),
     screenId: text('screen_id').notNull(),
     ratingValue: integer('rating_value').notNull(),
     chipSelected: text('chip_selected'),
@@ -152,15 +203,12 @@ export const responses = pgTable(
   ],
 );
 
-export const clients = pgTable('clients', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  status: clientStatusEnum('status').notNull(),
-  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const consoleUsers = pgTable('console_users', {
   id: uuid('id').primaryKey().defaultRandom(),
+  accountId: uuid('account_id')
+    .notNull()
+    .references(() => accounts.id),
+  // email stays globally unique (B1-D10): one owner, one account, simple login lookup.
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
