@@ -4,9 +4,9 @@ import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, seedApiKey, startTestDb } from './testDb.js';
 
-const APP_KEY = 'test-app-key';
+const APP_KEY = 'pk_test_uploadsxxxxxxxxxxxxxx';
 const BUCKET = 'signal-feedback-images';
 const ACCESS_KEY = 'signal';
 const SECRET_KEY = 'signal_local_dev';
@@ -21,6 +21,8 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
 
   beforeAll(async () => {
     db = await startTestDb();
+    const accountId = await seedAccount(db.db);
+    await seedApiKey(db.db, accountId, APP_KEY);
 
     container = await new GenericContainer('minio/minio')
       .withCommand(['server', '/data'])
@@ -59,7 +61,6 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
 
     const env = parseEnv({
       NODE_ENV: 'test',
-      SIGNAL_APP_KEYS: APP_KEY,
       S3_ENDPOINT: endpoint,
       S3_REGION: REGION,
       S3_BUCKET: BUCKET,

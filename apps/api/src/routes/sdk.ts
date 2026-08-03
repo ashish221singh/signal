@@ -20,9 +20,9 @@ export function sdkRoutes(deps: {
         });
       }
       const config = await deps.eligibility.check({
+        accountId: request.accountId as string,
         screenId: parsed.data.screen_id,
         userId: parsed.data.user_id,
-        clientId: parsed.data.client_id,
         repTenureDays: parsed.data.rep_tenure_days,
       });
       if (!config) return reply.code(204).send();

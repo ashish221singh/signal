@@ -26,8 +26,8 @@ export function makeDbCampaignLoader(db: Db): CampaignLoader {
       }
       result.push({
         id: c.id,
+        accountId: c.accountId,
         screenId: t.screenId,
-        clientIds: c.clientIds,
         metricType: c.metricType,
         ratingType: c.ratingType,
         ratingScaleMax: c.ratingScaleMax,

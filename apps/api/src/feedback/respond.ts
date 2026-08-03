@@ -30,10 +30,10 @@ export async function recordResponse(
     await tx
       .insert(responses)
       .values({
+        accountId: trigger.accountId,
         triggerId: trigger.id,
         campaignId: trigger.campaignId,
         userId: trigger.userId,
-        clientId: trigger.clientId,
         screenId: trigger.screenId,
         ratingValue: body.rating_value,
         chipSelected: body.chip_selected ?? null,

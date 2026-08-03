@@ -9,9 +9,9 @@ import { cooldownEndsAt } from './cooldown.js';
 import { decide } from './decide.js';
 
 export interface EligibilityQueryInput {
+  accountId: string;
   screenId: string;
   userId: string;
-  clientId: string;
   repTenureDays?: number;
 }
 
@@ -23,7 +23,7 @@ export class EligibilityService {
   ) {}
 
   async check(input: EligibilityQueryInput): Promise<EligibilityConfig | null> {
-    const campaign = this.cache.match(input.screenId, input.clientId);
+    const campaign = this.cache.match(input.accountId, input.screenId);
     if (!campaign) return null;
 
     const now = this.clock.now();
@@ -62,9 +62,9 @@ export class EligibilityService {
       const [trigger] = await tx
         .insert(triggerLog)
         .values({
+          accountId: input.accountId,
           campaignId: campaign.id,
           userId: input.userId,
-          clientId: input.clientId,
           screenId: input.screenId,
           shownAt: now,
         })

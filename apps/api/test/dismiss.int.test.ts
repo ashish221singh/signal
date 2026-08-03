@@ -9,7 +9,7 @@ import * as s from '../src/db/schema.js';
 import { EligibilityService } from '../src/eligibility/service.js';
 import { recordDismiss } from '../src/feedback/dismiss.js';
 import { recordResponse } from '../src/feedback/respond.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, startTestDb } from './testDb.js';
 
 class FakeClock implements Clock {
   constructor(private current: Date) {}
@@ -26,6 +26,7 @@ describe('recordDismiss (real Postgres)', () => {
   let clock: FakeClock;
   let service: EligibilityService;
   let cache: CampaignCache;
+  let accountId: string;
 
   beforeAll(async () => {
     t = await startTestDb();
@@ -36,6 +37,7 @@ describe('recordDismiss (real Postgres)', () => {
 
   beforeEach(async () => {
     await t.truncateAll();
+    accountId = await seedAccount(t.db);
     clock = new FakeClock(new Date('2026-07-08T10:00:00Z'));
     cache = new CampaignCache(makeDbCampaignLoader(t.db));
     // Same clock instance flows into both the service and dismiss so "server now" is the fake time.
@@ -43,9 +45,10 @@ describe('recordDismiss (real Postgres)', () => {
   });
 
   async function seedCampaign(overrides: Partial<typeof s.campaigns.$inferInsert> = {}) {
-    const [inserted] = await t.db
+    const [target] = await t.db
       .insert(s.targetRegistry)
       .values({
+        accountId,
         name: 'Order Completion',
         screenId: 'order_completion',
         triggerMechanism: 'action',
@@ -53,19 +56,11 @@ describe('recordDismiss (real Postgres)', () => {
       })
       .onConflictDoNothing()
       .returning();
-    const target =
-      inserted ??
-      (
-        await t.db
-          .select()
-          .from(s.targetRegistry)
-          .where(eq(s.targetRegistry.screenId, 'order_completion'))
-      )[0];
     const [campaign] = await t.db
       .insert(s.campaigns)
       .values({
+        accountId,
         targetId: target!.id,
-        clientIds: ['cl_A'],
         metricType: 'CSAT',
         ratingType: 'star',
         ratingScaleMax: 5,
@@ -82,11 +77,11 @@ describe('recordDismiss (real Postgres)', () => {
     return campaign!;
   }
 
-  const q = { screenId: 'order_completion', userId: 'u_1', clientId: 'cl_A' } as const;
+  const q = () => ({ accountId, screenId: 'order_completion', userId: 'u_1' }) as const;
 
   /** Grant a real trigger via the eligibility service and return its trigger_id. */
   async function grantTrigger(): Promise<string> {
-    const config = await service.check(q);
+    const config = await service.check(q());
     expect(config).not.toBeNull();
     return config!.trigger_id;
   }
@@ -104,7 +99,7 @@ describe('recordDismiss (real Postgres)', () => {
       .select()
       .from(s.suppressionState)
       .where(
-        and(eq(s.suppressionState.userId, q.userId), eq(s.suppressionState.campaignId, campaignId)),
+        and(eq(s.suppressionState.userId, 'u_1'), eq(s.suppressionState.campaignId, campaignId)),
       );
     return row!;
   }
@@ -123,9 +118,9 @@ describe('recordDismiss (real Postgres)', () => {
 
     // Prove via the service: still suppressed at +167h, eligible at +169h.
     clock.advanceHours(167);
-    expect(await service.check(q)).toBeNull();
+    expect(await service.check(q())).toBeNull();
     clock.advanceHours(2); // now +169h
-    expect(await service.check(q)).not.toBeNull();
+    expect(await service.check(q())).not.toBeNull();
   });
 
   it('idempotent: second dismiss is a no-op, cooldown stays anchored to first dismiss', async () => {
