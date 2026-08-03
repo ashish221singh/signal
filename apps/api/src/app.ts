@@ -14,6 +14,7 @@ import { resolveAuth } from './plugins/resolveAuth.js';
 import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { deployRoutes } from './routes/console/deploy.js';
+import { eventRoutes } from './routes/console/events.js';
 import { managementRoutes } from './routes/console/management.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { workflowRoutes } from './routes/console/workflows.js';
@@ -148,6 +149,8 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       await consoleApi.register(
         deployRoutes({ db: resolvedDb, clock, refreshCache: () => cache.refresh() }),
       );
+      // Event surfacing read route (B3, Task 8) — `/events`.
+      await consoleApi.register(eventRoutes({ db: resolvedDb }));
       // Reporting: mounted with NO sub-prefix — its routes carry their own
       // `/workflows/:id/overview` and `/dashboard` paths, distinct from
       // workflowRoutes above. The clock feeds the dashboard's 30-day window.

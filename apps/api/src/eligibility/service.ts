@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import { suppressionState, triggerLog } from '../db/schema.js';
+import { upsertSeenEvent } from '../events/repo.js';
+import { SeenEventSet } from '../events/seenSet.js';
 import type { WorkflowCache } from '../workflows/cache.js';
 import { claimShow } from './claim.js';
 import { cooldownEndsAt } from './cooldown.js';
@@ -17,19 +19,41 @@ export interface EligibilityQueryInput {
 }
 
 export class EligibilityService {
+  private readonly seen: SeenEventSet;
+
   constructor(
     private readonly db: Db,
     private readonly cache: WorkflowCache,
     private readonly clock: Clock,
     // Injected RNG (B2-D4) so tests can force sampled/not-sampled deterministically.
     private readonly rng: () => number = Math.random,
-  ) {}
+    // Event surfacing (B3-D7): the in-memory first-sighting set. Injectable so a
+    // test can share/inspect it. `onUpsert` is the best-effort async writer.
+    seen: SeenEventSet = new SeenEventSet(),
+    private readonly onUpsert: (
+      accountId: string,
+      eventName: string,
+      now: Date,
+    ) => Promise<void> = (accountId, eventName, now) =>
+      upsertSeenEvent(this.db, accountId, eventName, now),
+  ) {
+    this.seen = seen;
+  }
 
   async check(input: EligibilityQueryInput): Promise<EligibilityConfig | null> {
+    const now = this.clock.now();
+
+    // Event surfacing (B3-D7): record the sighting BEFORE the match short-circuit so
+    // events that have no workflow yet still surface (that's the point — the PM
+    // discovers which events the app fires). Only a FIRST sighting this process has
+    // seen fires the best-effort async upsert; steady state is a pure memory hit and
+    // adds NO DB write to the hot path.
+    if (this.seen.markSeen(input.accountId, input.eventName)) {
+      void this.onUpsert(input.accountId, input.eventName, now).catch(() => {});
+    }
+
     const workflow = this.cache.match(input.accountId, input.eventName);
     if (!workflow) return null;
-
-    const now = this.clock.now();
 
     const [suppression] = await this.db
       .select()
