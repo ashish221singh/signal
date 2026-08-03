@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./env": "./src/env.ts",
+    "./test-helpers": "./test/testDb.ts",
+    "./tokens": "./src/tokens/service.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
