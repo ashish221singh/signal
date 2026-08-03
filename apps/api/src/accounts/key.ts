@@ -17,8 +17,8 @@ function base62(length: number): string {
   // alphabet. The tiny modulo bias is irrelevant for a non-secret uniqueness id.
   const bytes = randomBytes(length);
   let out = '';
-  for (let i = 0; i < length; i += 1) {
-    out += BASE62[bytes[i]! % 62];
+  for (const byte of bytes) {
+    out += BASE62[byte % 62];
   }
   return out;
 }
