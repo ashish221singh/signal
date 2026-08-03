@@ -104,42 +104,64 @@ describe('parseEnv', () => {
   it('defaults ALLOW_PASSWORD_CLI_LOGIN ON in dev/test, OFF in production (B3-D4, GR-10)', () => {
     expect(parseEnv({}).ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
     expect(parseEnv({ NODE_ENV: 'test' }).ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
-    const prod = parseEnv({
-      NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SESSION_SECRET: 'a-sufficiently-long-secret',
-      S3_ACCESS_KEY: 'AKIA',
-      S3_SECRET_KEY: 'secret',
-    });
+    const prod = parseEnv(prodBase());
     expect(prod.ALLOW_PASSWORD_CLI_LOGIN).toBe(false);
   });
 
   it('honours an explicit ALLOW_PASSWORD_CLI_LOGIN override', () => {
     expect(parseEnv({ ALLOW_PASSWORD_CLI_LOGIN: 'false' }).ALLOW_PASSWORD_CLI_LOGIN).toBe(false);
-    const prodOn = parseEnv({
-      NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SESSION_SECRET: 'a-sufficiently-long-secret',
-      S3_ACCESS_KEY: 'AKIA',
-      S3_SECRET_KEY: 'secret',
-      ALLOW_PASSWORD_CLI_LOGIN: 'true',
-    });
+    const prodOn = parseEnv({ ...prodBase(), ALLOW_PASSWORD_CLI_LOGIN: 'true' });
     expect(prodOn.ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
   });
 
-  it('does not throw in production when S3 secrets are provided', () => {
-    const env = parseEnv({
-      NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SESSION_SECRET: 'a-sufficiently-long-secret',
-      S3_ACCESS_KEY: 'AKIA',
-      S3_SECRET_KEY: 'secret',
-    });
+  it('defaults CONSOLE_ORIGINS to localhost dev origins and parses the comma list (B4-D2)', () => {
+    expect(parseEnv({}).CONSOLE_ORIGINS).toEqual([
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ]);
+    expect(
+      parseEnv({ CONSOLE_ORIGINS: 'https://a.example, https://b.example ,,' }).CONSOLE_ORIGINS,
+    ).toEqual(['https://a.example', 'https://b.example']);
+  });
+
+  it('throws in production when PUBLIC_BASE_URL is unset (B4-D4)', () => {
+    const { PUBLIC_BASE_URL, ...rest } = prodBase();
+    void PUBLIC_BASE_URL;
+    expect(() => parseEnv(rest)).toThrow(/PUBLIC_BASE_URL/);
+  });
+
+  it('throws in production when CONSOLE_ORIGINS is unset (B4-D4)', () => {
+    const { CONSOLE_ORIGINS, ...rest } = prodBase();
+    void CONSOLE_ORIGINS;
+    expect(() => parseEnv(rest)).toThrow(/CONSOLE_ORIGINS/);
+  });
+
+  it('does not throw in production when the full required set is provided (B4-D4)', () => {
+    const env = parseEnv(prodBase());
     expect(env.S3_ACCESS_KEY).toBe('AKIA');
     expect(env.S3_SECRET_KEY).toBe('secret');
     expect(env.S3_REGION).toBe('us-east-1');
     expect(env.S3_BUCKET).toBe('signal-feedback-images');
     expect(env.S3_ENDPOINT).toBe('http://localhost:9000');
     expect(env.S3_PUBLIC_URL).toBe('http://localhost:9000/signal-feedback-images');
+    expect(env.PUBLIC_BASE_URL).toBe('https://app.example.com');
+    expect(env.CONSOLE_ORIGINS).toEqual(['https://app.example.com']);
   });
 });
+
+/**
+ * The full production-required env set (B4-D4): DATABASE_URL, SESSION_SECRET,
+ * S3_ACCESS_KEY, S3_SECRET_KEY, PUBLIC_BASE_URL, CONSOLE_ORIGINS. Tests remove
+ * one field at a time to prove each is enforced.
+ */
+function prodBase() {
+  return {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+    SESSION_SECRET: 'a-sufficiently-long-secret',
+    S3_ACCESS_KEY: 'AKIA',
+    S3_SECRET_KEY: 'secret',
+    PUBLIC_BASE_URL: 'https://app.example.com',
+    CONSOLE_ORIGINS: 'https://app.example.com',
+  } as const;
+}

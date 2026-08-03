@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import cors, { type FastifyCorsOptionsDelegatePromise } from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
@@ -126,9 +127,25 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
     }),
   );
 
+  // CORS (B4-D2). Two console registrations exist (`/v1/console/auth` and the
+  // guarded `/v1/console` subtree); both get the SAME credentialed policy so the
+  // dashboard can log in AND read reports cross-origin. Allowed origins come from
+  // `CONSOLE_ORIGINS`. Registering cors on a scope also answers its preflight.
+  const consoleCors: Parameters<typeof cors>[1] = {
+    origin: env.CONSOLE_ORIGINS,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  };
+
   // Console auth (login/logout/me) — NOT behind the session guard; login must be
   // reachable without a session. The guarded console subtree arrives in Task 7.
-  await app.register(consoleAuthRoutes({ db: resolvedDb }), { prefix: '/v1/console/auth' });
+  await app.register(
+    async (consoleAuth) => {
+      await consoleAuth.register(cors, consoleCors);
+      await consoleAuth.register(consoleAuthRoutes({ db: resolvedDb }));
+    },
+    { prefix: '/v1/console/auth' },
+  );
 
   // Guarded console subtree (M2 Task 7, B3-D5): the fp-wrapped `resolveAuth` runs
   // on every request into this encapsulated scope, accepting EITHER a cookie
@@ -137,6 +154,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // `/v1/console/auth` above — login/logout/me stay reachable without a cookie.
   await app.register(
     async (consoleApi) => {
+      await consoleApi.register(cors, consoleCors);
       await consoleApi.register(resolveAuth({ db: resolvedDb, tokens: tokenService }));
       await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
         prefix: '/workflows',
@@ -161,6 +179,26 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   await app.register(
     async (sdk) => {
+      // CORS (B4-D2): the SDK ingest surface reflects an allowed `Origin` per the
+      // calling account's `allowed_origins` (B2). The delegator reads the request
+      // so it can resolve the account from the `X-Signal-App-Key` header; when the
+      // origin is not allow-listed (or the key/origin is absent) NO CORS headers
+      // are emitted. Native SDKs send no Origin and are unaffected. An empty
+      // allow-list means "any origin" (mirroring publishableKeyAuth's rule).
+      const sdkCorsDelegate: FastifyCorsOptionsDelegatePromise = async (req) => {
+        const key = req.headers['x-signal-app-key'];
+        const origin = req.headers.origin;
+        if (typeof origin !== 'string' || typeof key !== 'string') {
+          return { origin: false };
+        }
+        const resolved = await accountsService.resolveKey(key);
+        if (!resolved) return { origin: false };
+        const allowed =
+          resolved.allowedOrigins.length === 0 || resolved.allowedOrigins.includes(origin);
+        return { origin: allowed ? origin : false, credentials: false };
+      };
+      await sdk.register(cors, () => sdkCorsDelegate);
+
       // Hardening-lite (B2-D7): rate-limit the SDK ingest surface keyed by
       // publishableKey + user_id (60/min). Publishable keys are public, so this
       // blunts spoofing/abuse without per-tenant infra. Keyed off the header +

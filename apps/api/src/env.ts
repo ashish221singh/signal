@@ -10,6 +10,17 @@ const DEV_S3_SECRET_KEY = 'signal_local_dev';
 const DEV_S3_PUBLIC_URL = 'http://localhost:9000/signal-feedback-images';
 
 const DEV_PUBLIC_BASE_URL = 'http://localhost:3000';
+// Dashboard dev origins allowed to call `/v1/console/*` with credentials (B4-D2).
+// The Vite dev server (5173) and a same-origin 3000 during local dev.
+const DEV_CONSOLE_ORIGINS = 'http://localhost:5173,http://localhost:3000';
+
+/** Split a comma-separated origin list into a trimmed, non-empty array. */
+function parseOriginList(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0);
+}
 
 /**
  * `ALLOW_PASSWORD_CLI_LOGIN` (B3-D4, GR-10) accepts a boolean-ish string. When
@@ -27,6 +38,10 @@ const envSchema = z.object({
   // Public base URL for the device-flow `verification_uri` (B3-D3). Defaults to
   // localhost in dev; must be set to the real host before first deploy (GR-8).
   PUBLIC_BASE_URL: z.url().optional(),
+  // Dashboard origins allowed to make credentialed cross-origin calls to
+  // `/v1/console/*` (B4-D2). A comma-separated list. Defaults to localhost dev
+  // origins; REQUIRED in production so the deployed dashboard can reach the API.
+  CONSOLE_ORIGINS: z.string().optional(),
   // Interim password→CLI-token login gate (B3-D4, GR-10).
   ALLOW_PASSWORD_CLI_LOGIN: booleanish.optional(),
   DATABASE_URL: z.url().optional(),
@@ -50,6 +65,7 @@ export type Env = Omit<
   | 'S3_SECRET_KEY'
   | 'S3_PUBLIC_URL'
   | 'PUBLIC_BASE_URL'
+  | 'CONSOLE_ORIGINS'
   | 'ALLOW_PASSWORD_CLI_LOGIN'
 > & {
   DATABASE_URL: string;
@@ -61,6 +77,7 @@ export type Env = Omit<
   S3_SECRET_KEY: string;
   S3_PUBLIC_URL: string;
   PUBLIC_BASE_URL: string;
+  CONSOLE_ORIGINS: string[];
   ALLOW_PASSWORD_CLI_LOGIN: boolean;
 };
 
@@ -83,19 +100,23 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     S3_SECRET_KEY,
     S3_PUBLIC_URL,
     PUBLIC_BASE_URL,
+    CONSOLE_ORIGINS,
     ALLOW_PASSWORD_CLI_LOGIN,
     ...rest
   } = result.data;
   const isProduction = rest.NODE_ENV === 'production';
 
-  // Device-flow base URL: explicit, else localhost in dev/test.
-  const publicBaseUrl = PUBLIC_BASE_URL ?? DEV_PUBLIC_BASE_URL;
   // Interim password login gate (B3-D4, GR-10): explicit value wins; otherwise
   // ON in dev/test, OFF in production so device-flow is the only prod path.
   const allowPasswordCliLogin = ALLOW_PASSWORD_CLI_LOGIN ?? !isProduction;
 
   const databaseUrl = DATABASE_URL ?? (isProduction ? undefined : DEV_DATABASE_URL);
   const sessionSecret = SESSION_SECRET ?? (isProduction ? undefined : DEV_SESSION_SECRET);
+  // B4-D4: `PUBLIC_BASE_URL` (device-flow verification URI / hosted links) and
+  // `CONSOLE_ORIGINS` (dashboard CORS) are REQUIRED in production; they default
+  // to localhost only in dev/test.
+  const publicBaseUrl = PUBLIC_BASE_URL ?? (isProduction ? undefined : DEV_PUBLIC_BASE_URL);
+  const consoleOriginsRaw = CONSOLE_ORIGINS ?? (isProduction ? undefined : DEV_CONSOLE_ORIGINS);
 
   // Endpoint/region/bucket/publicUrl are safe to default even in production;
   // only the S3 secrets (access/secret keys) must be provided in production.
@@ -110,13 +131,17 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     databaseUrl === undefined ||
     sessionSecret === undefined ||
     s3AccessKey === undefined ||
-    s3SecretKey === undefined
+    s3SecretKey === undefined ||
+    publicBaseUrl === undefined ||
+    consoleOriginsRaw === undefined
   ) {
     const missing = [
       ...(databaseUrl === undefined ? ['DATABASE_URL'] : []),
       ...(sessionSecret === undefined ? ['SESSION_SECRET'] : []),
       ...(s3AccessKey === undefined ? ['S3_ACCESS_KEY'] : []),
       ...(s3SecretKey === undefined ? ['S3_SECRET_KEY'] : []),
+      ...(publicBaseUrl === undefined ? ['PUBLIC_BASE_URL'] : []),
+      ...(consoleOriginsRaw === undefined ? ['CONSOLE_ORIGINS'] : []),
     ];
     throw new Error(`Missing required environment variables in production: ${missing.join(', ')}`);
   }
@@ -132,6 +157,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     S3_SECRET_KEY: s3SecretKey,
     S3_PUBLIC_URL: s3PublicUrl,
     PUBLIC_BASE_URL: publicBaseUrl,
+    CONSOLE_ORIGINS: parseOriginList(consoleOriginsRaw),
     ALLOW_PASSWORD_CLI_LOGIN: allowPasswordCliLogin,
   };
 }
