@@ -20,6 +20,7 @@ import { deployRoutes } from './routes/console/deploy.js';
 import { eventRoutes } from './routes/console/events.js';
 import { managementRoutes } from './routes/console/management.js';
 import { reportingRoutes } from './routes/console/reporting.js';
+import { userDataRoutes } from './routes/console/users.js';
 import { workflowRoutes } from './routes/console/workflows.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
@@ -201,6 +202,8 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       );
       // Event surfacing read route (B3, Task 8) — `/events`.
       await consoleApi.register(eventRoutes({ db: resolvedDb }));
+      // User-data deletion (B4, Task 5) — `/users/:userId/data`, `workflows:write`.
+      await consoleApi.register(userDataRoutes({ db: resolvedDb }));
       // Reporting: mounted with NO sub-prefix — its routes carry their own
       // `/workflows/:id/overview` and `/dashboard` paths, distinct from
       // workflowRoutes above. The clock feeds the dashboard's 30-day window.
