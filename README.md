@@ -15,16 +15,27 @@ In-app CSAT/CES feedback system for BeatRoute's field-rep app. One system, three
 ## Status
 
 - **Spec:** locked (v1.1, 2026-07-08)
-- **Build:** B2 (Event Re-key) complete — the trigger model is now **generic and
-  event-keyed**: a **workflow** listens for a named **event** (`signal.track("checkout_completed")`),
-  and eligibility resolves on `(account_id, event_name)`. Screens/targets are gone.
-  Workflows add per-workflow **sampling** (a not-sampled ask is invisible and does not
-  consume cooldown) and a **min-session-age** gate, and enforce **one active workflow per
-  event per account** (publish overlap → 409). The public SDK ingest is hardened-lite:
-  a per-`(key + user)` rate limit and a per-account browser origin allow-list (native SDKs
-  send no `Origin` and always pass). Built on B1's account tenancy + publishable keys.
-- **Not yet:** the agentic surface (B3) and reporting/CORS/deploy hardening (B4). No web
-  UI yet (frontend phase). The committed Android SDK is **deferred** (`sdk-android/DEFERRED.md`).
+- **Build: backend complete (B1–B4).** The API is done end to end: signup →
+  publishable keys → `track` → eligibility → response/dismiss → reporting, fully
+  account-scoped and agent-drivable.
+  - **B1 accounts/tenancy** — accounts, publishable keys, console signup/login/session.
+  - **B2 event re-key** — a **workflow** listens for a named **event**
+    (`signal.track("checkout_completed")`); eligibility resolves on
+    `(account_id, event_name)`. Screens/targets are gone. Per-workflow **sampling** +
+    **min-session-age** gate; **one active workflow per event per account** (overlap → 409).
+    SDK ingest hardened-lite (per-`(key + user)` rate limit + per-account origin allow-list).
+  - **B3 agentic surface** — CLI tokens + OAuth **device flow**, unified Bearer/session
+    auth with **scopes**, **config-as-code deploy** (`signal deploy`), event surfacing,
+    plus `@signal/mcp` + `@signal/cli`. Server-rendered `/signup` `/login` `/cli/approve`.
+  - **B4 reporting/hardening** — account-scoped S3 uploads (`acct/<id>/…`), CORS split
+    (credentialed console via `CONSOLE_ORIGINS`, per-account SDK origins), event-model
+    reporting readable via session or a `responses:read` token, `/ready` deep probe,
+    finalized prod env, and user-data deletion (GDPR-lite). Full API reference in
+    [`docs/api-v1.md`](docs/api-v1.md).
+- **Migrations frozen (GR-1):** the single-`0000`-rewrite era ends with B4. The schema
+  is now stable; **all further changes are incremental migrations** — no more `0000` rewrites.
+- **Not yet:** the web UI (frontend phase). The committed Android SDK is **deferred**
+  (`sdk-android/DEFERRED.md`).
 
 ## Planned layout (per spec §12 build sequence)
 
@@ -71,6 +82,12 @@ pnpm --filter @signal/api dev &
 publishable key, builds + publishes event-keyed workflows under that account
 through the Console API, then drives the full SDK loop with that key — no pre-seed
 needed.
+
+`./scripts/console-demo.sh` proves the **agentic + reporting** path end to end with
+the real `@signal/cli` binary: signup → publishable key → `signal login` →
+`signal deploy` (config-as-code) → `track` an event via the SDK → respond → read the
+reports back over a **CLI token** (`events/overview`, `dashboard`, per-workflow
+overview). Prints `ALL SCENARIOS PASSED`.
 
 ## Console API
 

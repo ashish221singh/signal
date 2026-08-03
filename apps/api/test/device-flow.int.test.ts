@@ -249,6 +249,9 @@ describe('interim login gated OFF in production (B3-D4, GR-10)', () => {
       SESSION_SECRET: 'a-sufficiently-long-secret',
       S3_ACCESS_KEY: 'AKIA',
       S3_SECRET_KEY: 'secret',
+      // B4-D4: PUBLIC_BASE_URL + CONSOLE_ORIGINS are now production-required.
+      PUBLIC_BASE_URL: 'https://app.example.com',
+      CONSOLE_ORIGINS: 'https://app.example.com',
     });
     const app = await buildApp(prodEnv, { db: t.db, closeDb: async () => {} });
     try {
