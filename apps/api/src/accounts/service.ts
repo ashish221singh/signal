@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { hashPassword } from '../auth/password.js';
 import type { Db } from '../db/client.js';
 import { accounts, apiKeys, consoleUsers } from '../db/schema.js';
@@ -107,6 +107,52 @@ export class AccountsService {
       .returning();
     if (!row) throw new Error('api key insert returned no row');
     return row;
+  }
+
+  /**
+   * Create a publishable key with an optional origin allow-list (B3 key management,
+   * B2-D7). Returns the full row (incl. the plaintext key — publishable keys are
+   * NOT secrets and are safe to return on list).
+   */
+  async createKey(
+    accountId: string,
+    input: { label: string; environment: KeyEnvironment; allowedOrigins: string[] },
+  ): Promise<IssueKeyResult> {
+    const key = generateKey(input.environment);
+    const [row] = await this.db
+      .insert(apiKeys)
+      .values({
+        accountId,
+        key,
+        label: input.label,
+        environment: input.environment,
+        allowedOrigins: input.allowedOrigins,
+      })
+      .returning();
+    if (!row) throw new Error('api key insert returned no row');
+    return row;
+  }
+
+  /** List an account's publishable keys, newest first (B3 key management). */
+  async listKeys(accountId: string): Promise<IssueKeyResult[]> {
+    return this.db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.accountId, accountId))
+      .orderBy(desc(apiKeys.createdAt));
+  }
+
+  /**
+   * Revoke a key by id, scoped to `accountId` (isolation). Idempotent. Returns
+   * whether a matching row was found.
+   */
+  async revokeKeyById(accountId: string, id: string): Promise<boolean> {
+    const [row] = await this.db
+      .update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.accountId, accountId)))
+      .returning({ id: apiKeys.id });
+    return Boolean(row);
   }
 
   /**

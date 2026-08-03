@@ -30,10 +30,22 @@ export const apiKeySchema = z.object({
   key: z.string(),
   label: z.string(),
   environment: apiKeyEnvironmentSchema,
+  allowed_origins: z.array(z.string()),
   created_at: z.union([z.date(), z.iso.datetime()]),
   revoked_at: z.union([z.date(), z.iso.datetime()]).nullable(),
 });
 export type ApiKey = z.infer<typeof apiKeySchema>;
+
+/**
+ * POST /v1/console/keys body (B3, key management). Create a publishable key with an
+ * optional browser origin allow-list (B2-D7). `environment` defaults to `live`.
+ */
+export const apiKeyCreateSchema = z.object({
+  label: z.string().trim().min(1).max(200).default('default'),
+  environment: apiKeyEnvironmentSchema.default('live'),
+  allowed_origins: z.array(z.string().trim().min(1)).default([]),
+});
+export type ApiKeyCreate = z.infer<typeof apiKeyCreateSchema>;
 
 /** POST /v1/console/auth/signup response. */
 export const signupResponseSchema = z.object({
