@@ -1,0 +1,126 @@
+import type { DeployItemResult } from '@signal/contracts';
+import type { CliClient } from './client.js';
+import { defaultApiUrl, readConfig, updateConfig } from './config.js';
+import { loadDeployConfig } from './loadConfigFile.js';
+
+/**
+ * CLI command implementations (B3-D9), decoupled from commander so they are directly
+ * unit/e2e-testable. Each takes a `CliClient` factory + an output sink. `login`
+ * (device flow) and `login --password` both persist the token to
+ * `~/.signal/config.json`; the others read it back and require it.
+ */
+export interface CommandDeps {
+  makeClient: (apiUrl: string) => CliClient;
+  out: (line: string) => void;
+  /** Sleep between device-flow polls (overridable so tests don't wait). */
+  sleep?: (ms: number) => Promise<void>;
+  /** Bounds the device-flow poll loop (tests keep it small). */
+  maxPolls?: number;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+async function requireToken(): Promise<{ apiUrl: string; token: string }> {
+  const config = await readConfig();
+  if (!config?.token) {
+    throw new Error('not logged in — run `signal login` first');
+  }
+  return { apiUrl: config.api_url ?? defaultApiUrl(), token: config.token };
+}
+
+/** `signal login` — device flow. Prints the verification URL, then polls. */
+export async function loginDevice(deps: CommandDeps, apiUrl = defaultApiUrl()): Promise<void> {
+  const client = deps.makeClient(apiUrl);
+  const grant = await client.startDevice();
+  deps.out(`To authorize this CLI, open:\n  ${grant.verification_uri}`);
+  deps.out(`and confirm the code:  ${grant.user_code}`);
+
+  const sleep = deps.sleep ?? defaultSleep;
+  const maxPolls = deps.maxPolls ?? Math.ceil(grant.expires_in / grant.interval);
+  for (let i = 0; i < maxPolls; i++) {
+    const poll = await client.pollDevice(grant.device_code);
+    if (poll.status === 'approved') {
+      await updateConfig({
+        api_url: apiUrl,
+        token: poll.result.token,
+        scopes: poll.result.scopes,
+        expires_at: String(poll.result.expires_at),
+      });
+      deps.out('Logged in. Token saved to ~/.signal/config.json');
+      return;
+    }
+    if (poll.status === 'denied') throw new Error('authorization was denied');
+    if (poll.status === 'expired') throw new Error('the device code expired — run login again');
+    await sleep(grant.interval * 1000);
+  }
+  throw new Error('timed out waiting for approval');
+}
+
+/** `signal login --password` — interim credential login. */
+export async function loginPassword(
+  deps: CommandDeps,
+  email: string,
+  password: string,
+  apiUrl = defaultApiUrl(),
+): Promise<void> {
+  const client = deps.makeClient(apiUrl);
+  const result = await client.passwordLogin(email, password);
+  await updateConfig({
+    api_url: apiUrl,
+    token: result.token,
+    scopes: result.scopes,
+    expires_at: String(result.expires_at),
+  });
+  deps.out('Logged in. Token saved to ~/.signal/config.json');
+}
+
+/** `signal whoami` — show the stored login (account is implied by the token). */
+export async function whoami(deps: CommandDeps): Promise<void> {
+  const config = await readConfig();
+  if (!config?.token) {
+    deps.out('Not logged in.');
+    return;
+  }
+  const client = deps.makeClient(config.api_url ?? defaultApiUrl());
+  // A round-trip both proves the token is live and confirms the API URL.
+  await client.listWorkflows(config.token);
+  deps.out(`Logged in to ${config.api_url}`);
+  deps.out(`Scopes: ${(config.scopes ?? []).join(', ') || '(unknown)'}`);
+  deps.out(`Token expires: ${config.expires_at ?? '(unknown)'}`);
+}
+
+/** `signal deploy <file>` — apply a config-as-code file, printing per-item results. */
+export async function deploy(deps: CommandDeps, file: string): Promise<DeployItemResult[]> {
+  const { apiUrl, token } = await requireToken();
+  const config = await loadDeployConfig(file);
+  const client = deps.makeClient(apiUrl);
+  const { results } = await client.deploy(token, config.workflows);
+  for (const r of results) {
+    const suffix = r.error ? ` — ${r.error.code}: ${r.error.message}` : '';
+    deps.out(`${r.action.padEnd(9)} ${r.key} (${r.status ?? '—'})${suffix}`);
+  }
+  const failed = results.filter((r) => r.action === 'failed');
+  if (failed.length > 0) {
+    deps.out(`\n${failed.length} item(s) failed.`);
+  }
+  return results;
+}
+
+/** `signal workflows list` — list the account's workflows. */
+export async function workflowsList(deps: CommandDeps): Promise<void> {
+  const { apiUrl, token } = await requireToken();
+  const client = deps.makeClient(apiUrl);
+  const rows = (await client.listWorkflows(token)) as {
+    id: string;
+    event_name: string | null;
+    header_text: string | null;
+    status: string;
+  }[];
+  if (rows.length === 0) {
+    deps.out('No workflows.');
+    return;
+  }
+  for (const w of rows) {
+    deps.out(`${w.status.padEnd(8)} ${w.event_name ?? '(no event)'}  ${w.id}`);
+  }
+}

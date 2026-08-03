@@ -6,6 +6,8 @@
   "exports": {
     "./app": "./src/app.ts",
     "./env": "./src/env.ts",
+    "./password": "./src/auth/password.ts",
+    "./schema": "./src/db/schema.ts",
     "./test-helpers": "./test/testDb.ts",
     "./tokens": "./src/tokens/service.ts"
   },
