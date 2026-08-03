@@ -74,7 +74,8 @@ export async function startTestDb(): Promise<{
     truncateAll: async () => {
       await db.execute(sql`
         truncate responses, trigger_log, suppression_state, workflows,
-          api_keys, console_users, accounts
+          api_keys, cli_tokens, device_authorizations, seen_events,
+          console_users, accounts
         restart identity cascade
       `);
     },

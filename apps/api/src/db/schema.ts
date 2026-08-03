@@ -36,6 +36,17 @@ export const workflowStatusEnum = pgEnum('workflow_status', [
 export const lastActionEnum = pgEnum('last_action', ['dismissed', 'submitted']);
 export const consoleUserRoleEnum = pgEnum('console_user_role', ['admin', 'editor']);
 export const apiKeyEnvironmentEnum = pgEnum('api_key_environment', ['live', 'test']);
+// B3-D1: how a workflow is managed. `console` rows are edited via the console/MCP;
+// `code` rows are owned by `signal deploy` (config-as-code) and locked against
+// console/MCP edits (B3-D6).
+export const workflowManagedByEnum = pgEnum('workflow_managed_by', ['console', 'code']);
+// B3-D3: device-authorization lifecycle for the OAuth Device Grant.
+export const deviceAuthStatusEnum = pgEnum('device_auth_status', [
+  'pending',
+  'approved',
+  'denied',
+  'expired',
+]);
 
 /**
  * Accounts (B1-D2): the tenant root. Every owned row FK-references an account.
@@ -112,6 +123,12 @@ export const workflows = pgTable(
     askFrequency: askFrequencyEnum('ask_frequency').notNull().default('after_7_days'),
     minSessionAgeDays: integer('min_session_age_days'),
     status: workflowStatusEnum('status').notNull().default('draft'),
+    // B3-D6: `key` is the stable identity for config-as-code deploy — the upsert
+    // target for `(account_id, key)`. NULL for console-created workflows (which
+    // have no stable key). `managed_by` gates edits: `code` rows are locked to
+    // the deploy path; console/MCP mutations to them are rejected 409.
+    key: text('key'),
+    managedBy: workflowManagedByEnum('managed_by').notNull().default('console'),
     createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -124,6 +141,12 @@ export const workflows = pgTable(
     uniqueIndex('workflows_active_event_unique')
       .on(t.accountId, t.eventName)
       .where(sql`${t.status} = 'active'`),
+    // B3-D6: `key` is unique per account when present — the deploy upsert identity.
+    // Partial (WHERE key IS NOT NULL) so the many console rows with NULL key don't
+    // collide.
+    uniqueIndex('workflows_account_key_unique')
+      .on(t.accountId, t.key)
+      .where(sql`${t.key} IS NOT NULL`),
     // B2-D2: the active-complete CHECK now also requires `event_name`.
     check(
       'workflows_active_complete',
@@ -222,3 +245,75 @@ export const consoleUsers = pgTable('console_users', {
   role: consoleUserRoleEnum('role').notNull().default('admin'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * CLI tokens (B3-D1): unlike publishable keys these ARE secrets — a CLI token can
+ * mutate. Stored sha256-HASHED (`token_hash`, unique for O(1) lookup); the plaintext
+ * `cli_<base62(32)>` is shown once at issue and never persisted. `scopes` gates each
+ * route (B3-D2). Default 90d expiry; `revoked_at` supports immediate revocation.
+ */
+export const cliTokens = pgTable(
+  'cli_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    tokenHash: text('token_hash').notNull(),
+    name: text('name').notNull(),
+    scopes: text('scopes').array().notNull().default(sql`'{}'::text[]`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('cli_tokens_token_hash_unique').on(t.tokenHash),
+    index('cli_tokens_account_idx').on(t.accountId),
+  ],
+);
+
+/**
+ * Device authorizations (B3-D3): the OAuth 2.0 Device Authorization Grant state.
+ * The `device_code` is a secret the CLI polls with, so it is stored HASHED; the
+ * `user_code` is the short human-typed code shown on the approval page. `account_id`
+ * is NULL until an authenticated console user approves (binding the account). The
+ * poll endpoint returns the token exactly once when status flips to `approved`.
+ */
+export const deviceAuthorizations = pgTable(
+  'device_authorizations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    deviceCodeHash: text('device_code_hash').notNull(),
+    userCode: text('user_code').notNull(),
+    accountId: uuid('account_id').references(() => accounts.id),
+    status: deviceAuthStatusEnum('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('device_authorizations_device_code_hash_unique').on(t.deviceCodeHash),
+    uniqueIndex('device_authorizations_user_code_unique').on(t.userCode),
+  ],
+);
+
+/**
+ * Seen events (B3-D7): the surfaced set of `event_name`s an account has ever fired
+ * an eligibility check for. Populated OFF the hot path — the eligibility service
+ * keeps an in-memory per-account seen-set and only writes here on a first sighting
+ * this process hasn't recorded (best-effort async upsert). PK (account_id,
+ * event_name); `hit_count` is a coarse counter bumped on each first-sighting upsert.
+ */
+export const seenEvents = pgTable(
+  'seen_events',
+  {
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id),
+    eventName: text('event_name').notNull(),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    hitCount: integer('hit_count').notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.eventName] })],
+);

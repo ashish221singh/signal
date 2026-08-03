@@ -136,6 +136,96 @@ describe('schema', () => {
     ).rejects.toThrow();
   });
 
+  // B3-D6: `key` is unique per account (partial index, WHERE key IS NOT NULL).
+  it('rejects a second workflow with the same (account, key)', async () => {
+    await t.db
+      .insert(s.workflows)
+      .values({ accountId, key: 'checkout-csat', managedBy: 'code', createdBy: 'deploy' });
+    await expect(
+      t.db
+        .insert(s.workflows)
+        .values({ accountId, key: 'checkout-csat', managedBy: 'code', createdBy: 'deploy' }),
+    ).rejects.toThrow();
+  });
+
+  it('allows many workflows with a NULL key (partial index skips them)', async () => {
+    await t.db.insert(s.workflows).values({ accountId, createdBy: 'console' });
+    const [row] = await t.db
+      .insert(s.workflows)
+      .values({ accountId, createdBy: 'console' })
+      .returning();
+    expect(row!.key).toBeNull();
+    expect(row!.managedBy).toBe('console');
+  });
+
+  it('the same key is reusable across different accounts', async () => {
+    await t.db.insert(s.workflows).values({ accountId, key: 'k', createdBy: 'deploy' });
+    const other = await seedAccount(t.db, 'Other');
+    const [row] = await t.db
+      .insert(s.workflows)
+      .values({ accountId: other, key: 'k', createdBy: 'deploy' })
+      .returning();
+    expect(row!.key).toBe('k');
+  });
+
+  // B3-D1: cli_tokens hash is globally unique.
+  it('rejects a second cli_token with the same token_hash', async () => {
+    await t.db
+      .insert(s.cliTokens)
+      .values({ accountId, tokenHash: 'h', name: 'a', expiresAt: new Date(Date.now() + 1000) });
+    await expect(
+      t.db
+        .insert(s.cliTokens)
+        .values({ accountId, tokenHash: 'h', name: 'b', expiresAt: new Date(Date.now() + 1000) }),
+    ).rejects.toThrow();
+  });
+
+  it('cli_tokens default scopes to an empty array', async () => {
+    const [row] = await t.db
+      .insert(s.cliTokens)
+      .values({ accountId, tokenHash: 'h2', name: 'a', expiresAt: new Date(Date.now() + 1000) })
+      .returning();
+    expect(row!.scopes).toEqual([]);
+    expect(row!.revokedAt).toBeNull();
+  });
+
+  // B3-D3: device_authorizations user_code + device_code_hash are unique.
+  it('rejects a duplicate device user_code', async () => {
+    await t.db.insert(s.deviceAuthorizations).values({
+      deviceCodeHash: 'd1',
+      userCode: 'ABCD-1234',
+      expiresAt: new Date(Date.now() + 1000),
+    });
+    await expect(
+      t.db.insert(s.deviceAuthorizations).values({
+        deviceCodeHash: 'd2',
+        userCode: 'ABCD-1234',
+        expiresAt: new Date(Date.now() + 1000),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('device_authorizations default to pending with a null account_id', async () => {
+    const [row] = await t.db
+      .insert(s.deviceAuthorizations)
+      .values({
+        deviceCodeHash: 'd3',
+        userCode: 'WXYZ-9999',
+        expiresAt: new Date(Date.now() + 1000),
+      })
+      .returning();
+    expect(row!.status).toBe('pending');
+    expect(row!.accountId).toBeNull();
+  });
+
+  // B3-D7: seen_events PK is (account_id, event_name).
+  it('rejects a duplicate (account, event_name) in seen_events', async () => {
+    await t.db.insert(s.seenEvents).values({ accountId, eventName: 'checkout_completed' });
+    await expect(
+      t.db.insert(s.seenEvents).values({ accountId, eventName: 'checkout_completed' }),
+    ).rejects.toThrow();
+  });
+
   it('rejects a second response for the same trigger_id (unique constraint)', async () => {
     const workflow = await seedActiveWorkflow();
     const [trigger] = await t.db
