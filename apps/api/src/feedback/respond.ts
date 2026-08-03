@@ -4,12 +4,16 @@ import { and, eq } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import { responses, suppressionState, triggerLog, workflows } from '../db/schema.js';
+import type { Env } from '../env.js';
+import { isUrlUnderAccountPrefix } from '../uploads/presign.js';
 
-export type RespondResult = 'ok' | 'unknown_trigger' | 'invalid_rating';
+export type RespondResult = 'ok' | 'unknown_trigger' | 'invalid_rating' | 'invalid_image_url';
 
 export async function recordResponse(
   db: Db,
   clock: Clock,
+  env: Env,
+  accountId: string,
   body: ResponseBody,
 ): Promise<RespondResult> {
   const [trigger] = await db.select().from(triggerLog).where(eq(triggerLog.id, body.trigger_id));
@@ -25,6 +29,15 @@ export async function recordResponse(
 
   const bounds = ratingBoundsFor(workflow.ratingType, workflow.ratingScaleMax);
   if (body.rating_value < bounds.min || body.rating_value > bounds.max) return 'invalid_rating';
+
+  // B4-D1: a supplied image URL must sit under THIS caller's account prefix
+  // (`${S3_PUBLIC_URL}/acct/<accountId>/…`). A forged URL pointing at another
+  // account's prefix (or an arbitrary host) is rejected before storage.
+  if (
+    body.other_image_url != null &&
+    !isUrlUnderAccountPrefix(env, accountId, body.other_image_url)
+  )
+    return 'invalid_image_url';
 
   await db.transaction(async (tx) => {
     await tx

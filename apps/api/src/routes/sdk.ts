@@ -3,12 +3,14 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import type { EligibilityService } from '../eligibility/service.js';
+import type { Env } from '../env.js';
 import { recordDismiss } from '../feedback/dismiss.js';
 import { recordResponse } from '../feedback/respond.js';
 
 export function sdkRoutes(deps: {
   db: Db;
   clock: Clock;
+  env: Env;
   eligibility: EligibilityService;
 }): FastifyPluginAsync {
   return async (app) => {
@@ -37,7 +39,13 @@ export function sdkRoutes(deps: {
           error: { code: 'invalid_body', message: parsed.error.issues[0]?.message ?? 'invalid' },
         });
       }
-      const result = await recordResponse(deps.db, deps.clock, parsed.data);
+      const result = await recordResponse(
+        deps.db,
+        deps.clock,
+        deps.env,
+        request.accountId as string,
+        parsed.data,
+      );
       if (result === 'unknown_trigger')
         return reply
           .code(404)
@@ -46,6 +54,14 @@ export function sdkRoutes(deps: {
         return reply
           .code(422)
           .send({ error: { code: 'invalid_rating', message: 'rating outside workflow scale' } });
+      // B4-D1: a supplied image URL outside the caller's account prefix → 422.
+      if (result === 'invalid_image_url')
+        return reply.code(422).send({
+          error: {
+            code: 'invalid_image_url',
+            message: 'other_image_url is not under this account prefix',
+          },
+        });
       return reply.code(204).send();
     });
 

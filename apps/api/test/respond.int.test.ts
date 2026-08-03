@@ -5,10 +5,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Clock } from '../src/clock.js';
 import * as s from '../src/db/schema.js';
 import { EligibilityService } from '../src/eligibility/service.js';
+import { parseEnv } from '../src/env.js';
 import { recordResponse } from '../src/feedback/respond.js';
 import { WorkflowCache } from '../src/workflows/cache.js';
 import { makeDbWorkflowLoader } from '../src/workflows/loader.js';
 import { seedAccount, startTestDb } from './testDb.js';
+
+const env = parseEnv({ NODE_ENV: 'test' });
 
 class FakeClock implements Clock {
   constructor(private current: Date) {}
@@ -89,7 +92,7 @@ describe('recordResponse (real Postgres)', () => {
     const workflow = await seedWorkflow();
     const triggerId = await grantTrigger();
 
-    const result = await recordResponse(t.db, clock, bodyFor(triggerId));
+    const result = await recordResponse(t.db, clock, env, accountId, bodyFor(triggerId));
     expect(result).toBe('ok');
 
     const rows = await t.db.select().from(s.responses);
@@ -116,8 +119,8 @@ describe('recordResponse (real Postgres)', () => {
     const triggerId = await grantTrigger();
     const body = bodyFor(triggerId);
 
-    expect(await recordResponse(t.db, clock, body)).toBe('ok');
-    expect(await recordResponse(t.db, clock, body)).toBe('ok');
+    expect(await recordResponse(t.db, clock, env, accountId, body)).toBe('ok');
+    expect(await recordResponse(t.db, clock, env, accountId, body)).toBe('ok');
 
     expect(await t.db.select().from(s.responses)).toHaveLength(1);
   });
@@ -125,16 +128,18 @@ describe('recordResponse (real Postgres)', () => {
   it('unknown trigger_id → unknown_trigger', async () => {
     await seedWorkflow();
     const random = '00000000-0000-4000-8000-000000000000';
-    expect(await recordResponse(t.db, clock, bodyFor(random))).toBe('unknown_trigger');
+    expect(await recordResponse(t.db, clock, env, accountId, bodyFor(random))).toBe(
+      'unknown_trigger',
+    );
   });
 
   it('rating out of range for emoji campaign → invalid_rating (M1-D13)', async () => {
     await seedWorkflow({ ratingType: 'emoji', ratingScaleMax: 3 });
     const triggerId = await grantTrigger();
     // emoji bounds are 1..3; 4 is out of range even though schema allows 1..5.
-    expect(await recordResponse(t.db, clock, bodyFor(triggerId, { rating_value: 4 }))).toBe(
-      'invalid_rating',
-    );
+    expect(
+      await recordResponse(t.db, clock, env, accountId, bodyFor(triggerId, { rating_value: 4 })),
+    ).toBe('invalid_rating');
     expect(await t.db.select().from(s.responses)).toHaveLength(0);
   });
 
@@ -144,7 +149,7 @@ describe('recordResponse (real Postgres)', () => {
 
     await t.db.update(s.workflows).set({ status: 'paused' }).where(eq(s.workflows.id, workflow.id));
 
-    expect(await recordResponse(t.db, clock, bodyFor(triggerId))).toBe('ok');
+    expect(await recordResponse(t.db, clock, env, accountId, bodyFor(triggerId))).toBe('ok');
     expect(await t.db.select().from(s.responses)).toHaveLength(1);
   });
 
@@ -155,6 +160,8 @@ describe('recordResponse (real Postgres)', () => {
     const result = await recordResponse(
       t.db,
       clock,
+      env,
+      accountId,
       bodyFor(triggerId, { rating_value: 2, chip_selected: 'Not A Real Chip' }),
     );
     expect(result).toBe('ok');
@@ -162,5 +169,49 @@ describe('recordResponse (real Postgres)', () => {
     const rows = await t.db.select().from(s.responses);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.chipSelected).toBe('Not A Real Chip');
+  });
+
+  it('other_image_url under this account prefix is accepted (B4-D1)', async () => {
+    await seedWorkflow();
+    const triggerId = await grantTrigger();
+    const url = `${env.S3_PUBLIC_URL}/acct/${accountId}/feedback/abc.png`;
+    const result = await recordResponse(
+      t.db,
+      clock,
+      env,
+      accountId,
+      bodyFor(triggerId, { rating_value: 2, other_image_url: url }),
+    );
+    expect(result).toBe('ok');
+    const rows = await t.db.select().from(s.responses);
+    expect(rows[0]!.otherImageUrl).toBe(url);
+  });
+
+  it("other_image_url under ANOTHER account's prefix → invalid_image_url, nothing stored (B4-D1)", async () => {
+    await seedWorkflow();
+    const triggerId = await grantTrigger();
+    const forged = `${env.S3_PUBLIC_URL}/acct/00000000-0000-4000-8000-000000000000/feedback/x.png`;
+    const result = await recordResponse(
+      t.db,
+      clock,
+      env,
+      accountId,
+      bodyFor(triggerId, { rating_value: 2, other_image_url: forged }),
+    );
+    expect(result).toBe('invalid_image_url');
+    expect(await t.db.select().from(s.responses)).toHaveLength(0);
+  });
+
+  it('other_image_url on an arbitrary host → invalid_image_url (B4-D1)', async () => {
+    await seedWorkflow();
+    const triggerId = await grantTrigger();
+    const result = await recordResponse(
+      t.db,
+      clock,
+      env,
+      accountId,
+      bodyFor(triggerId, { rating_value: 2, other_image_url: 'https://evil.example/x.png' }),
+    );
+    expect(result).toBe('invalid_image_url');
   });
 });

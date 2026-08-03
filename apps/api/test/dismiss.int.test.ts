@@ -5,8 +5,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Clock } from '../src/clock.js';
 import * as s from '../src/db/schema.js';
 import { EligibilityService } from '../src/eligibility/service.js';
+import { parseEnv } from '../src/env.js';
 import { recordDismiss } from '../src/feedback/dismiss.js';
 import { recordResponse } from '../src/feedback/respond.js';
+
+const env = parseEnv({ NODE_ENV: 'test' });
+
 import { WorkflowCache } from '../src/workflows/cache.js';
 import { makeDbWorkflowLoader } from '../src/workflows/loader.js';
 import { seedAccount, startTestDb } from './testDb.js';
@@ -141,7 +145,7 @@ describe('recordDismiss (real Postgres)', () => {
 
     // Record a real response first → last_action='submitted', next_eligible_at=NULL.
     expect(
-      await recordResponse(t.db, clock, {
+      await recordResponse(t.db, clock, env, accountId, {
         trigger_id: triggerId,
         rating_value: 5,
         device_os: 'android 14',

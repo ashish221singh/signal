@@ -189,6 +189,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
         sdkRoutes({
           db: resolvedDb,
           clock,
+          env,
           eligibility,
         }),
       );
