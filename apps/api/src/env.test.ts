@@ -27,19 +27,8 @@ describe('parseEnv', () => {
     expect(env.DATABASE_URL).toBe('postgresql://signal:signal_local_dev@localhost:5433/signal');
   });
 
-  it('defaults appKeys to the dev app key in development', () => {
-    const env = parseEnv({});
-    expect(env.appKeys).toEqual(['dev-app-key']);
-  });
-
-  it('throws in production when DATABASE_URL and SIGNAL_APP_KEYS are unset', () => {
+  it('throws in production when DATABASE_URL is unset', () => {
     expect(() => parseEnv({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL/);
-    expect(() => parseEnv({ NODE_ENV: 'production' })).toThrow(/SIGNAL_APP_KEYS/);
-  });
-
-  it('parses SIGNAL_APP_KEYS as a trimmed comma-separated list', () => {
-    const env = parseEnv({ SIGNAL_APP_KEYS: 'k1, k2' });
-    expect(env.appKeys).toEqual(['k1', 'k2']);
   });
 
   it('defaults SESSION_SECRET to the dev constant in development', () => {
@@ -61,7 +50,6 @@ describe('parseEnv', () => {
       parseEnv({
         NODE_ENV: 'production',
         DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-        SIGNAL_APP_KEYS: 'k1',
       }),
     ).toThrow(/SESSION_SECRET/);
   });
@@ -97,7 +85,6 @@ describe('parseEnv', () => {
     const base = {
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SIGNAL_APP_KEYS: 'k1',
       SESSION_SECRET: 'a-sufficiently-long-secret',
     };
     expect(() => parseEnv(base)).toThrow(/S3_ACCESS_KEY/);
@@ -108,14 +95,9 @@ describe('parseEnv', () => {
     const env = parseEnv({
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SIGNAL_APP_KEYS: 'k1',
       SESSION_SECRET: 'a-sufficiently-long-secret',
       S3_ACCESS_KEY: 'AKIA',
       S3_SECRET_KEY: 'secret',
-      BEATROUTE_TOKEN_URL: 'https://auth.beatroute.example/oauth/token',
-      BEATROUTE_CLIENTS_API_URL: 'https://api.beatroute.example/v1/clients',
-      BEATROUTE_CLIENT_ID: 'prod-signal',
-      BEATROUTE_CLIENT_SECRET: 'prod-secret',
     });
     expect(env.S3_ACCESS_KEY).toBe('AKIA');
     expect(env.S3_SECRET_KEY).toBe('secret');
@@ -123,72 +105,5 @@ describe('parseEnv', () => {
     expect(env.S3_BUCKET).toBe('signal-feedback-images');
     expect(env.S3_ENDPOINT).toBe('http://localhost:9000');
     expect(env.S3_PUBLIC_URL).toBe('http://localhost:9000/signal-feedback-images');
-  });
-
-  it('defaults BeatRoute OAuth config to the local mock in development', () => {
-    const env = parseEnv({});
-    expect(env.BEATROUTE_TOKEN_URL).toBe('http://localhost:4599/oauth/token');
-    expect(env.BEATROUTE_CLIENTS_API_URL).toBe('http://localhost:4599/v1/clients');
-    expect(env.BEATROUTE_CLIENT_ID).toBe('signal-backend');
-    expect(env.BEATROUTE_CLIENT_SECRET).toBe('dev-beatroute-secret');
-    expect(env.BEATROUTE_OAUTH_SCOPE).toBe('clients:read');
-  });
-
-  it('exposes explicitly provided BeatRoute OAuth config', () => {
-    const env = parseEnv({
-      BEATROUTE_TOKEN_URL: 'https://auth.beatroute.example/oauth/token',
-      BEATROUTE_CLIENTS_API_URL: 'https://api.beatroute.example/v1/clients',
-      BEATROUTE_CLIENT_ID: 'prod-signal',
-      BEATROUTE_CLIENT_SECRET: 'prod-secret',
-    });
-    expect(env.BEATROUTE_TOKEN_URL).toBe('https://auth.beatroute.example/oauth/token');
-    expect(env.BEATROUTE_CLIENTS_API_URL).toBe('https://api.beatroute.example/v1/clients');
-    expect(env.BEATROUTE_CLIENT_ID).toBe('prod-signal');
-    expect(env.BEATROUTE_CLIENT_SECRET).toBe('prod-secret');
-  });
-
-  it('throws in production when the four BeatRoute OAuth vars are unset', () => {
-    const base = {
-      NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SIGNAL_APP_KEYS: 'k1',
-      SESSION_SECRET: 'a-sufficiently-long-secret',
-      S3_ACCESS_KEY: 'AKIA',
-      S3_SECRET_KEY: 'secret',
-    };
-    expect(() => parseEnv(base)).toThrow(/BEATROUTE_TOKEN_URL/);
-    expect(() => parseEnv(base)).toThrow(/BEATROUTE_CLIENTS_API_URL/);
-    expect(() => parseEnv(base)).toThrow(/BEATROUTE_CLIENT_ID/);
-    expect(() => parseEnv(base)).toThrow(/BEATROUTE_CLIENT_SECRET/);
-  });
-
-  it('does not throw in production when BeatRoute OAuth config is provided', () => {
-    const env = parseEnv({
-      NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
-      SIGNAL_APP_KEYS: 'k1',
-      SESSION_SECRET: 'a-sufficiently-long-secret',
-      S3_ACCESS_KEY: 'AKIA',
-      S3_SECRET_KEY: 'secret',
-      BEATROUTE_TOKEN_URL: 'https://auth.beatroute.example/oauth/token',
-      BEATROUTE_CLIENTS_API_URL: 'https://api.beatroute.example/v1/clients',
-      BEATROUTE_CLIENT_ID: 'prod-signal',
-      BEATROUTE_CLIENT_SECRET: 'prod-secret',
-    });
-    expect(env.BEATROUTE_TOKEN_URL).toBe('https://auth.beatroute.example/oauth/token');
-    expect(env.BEATROUTE_CLIENTS_API_URL).toBe('https://api.beatroute.example/v1/clients');
-    expect(env.BEATROUTE_CLIENT_ID).toBe('prod-signal');
-    expect(env.BEATROUTE_CLIENT_SECRET).toBe('prod-secret');
-    expect(env.BEATROUTE_OAUTH_SCOPE).toBe('clients:read');
-  });
-
-  it('passes through an explicitly set BEATROUTE_OAUTH_SCOPE', () => {
-    const env = parseEnv({ BEATROUTE_OAUTH_SCOPE: 'clients:read clients:write' });
-    expect(env.BEATROUTE_OAUTH_SCOPE).toBe('clients:read clients:write');
-  });
-
-  it('defaults BEATROUTE_OAUTH_SCOPE to clients:read when unset', () => {
-    const env = parseEnv({});
-    expect(env.BEATROUTE_OAUTH_SCOPE).toBe('clients:read');
   });
 });
