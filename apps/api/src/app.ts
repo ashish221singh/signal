@@ -1,14 +1,17 @@
 import cookie from '@fastify/cookie';
+import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
 import Fastify, { type FastifyError } from 'fastify';
 import { AccountsService } from './accounts/service.js';
+import { DeviceService } from './cli/deviceService.js';
 import { type Clock, systemClock } from './clock.js';
 import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
 import type { Env } from './env.js';
 import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
 import { resolveAuth } from './plugins/resolveAuth.js';
+import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { workflowRoutes } from './routes/console/workflows.js';
@@ -64,6 +67,7 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
   const accountsService = new AccountsService(resolvedDb);
   const tokenService = new TokenService(resolvedDb, clock);
+  const deviceService = new DeviceService(resolvedDb, tokenService, clock);
 
   // One S3 client for the app lifetime — shared by the SDK upload route. Its
   // close is a no-op, so there is nothing to tear down in `onClose`.
@@ -101,8 +105,23 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // (5/min/IP, M2-D4). @fastify/rate-limit v11 honors per-route config in child
   // scopes when the plugin is registered on an ancestor scope.
   await app.register(rateLimit, { global: false });
+  // Parse `application/x-www-form-urlencoded` bodies — the server-rendered CLI
+  // approval page (B3-D3b) posts a native HTML form.
+  await app.register(formbody);
 
   app.get('/health', async () => ({ status: 'ok' as const, version: SIGNAL_API_VERSION }));
+
+  // CLI / device-flow + server-rendered auth pages (B3-D3, D4, D3b). Mounted at
+  // the root (absolute paths) and PUBLIC — the approval page self-checks the
+  // console session and redirects to /login when absent.
+  await app.register(
+    cliRoutes({
+      db: resolvedDb,
+      env,
+      devices: deviceService,
+      tokens: tokenService,
+    }),
+  );
 
   // Console auth (login/logout/me) — NOT behind the session guard; login must be
   // reachable without a session. The guarded console subtree arrives in Task 7.

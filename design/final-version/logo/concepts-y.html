@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — mirrored-Y blocks (static)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=Instrument+Sans:wght@400;500&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#191815; --paper:#FCFCFB; --paper-2:#F7F7F6; --orange:#F78200; --orange-600:#D96F00;
+    --line:#E5E4E1; --muted:#7C7B75;
+    --display:'Schibsted Grotesk',sans-serif; --body:'Instrument Sans',sans-serif; --mono:'Spline Sans Mono',monospace;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:56px 28px 96px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  h1{font-family:var(--display);font-weight:700;font-size:38px;line-height:1.05;letter-spacing:-.02em;margin:10px 0 8px}
+  .sub{color:var(--muted);font-size:16px;max-width:60ch;margin:0}
+
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:36px}
+  @media(max-width:760px){.row{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--paper)}
+  .card .tt{font-family:var(--mono);font-size:11px;color:var(--orange-600);letter-spacing:.08em;text-transform:uppercase;padding:14px 18px 0}
+  .card h3{font-family:var(--display);font-weight:700;font-size:17px;margin:2px 18px 14px}
+  .stages{display:flex}
+  .st{flex:1;padding:30px;display:flex;align-items:center;justify-content:center}
+  .st.light{background:linear-gradient(180deg,#fff,var(--paper-2))}
+  .st.dark{background:#191815}
+  .st svg{width:96px;height:96px;display:block}
+  .st.dark svg rect{fill:#F78200}
+  .small{display:flex;gap:16px;align-items:center;padding:16px 18px 20px;border-top:1px solid var(--line)}
+  .small .lab{font-size:12px;color:var(--muted);font-family:var(--mono)}
+  .fav{width:44px;height:44px;border-radius:11px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .fav svg{width:30px;height:30px}
+  .fav.tile{background:#191815;border:none}
+  .fav.tile svg rect{fill:#F78200}
+  .fav.mini{width:26px;height:26px;border-radius:7px}
+  .fav.mini svg{width:18px;height:18px}
+
+  .lockup{display:flex;align-items:center;gap:16px;margin:44px 0 0}
+  .lockup svg{width:50px;height:50px}
+  .lockup .word{font-family:var(--display);font-weight:700;font-size:40px;letter-spacing:-.03em;color:var(--ink)}
+  .foot{margin-top:34px;color:var(--muted);font-size:13px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Signal · final version · mirrored-Y</div>
+  <h1>Three blocks, three sizes, splayed like a Y</h1>
+  <p class="sub">Static. Different sizes, deliberately off-grid so it reads as an organic constellation, not a stack. Two orientations — a mirrored Y (one up, two down) and an upright Y — on light and dark, down to favicon size.</p>
+
+  <div class="row">
+    <div class="card">
+      <div class="tt">primary · mirrored Y</div>
+      <h3>One up, two down</h3>
+      <div class="stages">
+        <div class="st light">
+          <svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg>
+        </div>
+        <div class="st dark">
+          <svg viewBox="0 0 96 96"><g><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg>
+        </div>
+      </div>
+      <div class="small">
+        <div class="fav"><svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg></div>
+        <div class="fav tile"><svg viewBox="0 0 96 96"><g><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg></div>
+        <div class="fav mini"><svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg></div>
+        <span class="lab">favicon · tile · 16px</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tt">alt · upright Y</div>
+      <h3>Two up, one down</h3>
+      <div class="stages">
+        <div class="st light">
+          <svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="13" y="9" width="28" height="28" rx="8"/><rect x="58" y="15" width="21" height="21" rx="6"/><rect x="35" y="54" width="26" height="26" rx="7"/></g></svg>
+        </div>
+        <div class="st dark">
+          <svg viewBox="0 0 96 96"><g><rect x="13" y="9" width="28" height="28" rx="8"/><rect x="58" y="15" width="21" height="21" rx="6"/><rect x="35" y="54" width="26" height="26" rx="7"/></g></svg>
+        </div>
+      </div>
+      <div class="small">
+        <div class="fav"><svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="13" y="9" width="28" height="28" rx="8"/><rect x="58" y="15" width="21" height="21" rx="6"/><rect x="35" y="54" width="26" height="26" rx="7"/></g></svg></div>
+        <div class="fav tile"><svg viewBox="0 0 96 96"><g><rect x="13" y="9" width="28" height="28" rx="8"/><rect x="58" y="15" width="21" height="21" rx="6"/><rect x="35" y="54" width="26" height="26" rx="7"/></g></svg></div>
+        <div class="fav mini"><svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="13" y="9" width="28" height="28" rx="8"/><rect x="58" y="15" width="21" height="21" rx="6"/><rect x="35" y="54" width="26" height="26" rx="7"/></g></svg></div>
+        <span class="lab">favicon · tile · 16px</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="lockup">
+    <svg viewBox="0 0 96 96"><g fill="#F78200"><rect x="37" y="8" width="26" height="26" rx="7"/><rect x="11" y="53" width="31" height="31" rx="9"/><rect x="59" y="58" width="20" height="20" rx="6"/></g></svg>
+    <span class="word">Signal</span>
+  </div>
+
+  <p class="foot">// which orientation + tweak the sizes/gaps/tilt → I lock it and build the full lockup set.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Signal">
+  <rect x="0" y="0" width="96" height="96" rx="22" fill="#191815"/>
+  <g fill="#FCFCFB">
+    <rect x="16" y="48" width="32" height="32" rx="9"/>
+    <rect x="50" y="28" width="24" height="24" rx="7"/>
+    <rect x="72" y="12" width="16" height="16" rx="5"/>
+  </g>
+</svg>

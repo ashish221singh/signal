@@ -47,7 +47,7 @@ describe('TokenService (real Postgres)', () => {
 
   it('rejects an unknown token', async () => {
     const svc = new TokenService(t.db);
-    expect(await svc.verify('cli_' + 'z'.repeat(32))).toBeNull();
+    expect(await svc.verify(`cli_${'z'.repeat(32)}`)).toBeNull();
   });
 
   it('rejects an expired token', async () => {

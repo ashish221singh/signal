@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — two-block mark (floating, misaligned)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=Instrument+Sans:wght@400;500&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#191815; --paper:#FCFCFB; --paper-2:#F7F7F6; --orange:#F78200; --blue:#0094DD;
+    --line:#E5E4E1; --muted:#7C7B75;
+    --display:'Schibsted Grotesk',sans-serif; --body:'Instrument Sans',sans-serif; --mono:'Spline Sans Mono',monospace;
+    --ease:cubic-bezier(.22,1,.36,1); --ease-inout:cubic-bezier(.65,0,.35,1);
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 28px 96px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  h1{font-family:var(--display);font-weight:700;font-size:40px;line-height:1.05;letter-spacing:-.02em;margin:10px 0 8px}
+  .sub{color:var(--muted);font-size:16px;max-width:62ch;margin:0}
+
+  .hero{margin:40px 0 40px;border-radius:22px;background:radial-gradient(120% 140% at 80% -20%, #2a2926 0%, #191815 55%);
+    padding:60px 40px;display:flex;gap:56px;align-items:center;justify-content:center;flex-wrap:wrap;position:relative;overflow:hidden}
+  .hero::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 18% 120%, rgba(247,130,0,.16), transparent 60%);pointer-events:none}
+  .hero .slot{display:flex;flex-direction:column;align-items:center;gap:16px;z-index:1}
+  .hero .name{font-family:var(--display);font-weight:500;color:#FCFCFB;font-size:15px;opacity:.9}
+  .hero svg{width:108px;height:108px;display:block;overflow:visible}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{border:1px solid var(--line);border-radius:18px;background:var(--paper);overflow:hidden}
+  .stage{padding:34px;display:flex;align-items:center;justify-content:center;gap:26px;background:linear-gradient(180deg,#fff,var(--paper-2));border-bottom:1px solid var(--line)}
+  .stage svg{width:88px;height:88px;display:block;overflow:visible}
+  .favi .chip{width:34px;height:34px;border-radius:9px;background:var(--ink);display:flex;align-items:center;justify-content:center}
+  .favi .chip svg{width:22px;height:22px}
+  .favi .chip svg rect{fill:#FCFCFB!important}
+  .meta{padding:18px 20px 22px}
+  .meta h3{font-family:var(--display);font-weight:700;font-size:18px;margin:0 0 2px}
+  .meta .tag{font-family:var(--mono);font-size:11px;color:var(--orange);letter-spacing:.08em;text-transform:uppercase}
+  .meta p{color:var(--muted);font-size:13.5px;line-height:1.5;margin:10px 0 0}
+  .foot{margin-top:40px;color:var(--muted);font-size:13px;font-family:var(--mono)}
+
+  /* ---- floating / misaligned life ---- */
+  .float-a .b2{transform-box:view-box;transform-origin:75px 29px;animation:floatA 3.4s var(--ease-inout) infinite}
+  @keyframes floatA{0%,100%{transform:translate(0,0) rotate(0)}50%{transform:translate(4px,-5px) rotate(4deg)}}
+  .float-a .b1{transform-box:view-box;transform-origin:32px 64px;animation:settle 3.4s var(--ease-inout) infinite}
+  @keyframes settle{0%,100%{transform:translate(0,0)}50%{transform:translate(-1.5px,1.5px)}}
+
+  .float-b .b2{transform-box:view-box;transform-origin:80px 18px;animation:emitB 3s var(--ease-inout) infinite}
+  @keyframes emitB{0%,100%{transform:translate(0,0) rotate(10deg)}45%{transform:translate(8px,-9px) rotate(18deg)}}
+  .float-b .b2.hot{animation:emitBhot 3s var(--ease-inout) infinite}
+  @keyframes emitBhot{0%,100%{fill:#FCFCFB;transform:translate(0,0) rotate(10deg)}45%{fill:#F78200;transform:translate(8px,-9px) rotate(18deg)}}
+
+  .float-c .b1{transform-box:view-box;transform-origin:30px 34px;animation:driftC1 4s var(--ease-inout) infinite}
+  .float-c .b2{transform-box:view-box;transform-origin:68px 64px;animation:driftC2 4s var(--ease-inout) infinite}
+  @keyframes driftC1{0%,100%{transform:translate(0,0)}50%{transform:translate(-3px,-3px)}}
+  @keyframes driftC2{0%,100%{transform:translate(0,0) rotate(-6deg)}50%{transform:translate(3px,3px) rotate(-9deg)}}
+
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Signal · final version · two-block mark</div>
+  <h1>Two blocks — floating, a little misaligned</h1>
+  <p class="sub">A block and its signal. Solid monochrome, off-grid on purpose — the misalignment is what makes it feel alive. In motion, the floating block drifts (and, on dark, flashes the brand orange — the palette returns in movement). Three takes:</p>
+
+  <div class="hero">
+    <div class="slot">
+      <svg class="float-a" viewBox="0 0 96 96" aria-label="Echo">
+        <rect class="b1" x="10" y="42" width="44" height="44" rx="12" fill="#FCFCFB"/>
+        <rect class="b2" x="58" y="12" width="34" height="34" rx="9" fill="#FCFCFB"/>
+      </svg><span class="name">Echo</span>
+    </div>
+    <div class="slot">
+      <svg class="float-b" viewBox="0 0 96 96" aria-label="Emit">
+        <rect class="b1" x="12" y="30" width="52" height="52" rx="15" fill="#FCFCFB"/>
+        <rect class="b2 hot" x="70" y="8" width="20" height="20" rx="6" fill="#FCFCFB"/>
+      </svg><span class="name">Emit</span>
+    </div>
+    <div class="slot">
+      <svg class="float-c" viewBox="0 0 96 96" aria-label="Twin">
+        <rect class="b1" x="12" y="16" width="36" height="36" rx="11" fill="#FCFCFB"/>
+        <rect class="b2" x="50" y="46" width="36" height="36" rx="11" fill="#FCFCFB"/>
+      </svg><span class="name">Twin</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="stage">
+        <svg class="float-a" viewBox="0 0 96 96"><rect class="b1" x="10" y="42" width="44" height="44" rx="12" fill="#191815"/><rect class="b2" x="58" y="12" width="34" height="34" rx="9" fill="#191815"/></svg>
+        <div class="favi"><div class="chip"><svg viewBox="0 0 96 96"><rect x="10" y="42" width="44" height="44" rx="12"/><rect x="58" y="12" width="34" height="34" rx="9"/></svg></div></div>
+      </div>
+      <div class="meta"><span class="tag">block + signal</span><h3>Echo</h3><p>Two near-equal blocks, offset with a clean gap. Calm, balanced, unmistakably a pair. The smaller one floats up-right like an echo of the first.</p></div>
+    </div>
+    <div class="card">
+      <div class="stage">
+        <svg class="float-b" viewBox="0 0 96 96"><rect class="b1" x="12" y="30" width="52" height="52" rx="15" fill="#191815"/><rect class="b2" x="70" y="8" width="20" height="20" rx="6" fill="#191815" transform="rotate(10 80 18)"/></svg>
+        <div class="favi"><div class="chip"><svg viewBox="0 0 96 96"><rect x="12" y="30" width="52" height="52" rx="15"/><rect x="70" y="8" width="20" height="20" rx="6" transform="rotate(10 80 18)"/></svg></div></div>
+      </div>
+      <div class="meta"><span class="tag">the signal escaping</span><h3>Emit</h3><p>A solid core and a small tilted block breaking away — the closest to your old "tile emitting," but distilled to one floating square. Most narrative: a signal leaving the source.</p></div>
+    </div>
+    <div class="card">
+      <div class="stage">
+        <svg class="float-c" viewBox="0 0 96 96"><rect class="b1" x="12" y="16" width="36" height="36" rx="11" fill="#191815"/><rect class="b2" x="50" y="46" width="36" height="36" rx="11" fill="#191815" transform="rotate(-6 68 64)"/></svg>
+        <div class="favi"><div class="chip"><svg viewBox="0 0 96 96"><rect x="12" y="16" width="36" height="36" rx="11"/><rect x="50" y="46" width="36" height="36" rx="11" transform="rotate(-6 68 64)"/></svg></div></div>
+      </div>
+      <div class="meta"><span class="tag">off-grid pair</span><h3>Twin</h3><p>Two equal blocks on a diagonal, one gently rotated — maximum "floating / misaligned" tension. Feels the most contemporary and design-forward.</p></div>
+    </div>
+  </div>
+
+  <p class="foot">// pick one (or a tweak) → I lock geometry, build the full lockups + wordmark, then the landing hero around its motion.</p>
+</div>
+</body>
+</html>

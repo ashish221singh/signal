@@ -91,6 +91,42 @@ describe('parseEnv', () => {
     expect(() => parseEnv(base)).toThrow(/S3_SECRET_KEY/);
   });
 
+  it('defaults PUBLIC_BASE_URL to localhost in development', () => {
+    expect(parseEnv({}).PUBLIC_BASE_URL).toBe('http://localhost:3000');
+  });
+
+  it('exposes an explicitly provided PUBLIC_BASE_URL', () => {
+    expect(parseEnv({ PUBLIC_BASE_URL: 'https://app.example.com' }).PUBLIC_BASE_URL).toBe(
+      'https://app.example.com',
+    );
+  });
+
+  it('defaults ALLOW_PASSWORD_CLI_LOGIN ON in dev/test, OFF in production (B3-D4, GR-10)', () => {
+    expect(parseEnv({}).ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
+    expect(parseEnv({ NODE_ENV: 'test' }).ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
+    const prod = parseEnv({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+      SESSION_SECRET: 'a-sufficiently-long-secret',
+      S3_ACCESS_KEY: 'AKIA',
+      S3_SECRET_KEY: 'secret',
+    });
+    expect(prod.ALLOW_PASSWORD_CLI_LOGIN).toBe(false);
+  });
+
+  it('honours an explicit ALLOW_PASSWORD_CLI_LOGIN override', () => {
+    expect(parseEnv({ ALLOW_PASSWORD_CLI_LOGIN: 'false' }).ALLOW_PASSWORD_CLI_LOGIN).toBe(false);
+    const prodOn = parseEnv({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+      SESSION_SECRET: 'a-sufficiently-long-secret',
+      S3_ACCESS_KEY: 'AKIA',
+      S3_SECRET_KEY: 'secret',
+      ALLOW_PASSWORD_CLI_LOGIN: 'true',
+    });
+    expect(prodOn.ALLOW_PASSWORD_CLI_LOGIN).toBe(true);
+  });
+
   it('does not throw in production when S3 secrets are provided', () => {
     const env = parseEnv({
       NODE_ENV: 'production',
