@@ -10,12 +10,6 @@ describe('campaignDraftCreateSchema', () => {
   it('accepts an empty object (draft can be created empty)', () => {
     expect(campaignDraftCreateSchema.safeParse({}).success).toBe(true);
   });
-  it('accepts { client_ids }', () => {
-    expect(campaignDraftCreateSchema.safeParse({ client_ids: ['cl_A'] }).success).toBe(true);
-  });
-  it('rejects a non-array client_ids', () => {
-    expect(campaignDraftCreateSchema.safeParse({ client_ids: 'cl_A' }).success).toBe(false);
-  });
 });
 
 describe('campaignUpdateSchema', () => {
@@ -42,9 +36,6 @@ describe('campaignUpdateSchema', () => {
   it('rejects a non-positive positive_threshold', () => {
     expect(campaignUpdateSchema.safeParse({ positive_threshold: 0 }).success).toBe(false);
   });
-  it('rejects an empty-string client id (dead targeting data)', () => {
-    expect(campaignUpdateSchema.safeParse({ client_ids: ['cl_A', ''] }).success).toBe(false);
-  });
   it('rejects an unknown metric_type', () => {
     expect(campaignUpdateSchema.safeParse({ metric_type: 'NPS' }).success).toBe(false);
   });
@@ -60,7 +51,6 @@ describe('campaignUpdateSchema', () => {
 const fullRow = {
   id: '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e',
   target_id: '4a1f7f3f-7f3f-4f3f-9f3f-7f3f7f3f7f3f',
-  client_ids: ['cl_A', 'cl_B'],
   metric_type: 'CSAT',
   rating_type: 'star',
   rating_scale_max: 5,
@@ -73,7 +63,7 @@ const fullRow = {
   ask_frequency: 'after_30_days',
   min_tenure_days: 7,
   status: 'active',
-  created_by: 'admin@beatroute.io',
+  created_by: 'admin@signal.dev',
   created_at: '2026-07-09T10:00:00.000Z',
   updated_at: '2026-07-09T10:00:00.000Z',
 };
@@ -113,7 +103,6 @@ describe('campaignListItemSchema', () => {
     header_text: 'How was your experience?',
     status: 'active',
     screen_id: 'home',
-    client_count: 2,
     updated_at: '2026-07-09T10:00:00.000Z',
   };
   it('parses a list projection', () => {
@@ -123,10 +112,5 @@ describe('campaignListItemSchema', () => {
     expect(
       campaignListItemSchema.safeParse({ ...listItem, header_text: null, screen_id: null }).success,
     ).toBe(true);
-  });
-  it('rejects a non-integer client_count', () => {
-    expect(campaignListItemSchema.safeParse({ ...listItem, client_count: 2.5 }).success).toBe(
-      false,
-    );
   });
 });

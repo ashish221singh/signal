@@ -21,12 +21,10 @@ import {
 const timestampSchema = z.union([z.date(), z.iso.datetime()]);
 
 /**
- * POST /campaigns body (Task 10). A draft can be created empty — every field
- * is optional, minimal is `{}` or `{ client_ids: [...] }`.
+ * POST /campaigns body. A draft is created empty (no client targeting in B1 —
+ * clients were removed with the BeatRoute pivot, B1-D6). Minimal is `{}`.
  */
-export const campaignDraftCreateSchema = z.object({
-  client_ids: z.array(z.string().min(1)).optional(),
-});
+export const campaignDraftCreateSchema = z.object({});
 export type CampaignDraftCreate = z.infer<typeof campaignDraftCreateSchema>;
 
 /**
@@ -36,7 +34,6 @@ export type CampaignDraftCreate = z.infer<typeof campaignDraftCreateSchema>;
  */
 export const campaignUpdateSchema = z.object({
   target_id: z.uuid().optional(),
-  client_ids: z.array(z.string().min(1)).optional(),
   metric_type: metricTypeSchema.optional(),
   rating_type: ratingTypeSchema.optional(),
   rating_scale_max: z.int().positive().optional(),
@@ -58,7 +55,6 @@ export type CampaignUpdate = z.infer<typeof campaignUpdateSchema>;
 export const campaignSchema = z.object({
   id: z.uuid(),
   target_id: z.uuid().nullable(),
-  client_ids: z.array(z.string()),
   metric_type: metricTypeSchema.nullable(),
   rating_type: ratingTypeSchema.nullable(),
   rating_scale_max: z.int().nullable(),
@@ -78,16 +74,14 @@ export const campaignSchema = z.object({
 export type Campaign = z.infer<typeof campaignSchema>;
 
 /**
- * Lighter list projection for GET /campaigns (Task 10). `screen_id` is the
- * target's screen id (nullable when the draft has no target yet), and
- * `client_count` is the size of `client_ids`.
+ * Lighter list projection for GET /campaigns. `screen_id` is the target's
+ * screen id (nullable when the draft has no target yet).
  */
 export const campaignListItemSchema = z.object({
   id: z.uuid(),
   header_text: z.string().nullable(),
   status: campaignStatusSchema,
   screen_id: z.string().nullable(),
-  client_count: z.int(),
   updated_at: timestampSchema,
 });
 export type CampaignListItem = z.infer<typeof campaignListItemSchema>;

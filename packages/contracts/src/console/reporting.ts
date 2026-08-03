@@ -93,26 +93,6 @@ export const reasonsSchema = z.object({
 export type Reasons = z.infer<typeof reasonsSchema>;
 
 /**
- * GET /v1/console/campaigns/:id/clients response shape (M4, Clients tab).
- * Per-client engagement. Rates/scores stay null-safe (M2-D15):
- * `response_rate` is null with zero triggers, `positive_score` with zero
- * responses (or no positive_threshold).
- */
-export const clientBreakdownSchema = z.object({
-  campaign_id: z.uuid(),
-  clients: z.array(
-    z.object({
-      client_id: z.string(),
-      triggers: z.int(),
-      responses: z.int(),
-      response_rate: z.number().nullable(),
-      positive_score: z.number().nullable(),
-    }),
-  ),
-});
-export type ClientBreakdown = z.infer<typeof clientBreakdownSchema>;
-
-/**
  * One row of the Responses feed (M4, Responses tab). `location` is null when
  * the response carried no geo; `chip_selected`, `other_text` and
  * `other_image_url` are null when the corresponding input was not provided.
@@ -131,7 +111,6 @@ export const responseFeedItemSchema = z.object({
       country: z.string().optional(),
     })
     .nullable(),
-  client_id: z.string(),
   device_os: z.string(),
   app_version: z.string(),
   shown_at: z.string(),

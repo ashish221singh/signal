@@ -4,7 +4,6 @@ import { metricTypeSchema, onPositiveActionSchema, ratingTypeSchema } from './pr
 export const eligibilityQuerySchema = z.object({
   screen_id: z.string().min(1),
   user_id: z.string().min(1),
-  client_id: z.string().min(1),
   rep_tenure_days: z.coerce.number().int().nonnegative().optional(),
 });
 export type EligibilityQuery = z.infer<typeof eligibilityQuerySchema>;

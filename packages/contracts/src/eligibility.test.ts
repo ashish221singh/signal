@@ -6,7 +6,6 @@ describe('eligibilityQuerySchema', () => {
     const r = eligibilityQuerySchema.safeParse({
       screen_id: 'order_completion',
       user_id: 'u_1',
-      client_id: 'cl_A',
       rep_tenure_days: '210',
     });
     expect(r.success).toBe(true);
@@ -16,20 +15,16 @@ describe('eligibilityQuerySchema', () => {
     const r = eligibilityQuerySchema.safeParse({
       screen_id: 's',
       user_id: 'u',
-      client_id: 'c',
     });
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.rep_tenure_days).toBeUndefined();
   });
   it('rejects negative tenure and empty ids', () => {
-    expect(
-      eligibilityQuerySchema.safeParse({ screen_id: '', user_id: 'u', client_id: 'c' }).success,
-    ).toBe(false);
+    expect(eligibilityQuerySchema.safeParse({ screen_id: '', user_id: 'u' }).success).toBe(false);
     expect(
       eligibilityQuerySchema.safeParse({
         screen_id: 's',
         user_id: 'u',
-        client_id: 'c',
         rep_tenure_days: '-4',
       }).success,
     ).toBe(false);
