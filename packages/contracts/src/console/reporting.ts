@@ -153,3 +153,24 @@ export const trendSchema = z.object({
   ),
 });
 export type Trend = z.infer<typeof trendSchema>;
+
+/**
+ * GET /v1/console/events/overview response shape (B4-D5). An account-wide roll-up
+ * of triggers/responses grouped by `event_name` — the event-model counterpart to
+ * the per-workflow overview. `response_rate` is null when an event had zero
+ * triggers; `positive_score` is null when it had zero responses (or no workflow
+ * with a `positive_threshold` covered the responses). All fields null-safe.
+ */
+export const eventOverviewRowSchema = z.object({
+  event_name: z.string(),
+  triggers: z.int(),
+  responses: z.int(),
+  response_rate: z.number().nullable(),
+  positive_score: z.number().nullable(),
+});
+export type EventOverviewRow = z.infer<typeof eventOverviewRowSchema>;
+
+export const eventsOverviewSchema = z.object({
+  events: z.array(eventOverviewRowSchema),
+});
+export type EventsOverview = z.infer<typeof eventsOverviewSchema>;

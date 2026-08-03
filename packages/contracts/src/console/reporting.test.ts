@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   campaignOverviewSchema,
   dashboardSummarySchema,
+  eventsOverviewSchema,
   reasonsSchema,
   responseFeedQuerySchema,
   responseFeedSchema,
@@ -203,6 +204,46 @@ describe('trendSchema', () => {
       trendSchema.safeParse({
         campaign_id: CID,
         points: [{ date: '2026-07-08', responses: 6.5, positive_score: 0.5 }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('eventsOverviewSchema', () => {
+  it('parses a populated events overview with null-safe ratios', () => {
+    const ok = eventsOverviewSchema.safeParse({
+      events: [
+        {
+          event_name: 'checkout_completed',
+          triggers: 10,
+          responses: 4,
+          response_rate: 0.4,
+          positive_score: 0.75,
+        },
+        {
+          event_name: 'app_opened',
+          triggers: 0,
+          responses: 0,
+          response_rate: null,
+          positive_score: null,
+        },
+      ],
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  it('rejects a non-integer triggers count', () => {
+    expect(
+      eventsOverviewSchema.safeParse({
+        events: [
+          {
+            event_name: 'x',
+            triggers: 1.5,
+            responses: 0,
+            response_rate: null,
+            positive_score: null,
+          },
+        ],
       }).success,
     ).toBe(false);
   });

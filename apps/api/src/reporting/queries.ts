@@ -3,6 +3,7 @@ import type {
   CampaignHealth,
   CampaignOverview,
   DashboardSummary,
+  EventOverviewRow,
   Reasons,
   ResponseFeedItem,
   Trend,
@@ -229,6 +230,72 @@ export async function campaignTrend(
       positive_score: threshold === null ? null : r.positive / r.responses,
     })),
   };
+}
+
+/**
+ * Events overview reporting query (B4-D5), scoped to `accountId`. Rolls
+ * triggers/responses up per `event_name` across the whole account — the event
+ * model's counterpart to the per-workflow overview. `positive` counts responses
+ * whose `rating_value` meets the covering workflow's `positive_threshold` (joined
+ * per response), so an event served by multiple workflows aggregates correctly.
+ * All ratios are null-safe; the list is ordered by triggers desc then event name.
+ */
+export async function eventsOverview(db: Db, accountId: string): Promise<EventOverviewRow[]> {
+  // Per-event trigger counts (trigger_log carries account_id + event_name).
+  const triggerRows = await db
+    .select({ eventName: triggerLog.eventName, count: sql<number>`count(*)::int` })
+    .from(triggerLog)
+    .where(eq(triggerLog.accountId, accountId))
+    .groupBy(triggerLog.eventName);
+
+  // Per-event response + positive counts. Join each response to its workflow for
+  // the positive_threshold; a null threshold contributes 0 positives.
+  const responseRows = await db
+    .select({
+      eventName: responses.eventName,
+      total: sql<number>`count(*)::int`,
+      positive: sql<number>`count(*) filter (
+        where ${workflows.positiveThreshold} is not null
+          and ${responses.ratingValue} >= ${workflows.positiveThreshold}
+      )::int`,
+      withThreshold: sql<number>`count(*) filter (
+        where ${workflows.positiveThreshold} is not null
+      )::int`,
+    })
+    .from(responses)
+    .innerJoin(workflows, eq(responses.workflowId, workflows.id))
+    .where(eq(responses.accountId, accountId))
+    .groupBy(responses.eventName);
+
+  const triggerByEvent = new Map(triggerRows.map((r) => [r.eventName, r.count]));
+  const responseByEvent = new Map(
+    responseRows.map((r) => [
+      r.eventName,
+      { total: r.total, positive: r.positive, withThreshold: r.withThreshold },
+    ]),
+  );
+
+  const eventNames = new Set<string>([...triggerByEvent.keys(), ...responseByEvent.keys()]);
+
+  const rows: EventOverviewRow[] = [];
+  for (const eventName of eventNames) {
+    const triggers = triggerByEvent.get(eventName) ?? 0;
+    const resp = responseByEvent.get(eventName) ?? { total: 0, positive: 0, withThreshold: 0 };
+    const response_rate = triggers === 0 ? null : resp.total / triggers;
+    // positive_score is over responses covered by a workflow with a threshold; if
+    // no responses had a threshold, it can't be computed (null).
+    const positive_score = resp.withThreshold === 0 ? null : resp.positive / resp.withThreshold;
+    rows.push({
+      event_name: eventName,
+      triggers,
+      responses: resp.total,
+      response_rate,
+      positive_score,
+    });
+  }
+
+  rows.sort((a, b) => b.triggers - a.triggers || a.event_name.localeCompare(b.event_name));
+  return rows;
 }
 
 /**

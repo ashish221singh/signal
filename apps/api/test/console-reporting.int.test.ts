@@ -2,6 +2,7 @@
 import {
   campaignOverviewSchema,
   dashboardSummarySchema,
+  eventsOverviewSchema,
   reasonsSchema,
   responseFeedSchema,
   trendSchema,
@@ -12,6 +13,7 @@ import type { Clock } from '../src/clock.js';
 import type { Db } from '../src/db/client.js';
 import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
+import { TokenService } from '../src/tokens/service.js';
 import { seedAccountWithUser, startTestDb } from './testDb.js';
 
 /** Fixed clock so the rolling 30-day window has a deterministic "now". */
@@ -684,5 +686,192 @@ describe('GET /v1/console/workflows/:id/trend (real Postgres)', () => {
     expect(body.points[0].date).toBe('2026-07-08');
     expect(body.points[0].responses).toBe(2);
     expect(body.points[0].positive_score).toBe(0);
+  });
+});
+
+describe('GET /v1/console/events/overview (real Postgres)', () => {
+  let t: Awaited<ReturnType<typeof startTestDb>>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let cookieHeader: string;
+  let accountId: string;
+
+  beforeAll(async () => {
+    t = await startTestDb();
+  }, 120_000);
+  afterAll(async () => {
+    await t.stop();
+  });
+
+  beforeEach(async () => {
+    await t.truncateAll();
+    const seeded = await seedAccountWithUser(t.db);
+    accountId = seeded.accountId;
+    app = await buildApp(env, { db: t.db, closeDb: async () => {} });
+    cookieHeader = `signal_session=${app.signCookie(seeded.userId)}`;
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function seedWfWithEvent(
+    eventName: string,
+    overrides: Partial<typeof s.workflows.$inferInsert> = {},
+  ): Promise<string> {
+    const [row] = await t.db
+      .insert(s.workflows)
+      .values({
+        accountId,
+        eventName,
+        metricType: 'CSAT',
+        ratingType: 'star',
+        ratingScaleMax: 5,
+        headerText: 'How was it?',
+        positiveThreshold: 4,
+        status: 'active',
+        createdBy: 'seed',
+        ...overrides,
+      })
+      .returning();
+    return row!.id;
+  }
+
+  async function seedTriggerFor(workflowId: string, eventName: string): Promise<string> {
+    const [row] = await t.db
+      .insert(s.triggerLog)
+      .values({ accountId, workflowId, userId: 'u', eventName, shownAt: new Date() })
+      .returning();
+    return row!.id;
+  }
+
+  async function seedResponseFor(
+    workflowId: string,
+    eventName: string,
+    ratingValue: number,
+  ): Promise<void> {
+    const triggerId = await seedTriggerFor(workflowId, eventName);
+    await t.db.insert(s.responses).values({
+      accountId,
+      triggerId,
+      workflowId,
+      userId: 'u',
+      eventName,
+      ratingValue,
+      deviceOs: 'Android',
+      appVersion: '1',
+      shownAt: new Date(),
+      respondedAt: new Date(),
+    });
+  }
+
+  it('no cookie → 401', async () => {
+    const res = await app.inject({ method: 'GET', url: '/v1/console/events/overview' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rolls up triggers/responses per event with null-safe ratios, ordered by triggers desc', async () => {
+    const checkout = await seedWfWithEvent('checkout_completed', { positiveThreshold: 4 });
+    await seedTriggerFor(checkout, 'checkout_completed'); // trigger, no response
+    await seedResponseFor(checkout, 'checkout_completed', 5); // +trigger +response (positive)
+    await seedResponseFor(checkout, 'checkout_completed', 2); // +trigger +response (not positive)
+
+    // A second event with only a trigger → response_rate 0, positive_score null.
+    const appOpened = await seedWfWithEvent('app_opened');
+    await seedTriggerFor(appOpened, 'app_opened');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview',
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(eventsOverviewSchema.safeParse(body).success).toBe(true);
+
+    const byName = Object.fromEntries(
+      body.events.map((e: { event_name: string }) => [e.event_name, e]),
+    );
+    // checkout_completed: 3 triggers, 2 responses, rate 2/3, positive 1/2.
+    expect(byName.checkout_completed.triggers).toBe(3);
+    expect(byName.checkout_completed.responses).toBe(2);
+    expect(byName.checkout_completed.response_rate).toBeCloseTo(2 / 3, 10);
+    expect(byName.checkout_completed.positive_score).toBeCloseTo(0.5, 10);
+    // app_opened: 1 trigger, 0 responses.
+    expect(byName.app_opened.triggers).toBe(1);
+    expect(byName.app_opened.responses).toBe(0);
+    expect(byName.app_opened.response_rate).toBe(0);
+    expect(byName.app_opened.positive_score).toBeNull();
+    // Ordered by triggers desc → checkout_completed first.
+    expect(body.events[0].event_name).toBe('checkout_completed');
+  });
+
+  it("isolation: only the caller account's events appear", async () => {
+    const mine = await seedWfWithEvent('mine_event');
+    await seedTriggerFor(mine, 'mine_event');
+
+    const b = await seedAccountWithUser(t.db, { accountName: 'B', email: 'b@example.com' });
+    await t.db.insert(s.triggerLog).values({
+      accountId: b.accountId,
+      workflowId: (
+        await t.db
+          .insert(s.workflows)
+          .values({ accountId: b.accountId, eventName: 'b_event', createdBy: 'seed' })
+          .returning()
+      )[0]!.id,
+      userId: 'u',
+      eventName: 'b_event',
+      shownAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview',
+      headers: { cookie: cookieHeader },
+    });
+    const names = res.json().events.map((e: { event_name: string }) => e.event_name);
+    expect(names).toContain('mine_event');
+    expect(names).not.toContain('b_event');
+  });
+
+  it('readable via a CLI token carrying responses:read', async () => {
+    const checkout = await seedWfWithEvent('checkout_completed');
+    await seedTriggerFor(checkout, 'checkout_completed');
+    const { token } = await new TokenService(t.db).issue(accountId, 'ci', {
+      scopes: ['responses:read'],
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(eventsOverviewSchema.safeParse(res.json()).success).toBe(true);
+  });
+
+  it('a token WITHOUT responses:read → 403 insufficient_scope on reporting', async () => {
+    const { token } = await new TokenService(t.db).issue(accountId, 'ci', {
+      scopes: ['workflows:read'],
+    });
+    for (const url of ['/v1/console/dashboard', '/v1/console/events/overview']) {
+      const res = await app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe('insufficient_scope');
+    }
+  });
+
+  it('dashboard is readable via a responses:read token', async () => {
+    const { token } = await new TokenService(t.db).issue(accountId, 'ci', {
+      scopes: ['responses:read'],
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/dashboard',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(dashboardSummarySchema.safeParse(res.json()).success).toBe(true);
   });
 });
