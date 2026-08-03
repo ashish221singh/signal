@@ -16,6 +16,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `pnpm verify` = typecheck + lint + test across ALL workspaces —
+      # @signal/contracts, @signal/api, @signal/mcp, @signal/cli (GR-7).
+      # `pnpm -r typecheck` covers each package's `tsc --noEmit`; `biome check`
+      # lints the whole tree; `vitest run` runs every *.test.ts including the
+      # MCP/CLI integration tests, which spin up an ephemeral API + a
+      # Testcontainers Postgres (Docker is preinstalled on ubuntu-latest).
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
