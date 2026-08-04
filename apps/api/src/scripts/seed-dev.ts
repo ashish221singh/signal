@@ -102,7 +102,9 @@ async function main(): Promise<void> {
           headerText: 'How satisfied were you with placing this order?',
           positiveThreshold: 4,
           chipsOnNegative: ['Slow to load', 'Items hard to find', 'Sync failed'],
-          onPositiveAction: 'play_store_review',
+          // B5: happy raters → app-store review; unhappy raters → support page.
+          positiveAction: { type: 'store_review' },
+          negativeAction: { type: 'redirect', url: 'https://support.signal.dev/checkout' },
           askFrequency: 'after_7_days',
           status: 'active',
           createdBy: SEED_CREATED_BY,
@@ -116,6 +118,9 @@ async function main(): Promise<void> {
           headerText: 'How was creating this customer?',
           positiveThreshold: 3,
           chipsOnNegative: ['Confusing form', 'Missing fields', 'Too slow'],
+          // B5: thank happy raters; just close for unhappy ones.
+          positiveAction: { type: 'thanks', message: 'Thanks — glad that was smooth!' },
+          negativeAction: { type: 'none' },
           askFrequency: 'after_7_days',
           minSessionAgeDays: 90,
           status: 'active',

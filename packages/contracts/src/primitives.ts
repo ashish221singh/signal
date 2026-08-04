@@ -3,7 +3,6 @@ import { z } from 'zod';
 export const metricTypeSchema = z.enum(['CSAT', 'CES']);
 export const ratingTypeSchema = z.enum(['star', 'emoji', 'effort_scale']);
 export const askFrequencySchema = z.enum(['after_7_days', 'after_30_days', 'after_60_days']);
-export const onPositiveActionSchema = z.enum(['none', 'play_store_review']);
 export const workflowStatusSchema = z.enum(['draft', 'active', 'paused', 'archived']);
 
 export type RatingType = z.infer<typeof ratingTypeSchema>;

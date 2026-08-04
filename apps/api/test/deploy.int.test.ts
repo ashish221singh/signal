@@ -67,6 +67,37 @@ describe('POST /v1/console/deploy (real Postgres)', () => {
     expect((await t.db.select().from(s.workflows)).length).toBe(1);
   });
 
+  // B5-D4: agent-authored onPositive/onNegative upsert to the stored branched actions.
+  it('upserts branched actions (onPositive/onNegative) and stays idempotent', async () => {
+    const withActions = {
+      key: 'checkout',
+      ...CSAT,
+      onPositive: { type: 'store_review' as const },
+      onNegative: { type: 'redirect' as const, url: 'https://support.example.com' },
+    };
+    const first = await deploy([withActions]);
+    expect(first.json().results[0]).toMatchObject({ action: 'created', status: 'active' });
+    const [row] = await t.db.select().from(s.workflows);
+    expect(row?.positiveAction).toEqual({ type: 'store_review' });
+    expect(row?.negativeAction).toEqual({ type: 'redirect', url: 'https://support.example.com' });
+
+    // re-deploying the same actions is a no-op.
+    const second = await deploy([withActions]);
+    expect(second.json().results[0]).toMatchObject({ action: 'unchanged' });
+
+    // changing an action re-publishes as an update.
+    const changed = await deploy([{ ...withActions, onPositive: { type: 'thanks' as const } }]);
+    expect(changed.json().results[0].action).toBe('updated');
+    const [after] = await t.db.select().from(s.workflows);
+    expect(after?.positiveAction).toEqual({ type: 'thanks', message: 'Thanks for your feedback!' });
+  });
+
+  it('rejects a payload whose onNegative redirect has no url → 422 invalid_body', async () => {
+    const res = await deploy([{ key: 'bad', ...CSAT, onNegative: { type: 'redirect' } }]);
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('invalid_body');
+  });
+
   it('updates content on a changed payload', async () => {
     await deploy([{ key: 'checkout', ...CSAT }]);
     const changed = await deploy([{ key: 'checkout', ...CSAT, header_text: 'Rate your checkout' }]);

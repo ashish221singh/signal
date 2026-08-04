@@ -3,7 +3,11 @@ import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import { workflows } from '../db/schema.js';
-import { missingRequiredFields, type WorkflowRow } from '../workflows/service.js';
+import {
+  invalidActionFields,
+  missingRequiredFields,
+  type WorkflowRow,
+} from '../workflows/service.js';
 
 /**
  * config-as-code deploy (B3-D6, GR-5). Applies a declarative `{ workflows: [...] }`
@@ -38,10 +42,24 @@ function contentValues(item: DeployItem): Partial<typeof workflows.$inferInsert>
   if (item.chips_on_negative !== undefined) set.chipsOnNegative = item.chips_on_negative;
   if (item.other_requires_text !== undefined) set.otherRequiresText = item.other_requires_text;
   if (item.other_allows_image !== undefined) set.otherAllowsImage = item.other_allows_image;
-  if (item.on_positive_action !== undefined) set.onPositiveAction = item.on_positive_action;
+  if (item.onPositive !== undefined) set.positiveAction = item.onPositive;
+  if (item.onNegative !== undefined) set.negativeAction = item.onNegative;
   if (item.ask_frequency !== undefined) set.askFrequency = item.ask_frequency;
   if (item.min_session_age_days !== undefined) set.minSessionAgeDays = item.min_session_age_days;
   return set;
+}
+
+/**
+ * Canonicalize an action for comparison. Postgres `jsonb` reorders object keys, so a
+ * plain `JSON.stringify` would spuriously report a diff on an unchanged action; pin
+ * the field order (and treat absent/undefined uniformly) to keep deploy idempotent.
+ */
+function canonicalAction(a: unknown): string {
+  if (a && typeof a === 'object') {
+    const o = a as Record<string, unknown>;
+    return JSON.stringify({ type: o.type, message: o.message ?? null, url: o.url ?? null });
+  }
+  return JSON.stringify(a ?? null);
 }
 
 /** Did any content/event field actually differ from the stored row? */
@@ -71,7 +89,15 @@ function rowDiffersFromItem(row: WorkflowRow, item: DeployItem): boolean {
     return true;
   if (desired.otherAllowsImage !== undefined && row.otherAllowsImage !== desired.otherAllowsImage)
     return true;
-  if (desired.onPositiveAction !== undefined && row.onPositiveAction !== desired.onPositiveAction)
+  if (
+    desired.positiveAction !== undefined &&
+    canonicalAction(row.positiveAction) !== canonicalAction(desired.positiveAction)
+  )
+    return true;
+  if (
+    desired.negativeAction !== undefined &&
+    canonicalAction(row.negativeAction) !== canonicalAction(desired.negativeAction)
+  )
     return true;
   if (desired.askFrequency !== undefined && row.askFrequency !== desired.askFrequency) return true;
   if (
@@ -243,6 +269,19 @@ export class DeployService {
           code: 'incomplete',
           message: 'workflow is missing required fields to publish',
           missing,
+        },
+      };
+    }
+
+    // B5-D2: a workflow may not go active with a malformed branched action.
+    const invalid = invalidActionFields(row);
+    if (invalid.length > 0) {
+      return {
+        ok: false,
+        status: row.status,
+        error: {
+          code: 'invalid',
+          message: `invalid post-submit action: ${invalid.join(', ')}`,
         },
       };
     }

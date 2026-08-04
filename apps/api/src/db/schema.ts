@@ -20,7 +20,6 @@ import {
 // screens/targets are no longer a targeting concept; a named event is the trigger.
 export const metricTypeEnum = pgEnum('metric_type', ['CSAT', 'CES']);
 export const ratingTypeEnum = pgEnum('rating_type', ['star', 'emoji', 'effort_scale']);
-export const onPositiveActionEnum = pgEnum('on_positive_action', ['none', 'play_store_review']);
 export const askFrequencyEnum = pgEnum('ask_frequency', [
   'after_7_days',
   'after_30_days',
@@ -47,6 +46,20 @@ export const deviceAuthStatusEnum = pgEnum('device_auth_status', [
   'denied',
   'expired',
 ]);
+
+/**
+ * B5-D1: a branchable post-submit action stored as jsonb on a workflow. The tagged
+ * shape `{ type, message?, url? }` is validated/normalized at the contract boundary
+ * (`@signal/contracts` `actionSchema`); this is the structural type the column
+ * carries. `redirect` uses `url` (https-only); `thanks` uses `message`.
+ */
+export type WorkflowActionType = 'none' | 'thanks' | 'redirect' | 'store_review';
+export interface WorkflowAction {
+  type: WorkflowActionType;
+  message?: string;
+  url?: string;
+}
+const NONE_ACTION = sql`'{"type":"none"}'::jsonb`;
 
 /**
  * Accounts (B1-D2): the tenant root. Every owned row FK-references an account.
@@ -119,7 +132,9 @@ export const workflows = pgTable(
       .default(sql`'[]'::jsonb`),
     otherRequiresText: boolean('other_requires_text').notNull().default(true),
     otherAllowsImage: boolean('other_allows_image').notNull().default(false),
-    onPositiveAction: onPositiveActionEnum('on_positive_action').notNull().default('none'),
+    // B5-D1: branched post-submit actions (replaces the `on_positive_action` enum).
+    positiveAction: jsonb('positive_action').$type<WorkflowAction>().notNull().default(NONE_ACTION),
+    negativeAction: jsonb('negative_action').$type<WorkflowAction>().notNull().default(NONE_ACTION),
     askFrequency: askFrequencyEnum('ask_frequency').notNull().default('after_7_days'),
     minSessionAgeDays: integer('min_session_age_days'),
     status: workflowStatusEnum('status').notNull().default('draft'),
