@@ -79,10 +79,31 @@ export default {
       positive_threshold: 4,
       chips_on_negative: ['Slow', 'Confusing'],
       sampling_rate: 1,
+      // Branched post-submit actions (B5). `onPositive` fires when the rating is
+      // >= positive_threshold, `onNegative` otherwise. Each is one of:
+      //   { type: 'none' }
+      //   { type: 'thanks', message?: string }      // default message if omitted
+      //   { type: 'redirect', url: 'https://…' }    // https-only, required
+      //   { type: 'store_review' }                  // ask for an app-store review
+      onPositive: { type: 'store_review' },
+      onNegative: { type: 'redirect', url: 'https://support.acme.com/checkout' },
     },
   ],
 };
 ```
+
+**Post-submit actions (B5), natural language → config.** The agent maps intent to
+`onPositive`/`onNegative`:
+
+- _"Thank happy raters and send unhappy ones to our support page"_ →
+  `onPositive: { type: 'thanks' }`, `onNegative: { type: 'redirect', url: 'https://…' }`
+- _"Ask 5-star folks to review us on the store; just close for everyone else"_ →
+  `onPositive: { type: 'store_review' }`, `onNegative: { type: 'none' }`
+
+A `redirect` **requires** a valid `https://` url (an `http://`, `javascript:`, or
+missing url is rejected `422` with a message the agent can self-correct from). A blank
+`thanks` message gets a sensible default. `store_review` degrades to a thank-you/close
+on surfaces with no store (e.g. web).
 
 Semantics:
 
@@ -112,6 +133,10 @@ Tools: `list_workflows`, `get_workflow`, `create_workflow`, `update_workflow`,
 `get_responses`. Each maps to console API calls; API errors surface as `isError`
 results carrying the server's `{ code, message }` (e.g. `code_managed`,
 `event_conflict`).
+
+`create_workflow`/`update_workflow` accept the branched post-submit actions in the
+same plain terms as the deploy config — `onPositive` and `onNegative`, each an
+`{ type, message?, url? }` action (see the deploy section above).
 
 ## Event surfacing
 

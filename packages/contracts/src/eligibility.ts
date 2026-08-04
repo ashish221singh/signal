@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { metricTypeSchema, onPositiveActionSchema, ratingTypeSchema } from './primitives.js';
+import { actionSchema } from './actions.js';
+import { metricTypeSchema, ratingTypeSchema } from './primitives.js';
 
 /**
  * SDK eligibility request (B2-D5). The generic ingest contract: a named
@@ -31,7 +32,9 @@ export const eligibilityConfigSchema = z.object({
   chips_on_negative: z.array(z.string()),
   other_requires_text: z.boolean(),
   other_allows_image: z.boolean(),
-  on_positive_action: onPositiveActionSchema,
+  // B5-D3: the resolved branched post-submit actions the sheet renders inline.
+  positive_action: actionSchema,
+  negative_action: actionSchema,
   skip_enabled: z.boolean(),
 });
 export type EligibilityConfig = z.infer<typeof eligibilityConfigSchema>;

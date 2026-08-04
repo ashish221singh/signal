@@ -36,7 +36,8 @@ export function makeDbWorkflowLoader(db: Db): WorkflowLoader {
         chipsOnNegative: w.chipsOnNegative,
         otherRequiresText: w.otherRequiresText,
         otherAllowsImage: w.otherAllowsImage,
-        onPositiveAction: w.onPositiveAction,
+        positiveAction: w.positiveAction,
+        negativeAction: w.negativeAction,
         askFrequency: w.askFrequency,
         createdAt: w.createdAt,
       });

@@ -1,3 +1,5 @@
+import type { WorkflowAction } from '../db/schema.js';
+
 export interface CachedWorkflow {
   id: string;
   accountId: string;
@@ -12,7 +14,8 @@ export interface CachedWorkflow {
   chipsOnNegative: string[];
   otherRequiresText: boolean;
   otherAllowsImage: boolean;
-  onPositiveAction: 'none' | 'play_store_review';
+  positiveAction: WorkflowAction;
+  negativeAction: WorkflowAction;
   askFrequency: 'after_7_days' | 'after_30_days' | 'after_60_days';
   createdAt: Date;
 }

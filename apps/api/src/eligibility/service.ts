@@ -115,7 +115,8 @@ export class EligibilityService {
         chips_on_negative: workflow.chipsOnNegative,
         other_requires_text: workflow.otherRequiresText,
         other_allows_image: workflow.otherAllowsImage,
-        on_positive_action: workflow.onPositiveAction,
+        positive_action: workflow.positiveAction,
+        negative_action: workflow.negativeAction,
         skip_enabled: true,
       };
     });

@@ -78,6 +78,21 @@ describe('EligibilityService (real Postgres)', () => {
     expect(logs[0]!.eventName).toBe('checkout_completed');
   });
 
+  // B5-D3: the resolved branched actions ride inline in the eligibility config.
+  it('config carries the workflow’s resolved positive/negative actions', async () => {
+    await seedWorkflow({
+      positiveAction: { type: 'store_review' },
+      negativeAction: { type: 'redirect', url: 'https://support.example.com' },
+    });
+    const result = await service.check(q({ userId: 'u_actions' }));
+    expect(result).not.toBeNull();
+    expect(result!.positive_action).toEqual({ type: 'store_review' });
+    expect(result!.negative_action).toEqual({
+      type: 'redirect',
+      url: 'https://support.example.com',
+    });
+  });
+
   it('stores the optional context on the trigger', async () => {
     await seedWorkflow();
     await service.check(q({ context: 'OrderSummaryScreen' }));
@@ -163,7 +178,8 @@ describe('EligibilityService (real Postgres)', () => {
         chipsOnNegative: [],
         otherRequiresText: true,
         otherAllowsImage: false,
-        onPositiveAction: 'none',
+        positiveAction: { type: 'none' },
+        negativeAction: { type: 'none' },
         askFrequency: 'after_7_days',
         createdAt: new Date('2026-06-01T00:00:00Z'),
       },
@@ -181,7 +197,8 @@ describe('EligibilityService (real Postgres)', () => {
         chipsOnNegative: [],
         otherRequiresText: true,
         otherAllowsImage: false,
-        onPositiveAction: 'none',
+        positiveAction: { type: 'none' },
+        negativeAction: { type: 'none' },
         askFrequency: 'after_7_days',
         createdAt: new Date('2026-07-01T00:00:00Z'),
       },

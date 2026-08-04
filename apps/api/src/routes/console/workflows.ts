@@ -106,6 +106,13 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
           missing: result.missing,
         });
       }
+      // invalid_action (B5-D2): a stored positive/negative action is malformed.
+      if (result.reason === 'invalid_action') {
+        return reply.code(422).send({
+          error: { code: 'invalid_action', message: 'a post-submit action is invalid' },
+          invalid: result.invalid,
+        });
+      }
       // overlap (B2-D3): one active workflow per (account, event_name).
       if (result.reason === 'overlap') {
         return reply.code(409).send({

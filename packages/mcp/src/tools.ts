@@ -1,7 +1,7 @@
 import {
+  actionSchema,
   askFrequencySchema,
   metricTypeSchema,
-  onPositiveActionSchema,
   ratingTypeSchema,
 } from '@signal/contracts';
 import { z } from 'zod';
@@ -33,7 +33,10 @@ const workflowContentShape = {
   chips_on_negative: z.array(z.string()).optional(),
   other_requires_text: z.boolean().optional(),
   other_allows_image: z.boolean().optional(),
-  on_positive_action: onPositiveActionSchema.optional(),
+  // B5-D4: agent-friendly branched actions. `onPositive` fires on a positive rating,
+  // `onNegative` on a negative one; each is an `{ type, message?, url? }` action.
+  onPositive: actionSchema.optional(),
+  onNegative: actionSchema.optional(),
   ask_frequency: askFrequencySchema.optional(),
   sampling_rate: z.number().min(0).max(1).optional(),
   min_session_age_days: z.number().int().nonnegative().nullable().optional(),
@@ -46,6 +49,19 @@ function definedOnly<T extends Record<string, unknown>>(obj: T): Partial<T> {
     if (v !== undefined) out[k as keyof T] = v as T[keyof T];
   }
   return out;
+}
+
+/**
+ * Map the agent-facing content args to a console-API PATCH body: the friendly
+ * `onPositive`/`onNegative` become the API's `positive_action`/`negative_action`
+ * (B5-D4). Undefined keys are stripped so a PATCH only carries provided fields.
+ */
+function toWorkflowPatch(args: Record<string, unknown>): Record<string, unknown> {
+  const { onPositive, onNegative, ...rest } = args;
+  const patch = definedOnly(rest);
+  if (onPositive !== undefined) patch.positive_action = onPositive;
+  if (onNegative !== undefined) patch.negative_action = onNegative;
+  return patch;
 }
 
 function tool<S extends z.ZodRawShape>(def: ToolDef<S>): ToolDef<z.ZodRawShape> {
@@ -75,7 +91,7 @@ export const TOOLS: ToolDef<z.ZodRawShape>[] = [
     inputShape: workflowContentShape,
     handler: async (args, client) => {
       const created = await client.post<{ id: string }>('/v1/console/workflows', {});
-      const patch = definedOnly(args);
+      const patch = toWorkflowPatch(args);
       if (Object.keys(patch).length === 0) return created;
       return client.patch(`/v1/console/workflows/${created.id}`, patch);
     },
@@ -86,7 +102,7 @@ export const TOOLS: ToolDef<z.ZodRawShape>[] = [
     inputShape: { id: z.string().uuid(), ...workflowContentShape },
     handler: (args, client) => {
       const { id, ...rest } = args;
-      return client.patch(`/v1/console/workflows/${id}`, definedOnly(rest));
+      return client.patch(`/v1/console/workflows/${id}`, toWorkflowPatch(rest));
     },
   }),
   tool({

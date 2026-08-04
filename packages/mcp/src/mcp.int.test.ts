@@ -115,6 +115,22 @@ describe('@signal/mcp round-trip (real Postgres + ephemeral API)', () => {
     expect(list.data.map((w: { id: string }) => w.id)).toContain(id);
   });
 
+  // B5-D4: onPositive/onNegative map to the API's positive_action/negative_action.
+  it('create_workflow sets branched actions via onPositive/onNegative', async () => {
+    const created = await callTool(client, 'create_workflow', {
+      event_name: 'checkout_completed',
+      header_text: 'How was checkout?',
+      onPositive: { type: 'store_review' },
+      onNegative: { type: 'redirect', url: 'https://support.example.com' },
+    });
+    expect(created.isError).toBe(false);
+    expect(created.data.positive_action).toEqual({ type: 'store_review' });
+    expect(created.data.negative_action).toEqual({
+      type: 'redirect',
+      url: 'https://support.example.com',
+    });
+  });
+
   it('surfaces API errors as isError with the server code', async () => {
     // Publishing an incomplete workflow → 422 incomplete.
     const created = await callTool(client, 'create_workflow', { event_name: 'x' });

@@ -80,6 +80,23 @@ describe('deployWorkflowSchema', () => {
     const { event_name: _omit, ...rest } = valid;
     expect(deployWorkflowSchema.safeParse(rest).success).toBe(false);
   });
+  it('accepts agent-friendly branched actions (onPositive/onNegative)', () => {
+    const parsed = deployWorkflowSchema.parse({
+      ...valid,
+      onPositive: { type: 'thanks' },
+      onNegative: { type: 'redirect', url: 'https://support.example.com' },
+    });
+    expect(parsed.onPositive).toEqual({ type: 'thanks', message: 'Thanks for your feedback!' });
+    expect(parsed.onNegative).toEqual({
+      type: 'redirect',
+      url: 'https://support.example.com',
+    });
+  });
+  it('rejects a redirect onNegative with no url', () => {
+    expect(
+      deployWorkflowSchema.safeParse({ ...valid, onNegative: { type: 'redirect' } }).success,
+    ).toBe(false);
+  });
 });
 
 describe('deployRequestSchema', () => {

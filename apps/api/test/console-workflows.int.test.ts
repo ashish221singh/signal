@@ -599,6 +599,71 @@ describe('POST /v1/console/workflows/:id/publish — completeness + overlap 409 
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('active');
   });
+
+  // B5-D2/D3: branched post-submit actions publish cleanly and persist normalized.
+  it('scenario 5: publishes with valid branched actions; config normalizes them', async () => {
+    const id = await draftWith({
+      ...completePayload('checkout_completed'),
+      positive_action: { type: 'store_review' },
+      negative_action: { type: 'redirect', url: 'https://support.example.com/help' },
+    });
+    const wf = await getWorkflow(id);
+    expect(wf.positive_action).toEqual({ type: 'store_review' });
+    expect(wf.negative_action).toEqual({
+      type: 'redirect',
+      url: 'https://support.example.com/help',
+    });
+
+    const pub = await app.inject({
+      method: 'POST',
+      url: `/v1/console/workflows/${id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(pub.statusCode).toBe(200);
+    expect(pub.json().status).toBe('active');
+  });
+
+  it('scenario 5b: PATCH a redirect action with no url → 422 invalid_body (contract guard)', async () => {
+    const id = await draftWith(completePayload('checkout_completed'));
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/v1/console/workflows/${id}`,
+      headers: { cookie: cookieHeader },
+      payload: { negative_action: { type: 'redirect' } },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('invalid_body');
+  });
+
+  // B5-D2: defense in depth — a malformed action that reached the row (bypassing the
+  // contract) blocks publish with 422 invalid_action naming the offending column.
+  it('scenario 5c: publishing a row with a malformed stored action → 422 invalid_action', async () => {
+    const [row] = await t.db
+      .insert(s.workflows)
+      .values({
+        accountId,
+        eventName: 'checkout_completed',
+        metricType: 'CSAT',
+        ratingType: 'star',
+        ratingScaleMax: 5,
+        headerText: 'How was it?',
+        positiveThreshold: 4,
+        // A redirect with no url would never pass the contract — inserted directly.
+        negativeAction: { type: 'redirect' },
+        status: 'draft',
+        createdBy: userId,
+      })
+      .returning();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/console/workflows/${row!.id}/publish`,
+      headers: { cookie: cookieHeader },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('invalid_action');
+    expect(res.json().invalid).toContain('negative_action');
+    expect((await getWorkflow(row!.id)).status).toBe('draft');
+  });
 });
 
 describe('workflow lifecycle: pause / resume / archive / hard-delete (real Postgres)', () => {

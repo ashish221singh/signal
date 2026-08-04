@@ -1,8 +1,8 @@
 import { z } from 'zod';
+import { actionSchema } from '../actions.js';
 import {
   askFrequencySchema,
   metricTypeSchema,
-  onPositiveActionSchema,
   ratingTypeSchema,
   workflowStatusSchema,
 } from '../primitives.js';
@@ -137,7 +137,11 @@ export const deployWorkflowSchema = z.object({
   chips_on_negative: z.array(z.string()).optional(),
   other_requires_text: z.boolean().optional(),
   other_allows_image: z.boolean().optional(),
-  on_positive_action: onPositiveActionSchema.optional(),
+  // B5-D4: agent-authored config names the branched actions in plain terms.
+  // `onPositive` fires on a positive rating, `onNegative` on a negative one; each
+  // is an `{ type, message?, url? }` action (see `actionSchema`).
+  onPositive: actionSchema.optional(),
+  onNegative: actionSchema.optional(),
   ask_frequency: askFrequencySchema.optional(),
   min_session_age_days: z.int().nonnegative().nullable().optional(),
 });

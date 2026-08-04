@@ -1,8 +1,8 @@
 import { z } from 'zod';
+import { actionSchema } from '../actions.js';
 import {
   askFrequencySchema,
   metricTypeSchema,
-  onPositiveActionSchema,
   ratingTypeSchema,
   workflowStatusSchema,
 } from '../primitives.js';
@@ -45,7 +45,9 @@ export const workflowUpdateSchema = z.object({
   chips_on_negative: z.array(z.string()).optional(),
   other_requires_text: z.boolean().optional(),
   other_allows_image: z.boolean().optional(),
-  on_positive_action: onPositiveActionSchema.optional(),
+  // B5: branched post-submit actions (validated + normalized by `actionSchema`).
+  positive_action: actionSchema.optional(),
+  negative_action: actionSchema.optional(),
   ask_frequency: askFrequencySchema.optional(),
   min_session_age_days: z.int().nonnegative().nullable().optional(),
 });
@@ -67,7 +69,8 @@ export const workflowSchema = z.object({
   chips_on_negative: z.array(z.string()),
   other_requires_text: z.boolean(),
   other_allows_image: z.boolean(),
-  on_positive_action: onPositiveActionSchema,
+  positive_action: actionSchema,
+  negative_action: actionSchema,
   ask_frequency: askFrequencySchema,
   min_session_age_days: z.int().nullable(),
   status: workflowStatusSchema,

@@ -1,8 +1,9 @@
-import type {
-  Workflow,
-  WorkflowDraftCreate,
-  WorkflowListItem,
-  WorkflowUpdate,
+import {
+  actionSchema,
+  type Workflow,
+  type WorkflowDraftCreate,
+  type WorkflowListItem,
+  type WorkflowUpdate,
 } from '@signal/contracts';
 import { and, count, desc, eq, ne } from 'drizzle-orm';
 import type { Clock } from '../clock.js';
@@ -60,10 +61,14 @@ export interface OverlapConflict {
  * Discriminated outcome of `publish` so the route can map to
  * 200 / 404 / 422 (incomplete) / 409 (overlap).
  */
+/** The action columns a publish re-validates (B5-D2). Wire (snake_case) names. */
+export type ActionField = 'positive_action' | 'negative_action';
+
 export type PublishResult =
   | { ok: true; workflow: Workflow }
   | { ok: false; reason: 'not_found' | 'code_managed' }
   | { ok: false; reason: 'incomplete'; missing: MissingField[] }
+  | { ok: false; reason: 'invalid_action'; invalid: ActionField[] }
   | { ok: false; reason: 'overlap'; conflict: OverlapConflict };
 
 export type TransitionResult =
@@ -102,7 +107,8 @@ export function toWorkflow(r: WorkflowRow): Workflow {
     chips_on_negative: r.chipsOnNegative,
     other_requires_text: r.otherRequiresText,
     other_allows_image: r.otherAllowsImage,
-    on_positive_action: r.onPositiveAction,
+    positive_action: r.positiveAction,
+    negative_action: r.negativeAction,
     ask_frequency: r.askFrequency,
     min_session_age_days: r.minSessionAgeDays,
     status: r.status,
@@ -126,6 +132,19 @@ export function missingRequiredFields(r: WorkflowRow): MissingField[] {
   if (r.headerText === null) missing.push('header_text');
   if (r.positiveThreshold === null) missing.push('positive_threshold');
   return missing;
+}
+
+/**
+ * B5-D2: re-validate the stored branched actions at publish (defense in depth — the
+ * contract already validates on every write). A structurally invalid action (e.g. a
+ * `redirect` with no/HTTP url that somehow reached the row) blocks going active.
+ * Returns the wire names of the offending action columns; empty ⇒ both are well-formed.
+ */
+export function invalidActionFields(r: WorkflowRow): ActionField[] {
+  const invalid: ActionField[] = [];
+  if (!actionSchema.safeParse(r.positiveAction).success) invalid.push('positive_action');
+  if (!actionSchema.safeParse(r.negativeAction).success) invalid.push('negative_action');
+  return invalid;
 }
 
 export class WorkflowService {
@@ -190,7 +209,8 @@ export class WorkflowService {
     if ('chips_on_negative' in patch) set.chipsOnNegative = patch.chips_on_negative;
     if ('other_requires_text' in patch) set.otherRequiresText = patch.other_requires_text;
     if ('other_allows_image' in patch) set.otherAllowsImage = patch.other_allows_image;
-    if ('on_positive_action' in patch) set.onPositiveAction = patch.on_positive_action;
+    if ('positive_action' in patch) set.positiveAction = patch.positive_action;
+    if ('negative_action' in patch) set.negativeAction = patch.negative_action;
     if ('ask_frequency' in patch) set.askFrequency = patch.ask_frequency;
     if ('min_session_age_days' in patch) set.minSessionAgeDays = patch.min_session_age_days;
 
@@ -219,6 +239,10 @@ export class WorkflowService {
 
     const missing = missingRequiredFields(row);
     if (missing.length > 0) return { ok: false, reason: 'incomplete', missing };
+
+    // B5-D2: a workflow may not go active with a malformed action.
+    const invalid = invalidActionFields(row);
+    if (invalid.length > 0) return { ok: false, reason: 'invalid_action', invalid };
 
     // `eventName` is guaranteed non-null here (completeness passed above).
     const conflict = await this.findActiveOverlap(accountId, id, row.eventName as string);

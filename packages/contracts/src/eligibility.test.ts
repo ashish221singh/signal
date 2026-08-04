@@ -56,7 +56,8 @@ describe('eligibilityConfigSchema', () => {
       chips_on_negative: ['Slow to load', 'Sync failed'],
       other_requires_text: true,
       other_allows_image: true,
-      on_positive_action: 'play_store_review',
+      positive_action: { type: 'store_review' },
+      negative_action: { type: 'redirect', url: 'https://support.example.com' },
       skip_enabled: true,
     });
     expect(r.success).toBe(true);
