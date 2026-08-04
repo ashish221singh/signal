@@ -17,4 +17,7 @@ export const FONT_FILES = [
   'inter-400.woff2',
   'inter-500.woff2',
   'inter-600.woff2',
+  'schibsted-grotesk-400.woff2',
+  'schibsted-grotesk-600.woff2',
+  'schibsted-grotesk-700.woff2',
 ] as const;

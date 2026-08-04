@@ -18,6 +18,18 @@ async function pickNegative(): Promise<void> {
 }
 
 describe('negative detail step (DOM)', () => {
+  it('uses the fixed "Tell us what happened" header and the warm placeholder', async () => {
+    goNegative(makeHost(), { other_requires_text: true, other_allows_image: true });
+    await pickNegative();
+    expect(q('.sig-question')?.textContent).toBe('Tell us what happened');
+    const ta = q<HTMLTextAreaElement>('.sig-textarea');
+    expect(ta?.placeholder).toBe('A sentence is plenty…');
+    // The photo affordance is a dashed clickable strip (paperclip + "Add a photo · optional").
+    const photo = q('.sig-photo');
+    expect(photo?.textContent).toContain('Add a photo');
+    expect(q('.sig-photo-optional')?.textContent).toBe('· optional');
+  });
+
   it('required comment blocks submit; whitespace-only stays blocked', async () => {
     const host = goNegative(makeHost(), { other_requires_text: true });
     await pickNegative();

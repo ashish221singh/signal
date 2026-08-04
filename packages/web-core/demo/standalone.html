@@ -34,6 +34,12 @@
   scenario and launch the sheet; click through both branches and each post-submit action.</p>
 
   <fieldset>
+    <legend>Rating type</legend>
+    <label><input type="radio" name="ratingType" value="emoji" checked /> emoji</label>
+    <label><input type="radio" name="ratingType" value="star" /> star</label>
+  </fieldset>
+
+  <fieldset>
     <legend>Branch capture</legend>
     <label><input type="checkbox" id="requires-text" /> other_requires_text</label>
     <label><input type="checkbox" id="allows-image" checked /> other_allows_image</label>
@@ -106,14 +112,16 @@
   };
 
   document.getElementById('launch').addEventListener('click', () => {
+    const ratingType = radio('ratingType');
+    const isStar = ratingType === 'star';
     const config = {
       trigger_id: crypto.randomUUID(),
       campaign_id: crypto.randomUUID(),
       metric_type: 'CSAT',
-      header: 'How was your experience?',
-      rating_type: 'emoji',
-      rating_scale_max: 3,
-      positive_threshold: Number(document.getElementById('threshold').value),
+      header: isStar ? 'How easy was placing this order?' : 'How was placing this order?',
+      rating_type: ratingType,
+      rating_scale_max: isStar ? 5 : 3,
+      positive_threshold: isStar ? 4 : Number(document.getElementById('threshold').value),
       chips_on_negative: [],
       other_requires_text: document.getElementById('requires-text').checked,
       other_allows_image: document.getElementById('allows-image').checked,

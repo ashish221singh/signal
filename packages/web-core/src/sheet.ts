@@ -5,6 +5,7 @@
  * network — only `host.*`.
  */
 import { EMOJI_FACES } from './assets/emoji.js';
+import { STAR_MAX, starSvg } from './assets/star.js';
 import type { NormalizedConfig } from './config.js';
 import type { DismissReason, SheetHost } from './host.js';
 import { SheetMachine } from './machine.js';
@@ -13,6 +14,11 @@ import type { Answer } from './types.js';
 
 const COMMENT_MAX = 2000;
 
+/** Fixed warm header for the negative detail step (replaces the question). */
+const DETAIL_HEADER = 'Tell us what happened';
+/** Textarea placeholder for the detail step. */
+const DETAIL_PLACEHOLDER = 'A sentence is plenty…';
+
 /** Defaults for the post-submit "Thanks" state when the action carries no message. */
 const DEFAULT_THANKS_TITLE = 'Thanks — that helps.';
 const DEFAULT_THANKS_SUB = 'Your feedback goes straight to the product team.';
@@ -20,8 +26,15 @@ const DEFAULT_THANKS_SUB = 'Your feedback goes straight to the product team.';
 /** Green check mark inside the pale-green circle (matches the reference). */
 const CHECK_SVG =
   '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
-  '<path d="M5 12.5 L10 17.5 L19 7" fill="none" stroke="#2E8F52" stroke-width="2.6" ' +
+  '<path d="M4.5 12.5 L9.5 17.5 L19.5 6.5" fill="none" stroke="#2E8F52" stroke-width="2.4" ' +
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** Paperclip for the "Add a photo" affordance (matches the reference). */
+const CLIP_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+  '<path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19' +
+  'a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg>';
 
 export interface SheetViewOptions {
   /** Called once the sheet is fully removed (singleton cleanup in mount). */
@@ -111,12 +124,12 @@ export class SheetView {
     this.body.replaceChildren();
   }
 
-  private header(withClose = true): HTMLDivElement {
+  private header(withClose = true, text: string = this.cfg.header): HTMLDivElement {
     const header = document.createElement('div');
     header.className = 'sig-header';
     const q = document.createElement('h2');
     q.className = 'sig-question';
-    q.textContent = this.cfg.header;
+    q.textContent = text;
     header.appendChild(q);
     if (withClose) {
       const close = document.createElement('button');
@@ -131,7 +144,13 @@ export class SheetView {
     return header;
   }
 
+  /** Pick the rating renderer from the config (emoji | star), emoji as the fallback. */
   private renderRating(): void {
+    if (this.cfg.ratingType === 'star') this.renderStarRating();
+    else this.renderEmojiRating();
+  }
+
+  private renderEmojiRating(): void {
     this.clearBody();
     this.body.appendChild(this.header());
 
@@ -162,19 +181,60 @@ export class SheetView {
     this.body.appendChild(hint);
   }
 
+  private renderStarRating(): void {
+    this.clearBody();
+    this.body.appendChild(this.header());
+
+    const group = document.createElement('div');
+    group.className = 'sig-stars';
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-label', this.cfg.header);
+
+    for (let value = 1; value <= STAR_MAX; value++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sig-star';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      btn.setAttribute('aria-label', value === 1 ? '1 star' : `${value} stars`);
+      btn.dataset.value = String(value);
+      btn.tabIndex = value === 1 ? 0 : -1;
+      btn.innerHTML = starSvg;
+      btn.addEventListener('click', () => this.pickRating(value));
+      group.appendChild(btn);
+    }
+
+    this.body.appendChild(group);
+
+    const hint = document.createElement('p');
+    hint.className = 'sig-hint';
+    hint.textContent = "Tap a star — one tap, that's it";
+    this.body.appendChild(hint);
+  }
+
+  /** All rating items in the current renderer (emoji faces or stars). */
   private faces(): HTMLButtonElement[] {
-    return Array.from(this.body.querySelectorAll<HTMLButtonElement>('.sig-face'));
+    return Array.from(this.body.querySelectorAll<HTMLButtonElement>('.sig-face, .sig-star'));
+  }
+
+  /** Reflect the chosen rating onto the items: emoji marks a single tile; stars
+   *  "light" every star up to and including the chosen value. */
+  private paintRating(value: number): void {
+    const isStar = this.cfg.ratingType === 'star';
+    for (const b of this.faces()) {
+      const v = Number(b.dataset.value);
+      const checked = v === value;
+      b.setAttribute('aria-checked', checked ? 'true' : 'false');
+      b.tabIndex = checked ? 0 : -1;
+      if (isStar) b.classList.toggle('sig-star-lit', v <= value);
+    }
   }
 
   private pickRating(value: number): void {
     if (this.machine.state !== 'rating') return; // debounce double-tap
     this.machine.selectRating(value);
-    for (const b of this.faces()) {
-      const checked = Number(b.dataset.value) === value;
-      b.setAttribute('aria-checked', checked ? 'true' : 'false');
-      b.tabIndex = checked ? 0 : -1;
-    }
-    // Advance: tapping a face is the advance affordance (F1 rating edge cases).
+    this.paintRating(value);
+    // Advance: tapping a face/star is the advance affordance (F1 rating edge cases).
     const next = this.machine.advanceFromRating();
     if (next === 'detail') this.renderDetail();
     else if (next === 'submitting') this.runSubmit();
@@ -182,53 +242,44 @@ export class SheetView {
 
   private renderDetail(): void {
     this.clearBody();
-    this.body.appendChild(this.header());
+    // The header becomes a fixed warm string for this step (not the question).
+    this.body.appendChild(this.header(true, DETAIL_HEADER));
 
     const branch = document.createElement('div');
     branch.className = 'sig-branch';
 
-    let textarea: HTMLTextAreaElement | null = null;
     let errorEl: HTMLDivElement | null = null;
 
-    // Comment (shown when required or when image not the only capture).
-    const showComment = true; // negative branch always offers a comment in v1
-    if (showComment) {
-      const field = document.createElement('div');
-      field.className = 'sig-field';
-      const label = document.createElement('label');
-      label.className = 'sig-label';
-      label.textContent = 'Tell us more';
-      const ta = document.createElement('textarea');
-      ta.className = 'sig-textarea';
-      ta.maxLength = COMMENT_MAX;
-      ta.setAttribute('aria-label', 'Comment');
-      ta.placeholder = this.cfg.other_requires_text
-        ? 'Tell us what happened… (required)'
-        : 'Tell us what happened… (optional)';
-      label.htmlFor = 'sig-comment';
-      ta.id = 'sig-comment';
-      const counter = document.createElement('div');
-      counter.className = 'sig-counter';
-      counter.textContent = `0 / ${COMMENT_MAX}`;
-      ta.addEventListener('input', () => {
-        this.machine.setComment(ta.value);
-        counter.textContent = `${ta.value.length} / ${COMMENT_MAX}`;
-        if (errorEl) errorEl.textContent = '';
-        this.syncDetailSubmit(submitBtn);
-      });
-      field.append(label, ta, counter);
-      errorEl = document.createElement('div');
-      errorEl.className = 'sig-error';
-      errorEl.setAttribute('role', 'alert');
-      field.appendChild(errorEl);
-      branch.appendChild(field);
-      textarea = ta;
-    }
+    // Comment — the negative branch always offers a comment in v1.
+    const field = document.createElement('div');
+    field.className = 'sig-field';
+    const ta = document.createElement('textarea');
+    ta.className = 'sig-textarea';
+    ta.maxLength = COMMENT_MAX;
+    ta.setAttribute('aria-label', DETAIL_HEADER);
+    ta.placeholder = DETAIL_PLACEHOLDER;
+    ta.id = 'sig-comment';
+    const counter = document.createElement('div');
+    counter.className = 'sig-counter';
+    counter.textContent = `0 / ${COMMENT_MAX}`;
+    ta.addEventListener('input', () => {
+      this.machine.setComment(ta.value);
+      counter.textContent = `${ta.value.length} / ${COMMENT_MAX}`;
+      if (errorEl) errorEl.textContent = '';
+      this.syncDetailSubmit(submitBtn);
+    });
+    field.append(ta, counter);
+    errorEl = document.createElement('div');
+    errorEl.className = 'sig-error';
+    errorEl.setAttribute('role', 'alert');
+    field.appendChild(errorEl);
 
-    // Photo (F1-D7) — only if allowed.
+    // Photo (F1-D7) — only if allowed; a dashed clickable affordance inside the field.
     if (this.cfg.other_allows_image) {
-      branch.appendChild(this.buildPhotoField());
+      field.appendChild(this.buildPhotoField());
     }
+    branch.appendChild(field);
+    const textarea: HTMLTextAreaElement = ta;
 
     // Actions
     const actions = document.createElement('div');
@@ -260,38 +311,34 @@ export class SheetView {
   }
 
   private buildPhotoField(): HTMLDivElement {
-    const field = document.createElement('div');
-    field.className = 'sig-field';
-    const label = document.createElement('div');
-    label.className = 'sig-label';
-    label.textContent = 'Attach a screenshot (optional)';
-    field.appendChild(label);
-
-    const row = document.createElement('div');
-    row.className = 'sig-photo-row';
+    const wrap = document.createElement('div');
 
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/jpeg,image/png,image/webp';
     input.className = 'sig-hidden-file';
 
+    // The affordance: a dashed clickable strip — paperclip + "Add a photo · optional".
     const attachBtn = document.createElement('button');
     attachBtn.type = 'button';
-    attachBtn.className = 'sig-btn sig-btn-ghost';
-    attachBtn.textContent = 'Add a photo';
+    attachBtn.className = 'sig-photo';
+    attachBtn.innerHTML = `${CLIP_SVG}<span>Add a photo</span><span class="sig-photo-optional">· optional</span>`;
     attachBtn.addEventListener('click', () => input.click());
+
+    // Preview (thumbnail + remove) — hidden until an image is attached.
+    const preview = document.createElement('div');
+    preview.className = 'sig-photo-preview';
 
     const thumb = document.createElement('img');
     thumb.className = 'sig-thumb';
     thumb.alt = 'Attached photo preview';
-    thumb.hidden = true;
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
-    removeBtn.className = 'sig-btn sig-btn-ghost';
+    removeBtn.className = 'sig-photo-remove';
     removeBtn.textContent = 'Remove';
-    removeBtn.style.flex = 'none';
-    removeBtn.hidden = true;
+
+    preview.append(thumb, removeBtn);
 
     const status = document.createElement('div');
     status.className = 'sig-error sig-photo-status';
@@ -299,15 +346,19 @@ export class SheetView {
 
     const submitBtn = () => this.body.querySelector<HTMLButtonElement>('.sig-btn-primary') ?? null;
 
+    const showPreview = (on: boolean) => {
+      preview.classList.toggle('sig-shown', on);
+      attachBtn.style.display = on ? 'none' : '';
+    };
+
     const clearPhoto = () => {
       this.machine.setImageUrl(null);
       if (this.objectUrl) {
         URL.revokeObjectURL(this.objectUrl);
         this.objectUrl = null;
       }
-      thumb.hidden = true;
       thumb.removeAttribute('src');
-      removeBtn.hidden = true;
+      showPreview(false);
       input.value = '';
     };
 
@@ -332,8 +383,7 @@ export class SheetView {
       if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = URL.createObjectURL(processed.file);
       thumb.src = this.objectUrl;
-      thumb.hidden = false;
-      removeBtn.hidden = false;
+      showPreview(true);
       this.uploading = true;
       const primary = submitBtn();
       if (primary) primary.disabled = true;
@@ -352,9 +402,8 @@ export class SheetView {
       }
     });
 
-    row.append(attachBtn, thumb, removeBtn);
-    field.append(row, input, status);
-    return field;
+    wrap.append(attachBtn, preview, input, status);
+    return wrap;
   }
 
   private renderSubmitting(): void {
@@ -403,8 +452,9 @@ export class SheetView {
     }
     if (resolved.kind === 'redirect') {
       // Record already happened before this (runSubmit). The redirect is now an
-      // OUTLINED button the user taps — never auto-fired (F1-D4).
-      this.showThanks(resolved.message ?? DEFAULT_THANKS_TITLE, {
+      // OUTLINED button the user taps — never auto-fired (F1-D4). The title is the
+      // standard warm line; the redirect label rides the button.
+      this.showThanks(DEFAULT_THANKS_TITLE, {
         label: resolved.message ?? 'Learn more',
         onClick: () => this.host.openUrl(resolved.url),
       });
@@ -511,7 +561,7 @@ export class SheetView {
 
   private focusFirst(): void {
     const target =
-      this.sheet.querySelector<HTMLElement>('.sig-face[tabindex="0"]') ??
+      this.sheet.querySelector<HTMLElement>('.sig-face[tabindex="0"], .sig-star[tabindex="0"]') ??
       this.focusable()[0] ??
       this.sheet;
     target.focus();
@@ -534,12 +584,9 @@ export class SheetView {
       const nextIdx = current === -1 ? 0 : (current + delta + faces.length) % faces.length;
       const next = faces[nextIdx];
       if (next) {
-        this.machine.selectRating(Number(next.dataset.value));
-        for (const b of faces) {
-          const checked = b === next;
-          b.setAttribute('aria-checked', checked ? 'true' : 'false');
-          b.tabIndex = checked ? 0 : -1;
-        }
+        const value = Number(next.dataset.value);
+        this.machine.selectRating(value);
+        this.paintRating(value);
         next.focus();
       }
       return;

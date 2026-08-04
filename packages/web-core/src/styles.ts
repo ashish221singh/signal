@@ -99,10 +99,11 @@ export const componentCss = `
   margin-bottom: var(--space-4);
 }
 .sig-question {
-  font: 700 20px/1.2 var(--font-sans);
+  font: 600 20px/1.28 var(--font-display);
   color: #191815;
   margin: 0;
   padding-top: 2px;
+  padding-right: 4px;
   letter-spacing: -0.01em;
 }
 .sig-close {
@@ -137,25 +138,24 @@ export const componentCss = `
 .sig-close:hover::before { background: var(--s-line); color: var(--s-ink); }
 .sig-close:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
 
-/* --- rating step --- */
+/* --- rating step (emoji) --- */
 .sig-faces {
   display: flex;
   gap: var(--space-3);
   justify-content: center;
-  margin: var(--space-4) 0 var(--space-2);
+  margin: var(--space-6) 0 var(--space-2);
 }
 .sig-face {
-  flex: 1;
+  width: 70px;
+  height: 70px;
   min-height: 44px;
-  aspect-ratio: 1 / 1;
-  max-width: 72px;
   border: 1px solid #E5E4E1;
   background: #FFFFFF;
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(25, 24, 21, .05);
+  border-radius: 17px;
+  box-shadow: 0 1px 2px rgba(25, 24, 21, .06), 0 1px 3px rgba(25, 24, 21, .05);
   color: var(--s-ink-2);
   cursor: pointer;
-  padding: 14px;
+  padding: 0;
   transition: transform var(--motion-fast) var(--ease-out),
               background var(--motion-fast) var(--ease-out),
               border-color var(--motion-fast) var(--ease-out),
@@ -164,14 +164,40 @@ export const componentCss = `
   align-items: center;
   justify-content: center;
 }
-.sig-face svg { width: 100%; height: 100%; display: block; }
-.sig-face:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(25, 24, 21, .10); }
+.sig-face svg { width: 38px; height: 38px; display: block; }
+.sig-face:hover { transform: translateY(-3px); box-shadow: var(--s-shadow-2); }
 .sig-face[aria-checked='true'] {
   background: #FFF5EB;
   border-color: #F78200;
-  box-shadow: 0 0 0 1.5px #F78200;
 }
 .sig-face:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
+
+/* --- rating step (star) --- */
+.sig-stars {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+  margin: var(--space-6) 0 var(--space-2);
+}
+.sig-star {
+  width: 42px;
+  height: 42px;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.sig-star svg { width: 100%; height: 100%; display: block; fill: #E5E4E1; transition: fill var(--motion-fast) var(--ease-out); }
+.sig-star:hover { transform: scale(1.12); }
+.sig-star[aria-checked='true'] svg,
+.sig-star.sig-star-lit svg { fill: #F78200; }
+.sig-star:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; border-radius: 8px; }
 
 .sig-hint {
   text-align: center;
@@ -190,30 +216,63 @@ export const componentCss = `
 }
 .sig-textarea {
   width: 100%;
-  min-height: 84px;
-  max-height: 150px;
+  min-height: 92px;
+  max-height: 160px;
   resize: none;
-  font: 400 14px/1.5 var(--font-sans);
+  font: 400 14.5px/1.5 var(--font-sans);
   color: var(--s-ink);
   background: var(--s-surface-2);
   border: none;
-  border-radius: var(--s-radius-sm);
+  border-radius: 12px;
   box-shadow: var(--s-shadow-1);
-  padding: var(--space-3);
+  padding: 13px 14px;
   outline: none;
   transition: box-shadow var(--motion-fast) var(--ease-out);
 }
 .sig-textarea::placeholder { color: var(--s-ink-3); }
 .sig-textarea:focus-visible,
-.sig-textarea:focus { box-shadow: 0 0 0 1.5px var(--s-focus), 0 2px 6px rgba(0, 148, 221, .12); }
+.sig-textarea:focus { box-shadow: 0 0 0 1.6px var(--s-focus), 0 2px 8px rgba(0, 148, 221, .12); }
 .sig-counter { font: 400 12px/1.4 var(--font-sans); color: var(--s-ink-3); text-align: right; margin-top: var(--space-1); }
 .sig-error { color: var(--s-danger); font: 400 12.5px/1.4 var(--font-sans); margin-top: var(--space-2); }
 
-.sig-photo-row { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); flex-wrap: wrap; }
+/* Photo affordance — a dashed, clickable strip (paperclip + "Add a photo · optional"). */
+.sig-photo {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px dashed var(--s-line-strong);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--s-surface);
+  color: var(--s-ink-2);
+  font: 500 13px/1.4 var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              color var(--motion-fast) var(--ease-out),
+              background var(--motion-fast) var(--ease-out);
+}
+.sig-photo:hover { border-color: var(--s-accent); color: var(--s-ink); background: var(--s-accent-tint); }
+.sig-photo:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
+.sig-photo svg { width: 17px; height: 17px; flex: none; }
+.sig-photo-optional { color: var(--s-ink-3); font-weight: 400; }
+.sig-photo-preview { display: none; align-items: center; gap: var(--space-3); margin-top: var(--space-3); }
+.sig-photo-preview.sig-shown { display: flex; }
 .sig-thumb {
   width: 56px; height: 56px; border-radius: var(--s-radius-sm); object-fit: cover;
   border: 1px solid var(--s-line);
 }
+.sig-photo-remove {
+  border: 1px solid var(--s-line); background: var(--s-surface); color: var(--s-ink-2);
+  border-radius: var(--s-radius-sm); min-height: 44px; padding: 0 14px;
+  font: 500 13px/1 var(--font-sans); cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+.sig-photo-remove:hover { border-color: var(--s-line-strong); color: var(--s-ink); }
+.sig-photo-remove:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
 .sig-hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 /* --- buttons --- */
@@ -251,8 +310,8 @@ export const componentCss = `
 /* --- thanks / done state (reference: pale-green circle + green check) --- */
 .sig-thanks { text-align: center; padding: var(--space-5) 0 var(--space-3); }
 .sig-check-circle {
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   margin: 0 auto var(--space-4);
   border-radius: 50%;
   background: #E6F4EC;
@@ -261,8 +320,8 @@ export const componentCss = `
   justify-content: center;
 }
 .sig-check-circle svg { width: 30px; height: 30px; display: block; }
-.sig-thanks-title { font: 700 16px/1.3 var(--font-sans); color: #191815; margin: 0; }
-.sig-thanks-sub { font: 400 13px/1.5 var(--font-sans); color: var(--s-ink-3); margin: var(--space-2) 0 0; }
+.sig-thanks-title { font: 600 19px/1.3 var(--font-display); color: #191815; margin: 0; }
+.sig-thanks-sub { font: 400 13.5px/1.5 var(--font-sans); color: var(--s-ink-3); margin: var(--space-2) 0 0; max-width: 250px; margin-left: auto; margin-right: auto; }
 .sig-thanks-action {
   display: inline-flex;
   align-items: center;
@@ -309,6 +368,6 @@ export const componentCss = `
 
 @media (prefers-reduced-motion: reduce) {
   .sig-spinner { animation: none; }
-  .sig-backdrop, .sig-sheet, .sig-face, .sig-close, .sig-btn, .sig-textarea, .sig-thanks-action { transition: none; }
+  .sig-backdrop, .sig-sheet, .sig-face, .sig-star, .sig-star svg, .sig-close, .sig-btn, .sig-textarea, .sig-photo, .sig-thanks-action { transition: none; }
 }
 `;

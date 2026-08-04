@@ -51,6 +51,12 @@ describe('post-submit actions (DOM)', () => {
     expect(host.calls).toContain('submit');
     // Not auto-fired.
     expect(host.reviewCount).toBe(0);
+    // The store_review branch shows the standard warm title + subtext (mockup),
+    // with the review label riding the outlined button.
+    expect(q('.sig-thanks-title')?.textContent).toBe('Thanks — that helps.');
+    expect(q('.sig-thanks-sub')?.textContent).toBe(
+      'Your feedback goes straight to the product team.',
+    );
     const btn = q<HTMLButtonElement>('.sig-thanks-action');
     expect(btn).not.toBeNull();
     expect(btn?.textContent).toContain('Rate us');

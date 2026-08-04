@@ -57,6 +57,29 @@
   font-display: swap;
   src: url('./fonts/inter-600.woff2') format('woff2');
 }
+/* Schibsted Grotesk — display face for headings/questions (real Latin subset,
+   static instances of the variable font at 400/600/700). */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-700.woff2') format('woff2');
+}
 
 :root {
   /* ---- Primitive: warm neutral ramp ------------------------------------ */
@@ -104,6 +127,9 @@
   /* ---- Type ------------------------------------------------------------ */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-sans: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* Display face for question headers / thanks title (F1 mockup). Falls back to
+     a system UI stack — never a serif — so headers stay clean before the font loads. */
+  --font-display: 'Schibsted Grotesk', var(--font-sans);
 
   /* fluid type scale */
   --text-display: 600 clamp(44px, 6vw, 76px)/1.02 var(--font-mono);

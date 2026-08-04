@@ -17,6 +17,9 @@ const fontFiles = [
   ['Inter', 400, 'inter-400.woff2'],
   ['Inter', 500, 'inter-500.woff2'],
   ['Inter', 600, 'inter-600.woff2'],
+  ['Schibsted Grotesk', 400, 'schibsted-grotesk-400.woff2'],
+  ['Schibsted Grotesk', 600, 'schibsted-grotesk-600.woff2'],
+  ['Schibsted Grotesk', 700, 'schibsted-grotesk-700.woff2'],
 ];
 
 // Build data-URI @font-face rules (self-contained; no relative URL to resolve).

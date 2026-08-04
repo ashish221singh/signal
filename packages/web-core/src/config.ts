@@ -56,17 +56,17 @@ export function normalizeConfig(raw: WorkflowConfig): ConfigResult {
   if (!isValidAction(raw.positive_action)) return { ok: false, reason: 'invalid positive_action' };
   if (!isValidAction(raw.negative_action)) return { ok: false, reason: 'invalid negative_action' };
 
-  // v1 rating is a 3-point emoji scale. Unknown rating types render the emoji
-  // fallback (edge case) rather than failing closed.
+  // v1 ratings: a 3-point emoji scale (default) or a 5-point star scale. Unknown
+  // rating types render the emoji fallback (edge case) rather than failing closed.
   const rawRatingType = raw.rating_type;
   const knownType =
     rawRatingType === 'emoji' || rawRatingType === 'star' || rawRatingType === 'effort_scale';
   const ratingType: NormalizedConfig['ratingType'] = knownType ? rawRatingType : 'unknown';
 
-  // Emoji v1 is 1..3. For other/unknown types we still render the 3-point emoji
-  // fallback, so bounds are 1..3 here.
+  // Star renders a 1..5 scale; emoji / effort_scale / unknown fall back to the
+  // 3-point emoji renderer, so bounds are 1..3 for those.
   const rating_min = 1;
-  const rating_max = 3;
+  const rating_max = ratingType === 'star' ? 5 : 3;
 
   // Clamp threshold into range (edge case: out-of-range threshold).
   const positive_threshold = Math.min(

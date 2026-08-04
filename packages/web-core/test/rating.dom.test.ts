@@ -17,8 +17,11 @@ describe('rating step (DOM)', () => {
       const svg = f.querySelector('svg');
       expect(svg).not.toBeNull();
       expect(f.innerHTML).not.toContain('currentColor');
-      // The warm-yellow face fill is baked in.
+      // The warm-yellow face fill + darker rim are baked in (matches the mockup).
       expect(f.innerHTML).toContain('#FFC93C');
+      expect(f.innerHTML).toContain('#E8A93A');
+      // Mockup geometry: the faces use a 48x48 viewBox.
+      expect(svg?.getAttribute('viewBox')).toBe('0 0 48 48');
     }
   });
 
