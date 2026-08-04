@@ -13,6 +13,16 @@ import type { Answer } from './types.js';
 
 const COMMENT_MAX = 2000;
 
+/** Defaults for the post-submit "Thanks" state when the action carries no message. */
+const DEFAULT_THANKS_TITLE = 'Thanks — that helps.';
+const DEFAULT_THANKS_SUB = 'Your feedback goes straight to the product team.';
+
+/** Green check mark inside the pale-green circle (matches the reference). */
+const CHECK_SVG =
+  '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' +
+  '<path d="M5 12.5 L10 17.5 L19 7" fill="none" stroke="#2E8F52" stroke-width="2.6" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 export interface SheetViewOptions {
   /** Called once the sheet is fully removed (singleton cleanup in mount). */
   onTeardown?: () => void;
@@ -145,6 +155,11 @@ export class SheetView {
     });
 
     this.body.appendChild(group);
+
+    const hint = document.createElement('p');
+    hint.className = 'sig-hint';
+    hint.textContent = 'One tap';
+    this.body.appendChild(hint);
   }
 
   private faces(): HTMLButtonElement[] {
@@ -385,37 +400,68 @@ export class SheetView {
       return;
     }
     if (resolved.kind === 'redirect') {
-      // Record already happened before this (runSubmit). Now redirect via host.
-      if (resolved.message) this.showThanks(resolved.message);
-      this.host.openUrl(resolved.url);
-      if (!resolved.message) this.close('redirect');
+      // Record already happened before this (runSubmit). The redirect is now an
+      // OUTLINED button the user taps — never auto-fired (F1-D4).
+      this.showThanks(resolved.message ?? DEFAULT_THANKS_TITLE, {
+        label: resolved.message ?? 'Learn more',
+        onClick: () => this.host.openUrl(resolved.url),
+      });
       return;
     }
     if (resolved.kind === 'store_review') {
-      this.host.openReview();
-      this.showThanks('Thanks for your feedback!');
+      // The review prompt is an OUTLINED button the user taps — not auto-fired.
+      this.showThanks(DEFAULT_THANKS_TITLE, {
+        label: '★ Rate us on the Play Store',
+        onClick: () => this.host.openReview(),
+      });
       return;
     }
-    // thanks
+    // thanks — configured message drives the bold line; no button.
     this.showThanks(resolved.message);
   }
 
-  private showThanks(message: string): void {
+  /**
+   * The post-submit "Thanks" state: pale-green circle + green check, a bold title,
+   * a gray subtext line, and (for redirect/store_review) an outlined action button
+   * the user taps. For thanks/none there is no button and the sheet auto-closes.
+   */
+  private showThanks(title: string, action?: { label: string; onClick: () => void }): void {
     this.clearBody();
-    const center = document.createElement('div');
-    center.className = 'sig-center';
-    const check = document.createElement('div');
-    check.className = 'sig-check';
-    check.textContent = '✓';
-    check.setAttribute('aria-hidden', 'true');
-    const msg = document.createElement('p');
-    msg.className = 'sig-done-msg';
-    msg.textContent = message;
-    center.append(check, msg);
-    this.body.appendChild(center);
-    this.announce(message);
-    // Auto-close after a short dwell (F1 positive thanks edge case).
-    this.autoCloseTimer = setTimeout(() => this.close('thanks-dwell'), 2200);
+    const wrap = document.createElement('div');
+    wrap.className = 'sig-thanks';
+
+    const circle = document.createElement('div');
+    circle.className = 'sig-check-circle';
+    circle.setAttribute('aria-hidden', 'true');
+    circle.innerHTML = CHECK_SVG;
+
+    const titleEl = document.createElement('p');
+    titleEl.className = 'sig-thanks-title';
+    titleEl.textContent = title;
+
+    const sub = document.createElement('p');
+    sub.className = 'sig-thanks-sub';
+    sub.textContent = DEFAULT_THANKS_SUB;
+
+    wrap.append(circle, titleEl, sub);
+
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sig-thanks-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => action.onClick());
+      wrap.appendChild(btn);
+    }
+
+    this.body.appendChild(wrap);
+    this.announce(title);
+
+    // No follow-up action ⇒ auto-close after a short dwell. When there IS a button
+    // we keep the sheet open so the user can tap it (F1 positive thanks edge case).
+    if (!action) {
+      this.autoCloseTimer = setTimeout(() => this.close('thanks-dwell'), 2200);
+    }
   }
 
   // ---- submit flow --------------------------------------------------------

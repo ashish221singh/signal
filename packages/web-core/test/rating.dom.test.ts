@@ -11,12 +11,21 @@ describe('rating step (DOM)', () => {
     expect(q('.sig-question')?.textContent).toBe('How was your experience?');
     const faces = qa('.sig-face');
     expect(faces).toHaveLength(3);
-    // Emoji are inline SVG using currentColor (F1-D11/D18), not text emoji.
+    // Emoji are hand-authored full-color inline SVG (F1-D11/D18), not text emoji
+    // and not monochrome currentColor — so they render identically cross-platform.
     for (const f of faces) {
       const svg = f.querySelector('svg');
       expect(svg).not.toBeNull();
-      expect(f.innerHTML).toContain('currentColor');
+      expect(f.innerHTML).not.toContain('currentColor');
+      // The warm-yellow face fill is baked in.
+      expect(f.innerHTML).toContain('#FFC93C');
     }
+  });
+
+  it('shows the "One tap" hint under the faces', async () => {
+    mount(document.body, makeConfig(), makeHost());
+    await tick();
+    expect(q('.sig-hint')?.textContent).toBe('One tap');
   });
 
   it('selecting the positive face (threshold 3) routes to submitting → done', async () => {
@@ -27,7 +36,7 @@ describe('rating step (DOM)', () => {
     positive?.click();
     await tick();
     expect(host.calls).toContain('submit');
-    expect(q('.sig-done-msg')?.textContent).toBe('Yay');
+    expect(q('.sig-thanks-title')?.textContent).toBe('Yay');
   });
 
   it('selecting a negative face with capture routes to the detail step', async () => {

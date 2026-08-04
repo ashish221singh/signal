@@ -1,35 +1,41 @@
 /**
- * Brand-style rating faces (F1-D11, D18). Hand-authored inline SVG, monochrome via
- * `currentColor` so they theme with tokens and animate — NEVER the platform emoji
- * font (which renders differently per OS and can't be themed). Geometric, terminal
- * feel to match the JetBrains-Mono brand: a round head, two dot eyes, a mouth whose
- * curvature encodes the sentiment.
+ * Full-color rating faces (F1-D11, D18). Hand-authored inline SVG so they render
+ * IDENTICALLY on every platform — NEVER the system emoji font (which varies per OS
+ * and can't be controlled) and NOT monochrome `currentColor` glyphs. Each face is a
+ * warm-yellow disc with a subtle darker rim, two dot eyes, and a mouth whose
+ * curvature encodes the sentiment (frown / flat / smile).
  *
- * viewBox is 0 0 48 48. `stroke="currentColor"` + `fill="currentColor"` for the
- * eyes; the mouth is a stroked path. All strokes are round-capped.
+ * viewBox is a 0..1 unit square so the SVG scales cleanly into whatever tile size
+ * the CSS gives it. Colors are baked in (not themed) — these are a brand asset.
  */
 
-const HEAD =
-  '<circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="2.5"/>';
-const EYES =
-  '<circle cx="17" cy="20" r="2.4" fill="currentColor"/><circle cx="31" cy="20" r="2.4" fill="currentColor"/>';
+const FACE_FILL = '#FFC93C';
+const FACE_EDGE = '#E8A93A';
+const INK = '#5A4A1E';
 
-function face(mouthPath: string): string {
+/** The yellow disc + rim + eyes, shared by every face. */
+const BASE =
+  `<circle cx="0.5" cy="0.5" r="0.47" fill="${FACE_FILL}" stroke="${FACE_EDGE}" stroke-width="0.03"/>` +
+  `<circle cx="0.35" cy="0.42" r="0.052" fill="${INK}"/>` +
+  `<circle cx="0.65" cy="0.42" r="0.052" fill="${INK}"/>`;
+
+function face(mouth: string): string {
   return (
-    `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">` +
-    HEAD +
-    EYES +
-    `<path d="${mouthPath}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<svg viewBox="0 0 1 1" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">` +
+    BASE +
+    mouth +
     `</svg>`
   );
 }
 
-/** Frown — mouth curves downward. */
-export const negativeSvg = face('M15 34 Q24 27 33 34');
-/** Flat — a straight mouth. */
-export const neutralSvg = face('M15 32 L33 32');
-/** Smile — mouth curves upward. */
-export const positiveSvg = face('M15 30 Q24 37 33 30');
+const MOUTH = `stroke="${INK}" stroke-width="0.055" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+
+/** Frown — mouth curves downward (unhappy). */
+export const negativeSvg = face(`<path d="M0.34 0.72 Q0.5 0.6 0.66 0.72" ${MOUTH}/>`);
+/** Flat — a straight mouth (neutral). */
+export const neutralSvg = face(`<path d="M0.35 0.68 L0.65 0.68" ${MOUTH}/>`);
+/** Smile — mouth curves upward (happy). */
+export const positiveSvg = face(`<path d="M0.34 0.64 Q0.5 0.78 0.66 0.64" ${MOUTH}/>`);
 
 /** In display order (worst → best), 1-based to match the emoji 1..3 scale. */
 export const EMOJI_FACES: ReadonlyArray<{ value: number; label: string; svg: string }> = [

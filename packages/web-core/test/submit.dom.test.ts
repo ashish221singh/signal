@@ -23,25 +23,38 @@ describe('post-submit actions (DOM)', () => {
     expect(document.querySelector('[data-signal-sheet]')).toBeNull();
   });
 
-  it('type:thanks → shows the message', async () => {
+  it('type:thanks → shows the configured message as the bold title, no action button', async () => {
     const host = await submitPositive({ type: 'thanks', message: 'You rock' });
     expect(host.calls).toContain('submit');
-    expect(q('.sig-done-msg')?.textContent).toBe('You rock');
+    expect(q('.sig-thanks-title')?.textContent).toBe('You rock');
+    // thanks has no follow-up affordance.
+    expect(q('.sig-thanks-action')).toBeNull();
   });
 
-  it('type:redirect → records BEFORE calling host.openUrl', async () => {
+  it('type:redirect → records, then shows an outlined button that calls host.openUrl on tap', async () => {
     const host = await submitPositive({ type: 'redirect', url: 'https://example.com/next' });
-    // submit must come before the openUrl in the call log (record before redirect)
+    // Recorded on submit; the redirect is NOT auto-fired.
+    expect(host.calls).toContain('submit');
+    expect(host.openedUrls).toHaveLength(0);
+    const btn = q<HTMLButtonElement>('.sig-thanks-action');
+    expect(btn).not.toBeNull();
+    btn?.click();
+    // Only after the user taps does the host redirect — and submit came first.
     const submitIdx = host.calls.indexOf('submit');
     const redirectIdx = host.calls.findIndex((c) => c.startsWith('openUrl:'));
-    expect(submitIdx).toBeGreaterThanOrEqual(0);
     expect(redirectIdx).toBeGreaterThan(submitIdx);
     expect(host.openedUrls[0]).toBe('https://example.com/next');
   });
 
-  it('type:store_review → calls host.openReview', async () => {
+  it('type:store_review → shows an outlined button that calls host.openReview on tap', async () => {
     const host = await submitPositive({ type: 'store_review' });
     expect(host.calls).toContain('submit');
+    // Not auto-fired.
+    expect(host.reviewCount).toBe(0);
+    const btn = q<HTMLButtonElement>('.sig-thanks-action');
+    expect(btn).not.toBeNull();
+    expect(btn?.textContent).toContain('Rate us');
+    btn?.click();
     expect(host.reviewCount).toBe(1);
   });
 
