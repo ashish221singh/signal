@@ -4,7 +4,7 @@ Dark-first, code-native identity for the lean, agent-first Signal product.
 Palette carried unchanged from the previous system; everything else is new.
 
 ## Source of truth
-- **`tokens.css`** — all design tokens (colour, type, spacing, radius, motion). Dark is the default theme; add class `theme-light` for light. Components reference **semantic** tokens only, never raw ramp values.
+- **`@signal/tokens` (`packages/tokens/tokens.css`)** — the canonical home of all design tokens (colour, type, spacing, radius, motion) plus the self-hosted subset fonts (F1-D17,D19). Dark is the default theme; add class `theme-light` for light. Components reference **semantic** tokens only, never raw ramp values. The styleguide here `<link>`s that file (`../../packages/tokens/tokens.css`); code consumers (web-core, shells) import the `tokensCss` string. **No duplicate token file.**
 - **`design-system.html`** — the living styleguide. Open it to see logo, colour, type, components, product surface, motion, and voice. Has a light/dark toggle.
 
 ## Logo

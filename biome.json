@@ -1,6 +1,15 @@
 {
   "files": {
-    "includes": ["apps/**", "packages/**", "*.json", "*.ts"]
+    "includes": [
+      "apps/**",
+      "packages/**",
+      "*.json",
+      "*.ts",
+      "!**/dist",
+      "!**/*.css",
+      "!**/*.html",
+      "!packages/tokens/src/generated.ts"
+    ]
   },
   "formatter": {
     "enabled": true,

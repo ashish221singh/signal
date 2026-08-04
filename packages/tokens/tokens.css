@@ -2,7 +2,84 @@
    Signal — Design Tokens (final version)
    Dark-first, code-native. Palette carried from the previous system.
    Source of truth: primitives → semantic (theme) → component tokens.
+
+   CANONICAL HOME: packages/tokens (@signal/tokens). Do not copy this file —
+   consumers import it (styleguide via <link>, web-core via the tokensCss string,
+   later shells + hosted link). See F1-D17.
    ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   Self-hosted fonts (F1-D19). Real subset woff2 (Latin + common punctuation),
+   no runtime Google Fonts fetch. font-display:swap + system fallback stack so
+   text never blocks on font load (F1-D14). URLs are relative to this file; when
+   web-core inlines tokensCss into a shadow root it swaps these for data-URI
+   @font-face rules (see @signal/tokens fontFaceDataUriCss + web-core injection).
+   ---------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/inter-600.woff2') format('woff2');
+}
+/* Schibsted Grotesk — display face for headings/questions (real Latin subset,
+   static instances of the variable font at 400/600/700). */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/schibsted-grotesk-700.woff2') format('woff2');
+}
 
 :root {
   /* ---- Primitive: warm neutral ramp ------------------------------------ */
@@ -50,6 +127,9 @@
   /* ---- Type ------------------------------------------------------------ */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-sans: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* Display face for question headers / thanks title (F1 mockup). Falls back to
+     a system UI stack — never a serif — so headers stay clean before the font loads. */
+  --font-display: 'Schibsted Grotesk', var(--font-sans);
 
   /* fluid type scale */
   --text-display: 600 clamp(44px, 6vw, 76px)/1.02 var(--font-mono);

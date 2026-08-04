@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Signal — web-core standalone demo</title>
+<style>
+  :root { color-scheme: dark light; }
+  body {
+    margin: 0; min-height: 100vh; font-family: ui-sans-serif, system-ui, sans-serif;
+    background: #191815; color: #FCFCFB; display: grid; place-items: start center; padding: 32px;
+  }
+  .panel { width: 100%; max-width: 720px; }
+  h1 { font-family: ui-monospace, monospace; font-weight: 600; letter-spacing: -0.02em; }
+  fieldset { border: 1px solid #42413D; border-radius: 12px; margin: 12px 0; padding: 12px 16px; }
+  legend { color: #A8A7A1; font: 500 12px/1.4 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .14em; }
+  label { display: inline-flex; align-items: center; gap: 6px; margin: 4px 10px 4px 0; font-size: 14px; }
+  button.launch {
+    background: #F78200; color: #191815; border: none; border-radius: 8px; padding: 12px 20px;
+    font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 8px;
+  }
+  #log {
+    margin-top: 16px; background: #100F0D; border: 1px solid #42413D; border-radius: 12px;
+    padding: 12px 16px; font: 13px/1.5 ui-monospace, monospace; color: #A8A7A1;
+    max-height: 260px; overflow: auto; white-space: pre-wrap;
+  }
+  select { background: #201E1A; color: #FCFCFB; border: 1px solid #42413D; border-radius: 6px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>signal / web-core</h1>
+  <p>Standalone harness with a mock <code>SheetHost</code> that logs every call. Configure a
+  scenario and launch the sheet; click through both branches and each post-submit action.</p>
+
+  <fieldset>
+    <legend>Rating type</legend>
+    <label><input type="radio" name="ratingType" value="emoji" checked /> emoji</label>
+    <label><input type="radio" name="ratingType" value="star" /> star</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Branch capture</legend>
+    <label><input type="checkbox" id="requires-text" /> other_requires_text</label>
+    <label><input type="checkbox" id="allows-image" checked /> other_allows_image</label>
+    <label>positive_threshold
+      <select id="threshold"><option>1</option><option>2</option><option selected>3</option></select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Positive action</legend>
+    <label><input type="radio" name="pos" value="none" checked /> none</label>
+    <label><input type="radio" name="pos" value="thanks" /> thanks</label>
+    <label><input type="radio" name="pos" value="redirect" /> redirect</label>
+    <label><input type="radio" name="pos" value="store_review" /> store_review</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Negative action</legend>
+    <label><input type="radio" name="neg" value="none" /> none</label>
+    <label><input type="radio" name="neg" value="thanks" checked /> thanks</label>
+    <label><input type="radio" name="neg" value="redirect" /> redirect</label>
+    <label><input type="radio" name="neg" value="store_review" /> store_review</label>
+  </fieldset>
+
+  <button class="launch" id="launch">Launch sheet</button>
+  <div id="log" aria-live="polite"></div>
+</div>
+
+<!-- classic script (not a module) so this works when opened via file:// — browsers block ES-module imports over file:// (CORS). The IIFE build exposes window.SignalWebCore. -->
+<script src="../dist/web-core.global.js"></script>
+<script>
+  const { mount } = SignalWebCore;
+
+  const logEl = document.getElementById('log');
+  const log = (msg) => {
+    const t = new Date().toLocaleTimeString();
+    logEl.textContent += `[${t}] ${msg}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  const actionFor = (name, value) => {
+    switch (value) {
+      case 'thanks': return { type: 'thanks', message: `Thanks — ${name} branch!` };
+      case 'redirect': return { type: 'redirect', url: 'https://example.com/thanks', message: 'Redirecting…' };
+      case 'store_review': return { type: 'store_review' };
+      default: return { type: 'none' };
+    }
+  };
+  const radio = (n) => document.querySelector(`input[name="${n}"]:checked`).value;
+
+  // A mock SheetHost that logs every impure call. This is exactly the surface a
+  // real shell (web SDK / native WebView / hosted link) implements in F2.
+  const host = {
+    async submit(answer) {
+      log('submit  ← ' + JSON.stringify(answer));
+      await new Promise((r) => setTimeout(r, 600)); // simulate a queue/persist
+      log('submit  → resolved (queued)');
+    },
+    dismiss(reason) { log('dismiss ← reason=' + reason); },
+    async requestUpload(file) {
+      log(`requestUpload ← ${file.name} (${file.type}, ${file.size}B)`);
+      await new Promise((r) => setTimeout(r, 500));
+      const url = 'https://cdn.example.com/' + encodeURIComponent(file.name);
+      log('requestUpload → ' + url);
+      return url;
+    },
+    openReview() { log('openReview ← (native store review)'); },
+    openUrl(url) { log('openUrl ← ' + url); },
+    onResize(h) { /* native shells size the WebView */ },
+  };
+
+  document.getElementById('launch').addEventListener('click', () => {
+    const ratingType = radio('ratingType');
+    const isStar = ratingType === 'star';
+    const config = {
+      trigger_id: crypto.randomUUID(),
+      campaign_id: crypto.randomUUID(),
+      metric_type: 'CSAT',
+      header: isStar ? 'How easy was placing this order?' : 'How was placing this order?',
+      rating_type: ratingType,
+      rating_scale_max: isStar ? 5 : 3,
+      positive_threshold: isStar ? 4 : Number(document.getElementById('threshold').value),
+      chips_on_negative: [],
+      other_requires_text: document.getElementById('requires-text').checked,
+      other_allows_image: document.getElementById('allows-image').checked,
+      positive_action: actionFor('positive', radio('pos')),
+      negative_action: actionFor('negative', radio('neg')),
+      skip_enabled: false,
+    };
+    log('mount ← ' + JSON.stringify({ threshold: config.positive_threshold, pos: config.positive_action.type, neg: config.negative_action.type }));
+    mount(document.body, config, host);
+  });
+</script>
+</body>
+</html>
