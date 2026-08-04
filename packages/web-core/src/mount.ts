@@ -1,9 +1,10 @@
 /**
  * mount() — the public entry (F1). Creates a Shadow DOM host, injects tokensCss
- * (F1-D2) + component CSS, applies the theme from prefers-color-scheme (F1-D9),
- * validates the config fail-closed (F1-D10), and drives the SheetView. One sheet
- * at a time (F1-D13): a second mount while one is open is a no-op returning the
- * existing handle.
+ * (F1-D2) + component CSS, validates the config fail-closed (F1-D10), and drives
+ * the SheetView. The sheet is a guest in customers' apps so it ships a
+ * self-contained neutral WHITE surface (see styles.ts) and renders the same
+ * regardless of the host's dark/light mode. One sheet at a time (F1-D13): a
+ * second mount while one is open is a no-op returning the existing handle.
  */
 import { fontFaceCss, tokensCss } from '@signal/tokens';
 import { normalizeConfig } from './config.js';

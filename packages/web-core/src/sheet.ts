@@ -32,7 +32,6 @@ export class SheetView {
   private uploading = false;
   private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private disposeTheme: (() => void) | null = null;
   private readonly onKeydown: EventListener;
 
   constructor(
@@ -51,7 +50,6 @@ export class SheetView {
     this.backdrop = document.createElement('div');
     this.backdrop.className = 'sig-backdrop';
     this.backdrop.setAttribute('data-open', 'false');
-    this.disposeTheme = this.applyTheme(this.backdrop);
 
     this.sheet = document.createElement('div');
     this.sheet.className = 'sig-sheet';
@@ -115,7 +113,8 @@ export class SheetView {
       close.type = 'button';
       close.className = 'sig-close';
       close.setAttribute('aria-label', 'Dismiss');
-      close.textContent = '×';
+      // Glyph is drawn via CSS (.sig-close::before) so the 44px touch target
+      // wraps a 26px visible circle.
       close.addEventListener('click', () => this.dismiss('backdrop'));
       header.appendChild(close);
     }
@@ -524,21 +523,6 @@ export class SheetView {
 
   // ---- lifecycle ----------------------------------------------------------
 
-  /** Apply light/dark from prefers-color-scheme (F1-D9); returns a disposer. The
-   *  token default is dark; `.theme-light` opts into light. */
-  private applyTheme(el: HTMLElement): () => void {
-    const mq =
-      typeof matchMedia !== 'undefined' ? matchMedia('(prefers-color-scheme: light)') : null;
-    const set = () => {
-      if (mq?.matches) el.classList.add('theme-light');
-      else el.classList.remove('theme-light');
-    };
-    set();
-    const listener = () => set();
-    mq?.addEventListener?.('change', listener);
-    return () => mq?.removeEventListener?.('change', listener);
-  }
-
   dismiss(reason: DismissReason): void {
     if (this.closed) return;
     this.machine.dismiss();
@@ -557,8 +541,6 @@ export class SheetView {
     this.closed = true;
     if (this.autoCloseTimer) clearTimeout(this.autoCloseTimer);
     this.resizeObserver?.disconnect();
-    this.disposeTheme?.();
-    this.disposeTheme = null;
     this.backdrop.removeEventListener('keydown', this.onKeydown, true);
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
