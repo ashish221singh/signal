@@ -101,7 +101,9 @@ WF_STAR="$(jq -r '.id' "$BODY")"
 patch_star="$(jq -nc --arg ev "$EVENT_STAR" \
   '{event_name:$ev, metric_type:"CSAT", rating_type:"star", rating_scale_max:5,
     header_text:"How was placing this order?", positive_threshold:4,
-    chips_on_negative:["Slow","Confusing"], ask_frequency:"after_7_days", min_session_age_days:0}')"
+    chips_on_negative:["Slow","Confusing"], ask_frequency:"after_7_days", min_session_age_days:0,
+    positive_action:{type:"store_review"},
+    negative_action:{type:"redirect", url:"https://support.demo.dev/checkout"}}')"
 status="$(console_patch "/v1/console/workflows/$WF_STAR" "$patch_star")"
 expect_status 200 "$status" "4b. patch star workflow complete → 200"
 status="$(console_post "/v1/console/workflows/$WF_STAR/publish" "{}")"
@@ -138,6 +140,11 @@ expect_status 200 "$status" "6. grant u_demo_1 on $EVENT_STAR → 200"
 TRIGGER_1="$(jq -r '.trigger_id' "$BODY")"
 RATING_TYPE_1="$(jq -r '.rating_type' "$BODY")"
 [[ "$RATING_TYPE_1" == "star" ]] && echo "✅ 6b. rating_type == star" || { echo "❌ 6b. rating_type (got $RATING_TYPE_1)"; exit 1; }
+# B5: the config carries the resolved branched post-submit actions.
+POS_ACTION_1="$(jq -rc '.positive_action.type' "$BODY")"
+NEG_ACTION_1="$(jq -rc '.negative_action | [.type, .url] | join(" ")' "$BODY")"
+[[ "$POS_ACTION_1" == "store_review" ]] && echo "✅ 6c. positive_action == store_review" || { echo "❌ 6c. positive_action (got $POS_ACTION_1)"; exit 1; }
+[[ "$NEG_ACTION_1" == "redirect https://support.demo.dev/checkout" ]] && echo "✅ 6d. negative_action == redirect+url" || { echo "❌ 6d. negative_action (got $NEG_ACTION_1)"; exit 1; }
 
 # ── Scenario 7: debounce / suppress (immediate repeat) ───────────────────────
 status="$(get_eligibility "event_name=$EVENT_STAR&user_id=u_demo_1&session_age_days=200")"
