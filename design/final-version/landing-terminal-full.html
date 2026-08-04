@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>signal — feedback, at the speed you ship</title>
+<meta name="description" content="Signal asks your users one quick question, in your app, at the moment that matters — so you stop guessing. One line of code. Your agent writes it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  :root{
+    --term-bg:#0E0D0B;            /* the terminal canvas */
+    --term-line:rgba(255,255,255,.06);
+    --path:var(--info);           /* directory colour */
+    --sign:var(--action);         /* prompt $ */
+    --comment:var(--gray-500);
+  }
+  body{
+    margin:0;color:var(--ink);
+    font:var(--text-code);font-size:15px;line-height:1.75;
+    background:var(--term-bg);
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  /* faint scanlines + top glow — a terminal, not a CRT (kept subtle) */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+    background:repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px);opacity:.6}
+  body::after{content:"";position:fixed;left:0;right:0;top:0;height:340px;pointer-events:none;z-index:0;
+    background:radial-gradient(120% 100% at 50% -30%,rgba(247,130,0,.10),transparent 60%)}
+  a{color:inherit;text-decoration:none}
+
+  /* ============ TITLE BAR (the terminal header) ============ */
+  .bar{position:sticky;top:0;z-index:40;background:rgba(20,19,16,.86);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--term-line)}
+  .bar .in{max-width:1000px;margin:0 auto;display:flex;align-items:center;gap:14px;height:52px;padding:0 20px}
+  .dots{display:flex;gap:7px;margin-right:4px}
+  .dots i{width:11px;height:11px;border-radius:50%;background:var(--gray-700)}
+  .bar .logo{display:flex;align-items:center;gap:9px}
+  .bar .logo svg{width:20px;height:20px;color:var(--ink)}
+  .bar .logo .wm{font:700 16px/1 var(--font-mono);letter-spacing:-.02em}
+  .bar .sep{color:var(--gray-700)}
+  .bar .path{font:500 13px/1 var(--font-mono);color:var(--path);display:flex;align-items:center;gap:8px;min-width:0}
+  .bar .path .branch{color:var(--comment)}
+  .bar .path .branch b{color:var(--gray-400);font-weight:500}
+  .bar .grow{flex:1}
+  .bar .status{font:500 11px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--comment);display:flex;align-items:center;gap:7px}
+  .bar .status .led{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 22%,transparent)}
+  .bar .go{font:600 12px/1 var(--font-mono);color:var(--action-ink);background:var(--action);padding:9px 14px;border-radius:var(--radius-sm);transition:background var(--motion-base) var(--ease-out)}
+  .bar .go:hover{background:var(--action-hover)}
+
+  /* ============ TERMINAL BODY ============ */
+  .term{max-width:1000px;margin:0 auto;padding:0 20px;position:relative;z-index:2}
+  .blk{padding:40px 0}                       /* a session block */
+  .blk+.blk{border-top:1px solid var(--term-line)}
+
+  /* prompt lines */
+  .cmd{white-space:pre-wrap;word-break:break-word}
+  .cmd .p{color:var(--path)}
+  .cmd .s{color:var(--sign);font-weight:700}
+  .cmd .c{color:var(--ink)}
+  .cmt{color:var(--comment)}
+  .out{padding-left:2ch;white-space:pre-wrap}
+  .out.ind{padding-left:4ch}
+  .ok{color:var(--success)} .warn{color:var(--action)} .info{color:var(--path)}
+  .dim{color:var(--comment)} .acc{color:var(--action)} .em{color:var(--action)}
+  .muted{color:var(--gray-400)}
+
+  /* blinking caret */
+  .caret{display:inline-block;width:.6ch;height:1.15em;background:var(--action);transform:translateY(.22em);border-radius:1px;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* ============ HERO ============ */
+  .hero{padding:56px 0 44px}
+  .hero .banner{margin:26px 0 0}
+  .hero h1{font:700 clamp(38px,6.4vw,72px)/1.04 var(--font-mono);letter-spacing:-.03em;margin:0}
+  .hero h1 .em{color:var(--action)}
+  .hero .sub{color:var(--gray-400);font:400 clamp(15px,2vw,19px)/1.6 var(--font-mono);max-width:56ch;margin:20px 0 0}
+  .hero .prompt{margin-top:34px;display:flex;align-items:center;flex-wrap:wrap;gap:14px}
+  .hero .prompt .lead{color:var(--comment)}
+  .btn{font:600 13px/1 var(--font-mono);border-radius:var(--radius-sm);padding:12px 18px;border:1px solid transparent;cursor:pointer;transition:all var(--motion-base) var(--ease-out);display:inline-flex;align-items:center;gap:8px}
+  .btn-primary{background:var(--action);color:var(--action-ink)}
+  .btn-primary:hover{background:var(--action-hover);transform:translateY(-1px)}
+  .btn-ghost{background:transparent;color:var(--gray-400);border-color:var(--line-strong)}
+  .btn-ghost:hover{color:var(--ink);border-color:var(--action)}
+
+  /* ============ STORY BLOCKS ============ */
+  .row{display:grid;grid-template-columns:1fr 340px;gap:44px;align-items:center;margin-top:26px}
+  .row.rev{grid-template-columns:340px 1fr}
+  .row.rev .render{order:-1}
+  .say h2{font:600 clamp(24px,3.4vw,34px)/1.15 var(--font-mono);letter-spacing:-.02em;margin:14px 0 12px;color:var(--ink)}
+  .say h2 .em{color:var(--action)}
+  .say p{color:var(--gray-400);font:400 15px/1.7 var(--font-mono);max-width:46ch;margin:0}
+
+  /* rendered "output" panel */
+  .render{border:1px solid var(--line-strong);border-radius:var(--radius-lg);background:
+    radial-gradient(120% 120% at 50% 0%,rgba(255,255,255,.03),transparent 70%),var(--surface);
+    min-height:210px;display:flex;align-items:center;justify-content:center;padding:26px;position:relative;overflow:hidden}
+  .render .tag{position:absolute;top:10px;left:12px;font:500 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gray-600)}
+
+  /* scroll reveal */
+  .rv{opacity:0;transform:translateY(16px);transition:opacity .6s var(--ease-out),transform .6s var(--ease-out)}
+  .rv.in{opacity:1;transform:none}
+  .st1{transition-delay:.06s}.st2{transition-delay:.14s}.st3{transition-delay:.22s}.st4{transition-delay:.3s}
+
+  /* --- beat 1: silence (emit into void) --- */
+  .emit{width:56px;height:56px;border-radius:16px;background:var(--action);box-shadow:var(--glow)}
+  .ring{position:absolute;width:56px;height:56px;border-radius:18px;border:2px solid var(--action);opacity:0}
+  .in .ring{animation:emit 2.8s var(--ease-out) infinite}
+  .ring.r2{animation-delay:.7s}.ring.r3{animation-delay:1.4s}
+  @keyframes emit{0%{transform:scale(1);opacity:.5}70%{opacity:0}100%{transform:scale(3.6);opacity:0}}
+  .vdot{position:absolute;width:5px;height:5px;border-radius:2px;background:var(--gray-600);opacity:0}
+  .in .vdot{animation:drift 3.6s var(--ease-out) infinite}
+  @keyframes drift{0%{opacity:0;transform:translateY(6px)}30%{opacity:.5}100%{opacity:0;transform:translateY(-10px)}}
+
+  /* --- beat 2: the sheet --- */
+  .sheet{width:250px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:18px;padding:18px;box-shadow:var(--shadow-2);
+    transform:translateY(26px);opacity:0;transition:transform var(--motion-sheet) var(--ease-sheet),opacity var(--motion-slow) var(--ease-out)}
+  .in .sheet{transform:none;opacity:1}
+  .sheet .grab{width:32px;height:4px;border-radius:99px;background:var(--line-strong);margin:0 auto 14px}
+  .sheet .q{font:600 15px/1.35 var(--font-mono);margin:0 0 3px;color:var(--ink)}
+  .sheet .cx{font:400 12px/1.4 var(--font-mono);color:var(--gray-400);margin:0 0 14px}
+  .sheet .stars{display:flex;gap:6px;justify-content:space-between;margin-bottom:14px}
+  .sheet .stars span{font-size:24px;color:var(--line-strong)}
+  .in .sheet .stars span:nth-child(-n+4){color:var(--action);animation:pop .4s var(--ease-out) both}
+  .in .sheet .stars span:nth-child(1){animation-delay:.45s}
+  .in .sheet .stars span:nth-child(2){animation-delay:.55s}
+  .in .sheet .stars span:nth-child(3){animation-delay:.65s}
+  .in .sheet .stars span:nth-child(4){animation-delay:.75s}
+  @keyframes pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+  .sheet .send{text-align:center;background:var(--action);color:var(--action-ink);font:600 12px/1 var(--font-mono);padding:11px;border-radius:var(--radius-sm)}
+
+  /* --- beat 3: the read --- */
+  .read{width:100%;max-width:280px}
+  .read .score{font:700 clamp(46px,6vw,62px)/1 var(--font-mono);letter-spacing:-.03em;color:var(--ink)}
+  .read .score small{font-size:.3em;color:var(--gray-500);letter-spacing:.12em;margin-left:8px;vertical-align:.8em}
+  .read .cap{font:500 10px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--gray-600);margin:8px 0 22px}
+  .bars{display:flex;align-items:flex-end;gap:11px;height:104px}
+  .bars i{flex:1;background:var(--action);border-radius:5px 5px 2px 2px;height:0;transition:height .9s var(--ease-out)}
+  .bars i:nth-child(1){background:var(--gray-600)}.bars i:nth-child(2){background:var(--gray-500)}
+  .lbls{display:flex;gap:11px;margin-top:8px}
+  .lbls span{flex:1;text-align:center;font:400 10px/1 var(--font-mono);color:var(--gray-600)}
+
+  /* ============ INSTALL SEQUENCE ============ */
+  .install .body{margin-top:22px;border-left:2px solid var(--term-line);padding-left:20px}
+  .install .l{white-space:pre-wrap;opacity:0}
+  .install .l.show{opacity:1}
+
+  /* ============ CLOSE ============ */
+  .close{padding:64px 0 30px}
+  .close h2{font:700 clamp(30px,5vw,52px)/1.06 var(--font-mono);letter-spacing:-.03em;margin:14px 0 0}
+  .close h2 .em{color:var(--action)}
+  .close .prompt{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap}
+
+  footer{max-width:1000px;margin:0 auto;padding:26px 20px 48px;position:relative;z-index:2;
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--term-line);
+    color:var(--comment);font:400 12px/1.6 var(--font-mono)}
+  footer .logo{display:flex;align-items:center;gap:8px;color:var(--gray-400)}
+  footer .logo svg{width:16px;height:16px}
+
+  @media (max-width:720px){
+    .row,.row.rev{grid-template-columns:1fr;gap:30px}
+    .row.rev .render{order:0}
+    .render{order:-1;min-height:180px}
+    .bar .status,.bar .path .branch{display:none}
+    .blk{padding:32px 0}
+    body{font-size:14px}
+  }
+  @media (max-width:420px){
+    .bar .path{font-size:12px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .rv{transition:none!important;opacity:1!important;transform:none!important}
+    .ring,.vdot,.caret,.pop{animation:none!important}
+    .sheet{opacity:1!important;transform:none!important}
+    .in .sheet .stars span{animation:none!important}
+  }
+</style>
+<noscript><style>.rv{opacity:1!important;transform:none!important}.sheet{opacity:1!important;transform:none!important}.install .l{opacity:1!important}</style></noscript>
+</head>
+<body>
+
+<!-- ===================== TITLE BAR ===================== -->
+<header class="bar">
+  <div class="in">
+    <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <a class="logo" href="#top" aria-label="signal home">
+      <svg viewBox="0 0 96 96" aria-hidden="true"><g fill="currentColor"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg>
+      <span class="wm">signal</span>
+    </a>
+    <span class="sep">—</span>
+    <span class="path"><span>~/your-app</span><span class="branch">on&nbsp;<b>main</b></span></span>
+    <span class="grow"></span>
+    <span class="status"><span class="led"></span>connected</span>
+    <a class="go" href="#start">$ get-started</a>
+  </div>
+</header>
+
+<main class="term" id="top">
+
+  <!-- ===================== HERO ===================== -->
+  <section class="blk hero">
+    <div class="cmd rv"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">git push origin main</span></div>
+    <div class="out ok rv st1">✓ deployed to production · 12,480 users live</div>
+    <div class="cmd rv st2"><span class="p">~/your-app</span> <span class="s">$</span> <span class="cmt"># …but did anyone actually like it?</span></div>
+
+    <div class="banner">
+      <h1 class="rv st2">You shipped it.<br>But did it <span class="em">land?</span></h1>
+      <p class="sub rv st3">Signal asks your users one quick question — inside your app, at the moment that matters — so you stop guessing.</p>
+    </div>
+
+    <div class="prompt rv st4">
+      <a class="btn btn-primary" href="#start">$ signal init</a>
+      <a class="btn btn-ghost" href="#how">read the story ↓</a>
+      <span class="dim">one line of code · your agent writes it<span class="caret" aria-hidden="true"></span></span>
+    </div>
+  </section>
+
+  <!-- ===================== BEAT 1 — SILENCE ===================== -->
+  <section class="blk" id="how">
+    <div class="cmd rv"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">analytics --why</span></div>
+    <div class="out warn rv st1">⚠ 'why' is not a metric.</div>
+    <div class="row rev">
+      <div class="render rv st2">
+        <span class="tag">stdout</span>
+        <div class="emit"></div>
+        <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+        <div class="vdot" style="top:26%;left:74%;animation-delay:.3s"></div>
+        <div class="vdot" style="top:68%;left:26%;animation-delay:1.3s"></div>
+        <div class="vdot" style="top:36%;left:22%;animation-delay:2.2s"></div>
+      </div>
+      <div class="say">
+        <div class="dim rv st2">01 — the problem</div>
+        <h2 class="rv st3">You ship. Then <span class="em">silence.</span></h2>
+        <p class="rv st4">Analytics tell you what users clicked — never how they felt, or why they left. So you ship, you guess, and you hope. The signal that matters never comes back.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== BEAT 2 — SIGNAL ASKS ===================== -->
+  <section class="blk">
+    <div class="cmd rv"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">signal.track(<span class="acc">"checkout_done"</span>)</span></div>
+    <div class="out info rv st1">↳ asking the user, in-app, right now…</div>
+    <div class="row">
+      <div class="say">
+        <div class="dim rv st2">02 — signal</div>
+        <h2 class="rv st3">Ask at the <span class="em">exact</span> right moment.</h2>
+        <p class="rv st4">Right after checkout. Right when the feature lands. One question slides up inside your app — not a survey emailed to no one next week.</p>
+      </div>
+      <div class="render rv st2">
+        <span class="tag">rendered · bottom-sheet</span>
+        <div class="sheet" role="img" aria-label="In-app feedback sheet: How was checkout? four of five stars.">
+          <div class="grab"></div>
+          <p class="q">How was checkout?</p>
+          <p class="cx">3 seconds — thanks for the signal.</p>
+          <div class="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+          <div class="send">Send feedback</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== BEAT 3 — THE READ ===================== -->
+  <section class="blk">
+    <div class="cmd rv"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">signal report checkout --last 7d</span></div>
+    <div class="row rev">
+      <div class="render rv st2">
+        <span class="tag">rendered · report</span>
+        <div class="read">
+          <div class="score" data-count="4.6">0.0<small>CSAT</small></div>
+          <div class="cap">checkout · last 7 days</div>
+          <div class="bars"><i data-h="24%"></i><i data-h="42%"></i><i data-h="68%"></i><i data-h="100%"></i></div>
+          <div class="lbls"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span></div>
+        </div>
+      </div>
+      <div class="say">
+        <div class="dim rv st2">03 — the read</div>
+        <h2 class="rv st3">A clear read, <span class="em">not a spreadsheet.</span></h2>
+        <p class="rv st4">Every answer rolls up into one number and the reasons behind it. You stop guessing and start knowing — at a glance.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== INSTALL SEQUENCE ===================== -->
+  <section class="blk install" id="start">
+    <div class="dim rv">04 — one line of code</div>
+    <div class="say"><h2 class="rv st1">Your agent wires it up.</h2>
+      <p class="rv st2" style="max-width:60ch">Install, and let Claude Code or Cursor create the workflow and drop the tracking call into your app — a diff you review. No dashboard-building, no SDK spelunking.</p>
+    </div>
+    <div class="body rv st2" id="seq">
+      <div class="l"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">npx @signal/cli init</span></div>
+      <div class="l"><span class="ok">✓</span> <span class="dim">connected — agent drafting your workflow</span></div>
+      <div class="l"><span class="cmt">// agent inserts, you review the diff:</span></div>
+      <div class="l">  signal.track(<span class="acc">"checkout_done"</span>)</div>
+      <div class="l"><span class="ok">✓</span> <span class="dim">live. answers flowing to your dashboard</span> <span class="caret" aria-hidden="true"></span></div>
+    </div>
+  </section>
+
+  <!-- ===================== CLOSE ===================== -->
+  <section class="blk close">
+    <div class="cmd rv"><span class="p">~/your-app</span> <span class="s">$</span> <span class="c">signal --listen</span></div>
+    <h2 class="rv st1">Stop guessing.<br><span class="em">Start listening.</span></h2>
+    <div class="prompt rv st2">
+      <a class="btn btn-primary" href="#top">$ get-started --free</a>
+      <a class="btn btn-ghost" href="#top">read the docs →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="logo">
+    <svg viewBox="0 0 96 96" aria-hidden="true"><g fill="currentColor"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg>
+    <span>signal</span>
+  </div>
+  <div>feedback, at the speed you ship · ~/your-app on main</div>
+</footer>
+
+<script>
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(!e.isIntersecting) return;
+      const el = e.target;
+      el.classList.add('in');
+      if(el.classList.contains('rv')) el.classList.add('in');
+      if(el.id==='seq') typeSeq(el);
+      el.querySelectorAll('.bars i').forEach(b=>{ if(b.dataset.h) b.style.height=b.dataset.h; });
+      const sc = el.querySelector('.score'); if(sc) countUp(sc);
+      io.unobserve(el);
+    });
+  },{threshold:.3});
+  document.querySelectorAll('.rv, .render, .row').forEach(el=>io.observe(el));
+
+  function countUp(el){
+    const t = parseFloat(el.dataset.count);
+    if(reduce){ el.firstChild.textContent = t.toFixed(1); return; }
+    let s=null; const d=1000;
+    (function step(ts){ if(!s)s=ts; const p=Math.min((ts-s)/d,1);
+      el.firstChild.textContent = (t*(1-Math.pow(1-p,3))).toFixed(1);
+      if(p<1) requestAnimationFrame(step); })(performance.now());
+  }
+  function typeSeq(box){
+    const lines=[...box.querySelectorAll('.l')];
+    if(reduce){ lines.forEach(l=>l.classList.add('show')); return; }
+    let i=0;(function n(){ if(i>=lines.length) return; lines[i++].classList.add('show'); setTimeout(n,520); })();
+  }
+</script>
+</body>
+</html>
