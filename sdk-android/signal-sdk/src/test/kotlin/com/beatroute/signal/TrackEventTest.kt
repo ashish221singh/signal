@@ -1,6 +1,6 @@
 package com.beatroute.signal
 
-import com.beatroute.signal.internal.EligibilityConfig
+import com.beatroute.signal.internal.EligibilityResult
 import com.beatroute.signal.internal.EligibilitySource
 import com.beatroute.signal.internal.SheetPresenter
 import com.beatroute.signal.internal.SignalState
@@ -21,26 +21,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
+/**
+ * The shared trigger flow (re-keyed to the event model, F2-D3): suppression short-circuit
+ * on `(eventName, userId)`, fail-silent eligibility, and presenting the WebView sheet
+ * with the raw config result. All collaborators are faked so this stays a pure unit test.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class TrackEventTest {
 
     private val fixedNow = 1_700_000_000_000L
 
-    private fun config(triggerId: String = "trig-1") = EligibilityConfig(
-        triggerId = triggerId,
-        campaignId = "camp-1",
-        metricType = "csat",
-        header = "How was it?",
-        ratingType = "star",
-        ratingScaleMax = 5,
-        positiveThreshold = 4,
-        chipsOnNegative = listOf("Slow"),
-        otherRequiresText = true,
-        otherAllowsImage = true,
-        onPositiveAction = "none",
-        skipEnabled = true,
-    )
+    private fun result(triggerId: String = "trig-1") =
+        EligibilityResult(triggerId = triggerId, rawConfigJson = """{"trigger_id":"$triggerId"}""")
 
     private class FakeSession(
         private val userId: String = "user-42",
@@ -53,28 +46,28 @@ class TrackEventTest {
     }
 
     private class FakeEligibilitySource(
-        private val result: EligibilityConfig? = null,
+        private val result: EligibilityResult? = null,
         private val throwError: Boolean = false,
     ) : EligibilitySource {
         var callCount = 0
-        var lastScreenId: String? = null
+        var lastEventName: String? = null
         var lastUserId: String? = null
-        var lastClientId: String? = null
-        var lastRepTenure: Int? = null
-        var repTenureWasSet = false
+        var lastContext: String? = null
+        var lastSessionAgeDays: Int? = null
+        var sessionAgeWasSet = false
 
         override suspend fun check(
-            screenId: String,
+            eventName: String,
             userId: String,
-            clientId: String,
-            repTenureDays: Int?,
-        ): EligibilityConfig? {
+            context: String?,
+            sessionAgeDays: Int?,
+        ): EligibilityResult? {
             callCount++
-            lastScreenId = screenId
+            lastEventName = eventName
             lastUserId = userId
-            lastClientId = clientId
-            lastRepTenure = repTenureDays
-            repTenureWasSet = true
+            lastContext = context
+            lastSessionAgeDays = sessionAgeDays
+            sessionAgeWasSet = true
             if (throwError) throw RuntimeException("boom")
             return result
         }
@@ -86,25 +79,25 @@ class TrackEventTest {
         var isSuppressedCalled = false
         var recordCalled = false
 
-        override suspend fun isSuppressed(screenId: String, clientId: String, nowMs: Long): Boolean {
+        override suspend fun isSuppressed(eventName: String, userId: String, nowMs: Long): Boolean {
             isSuppressedCalled = true
             return suppressed
         }
 
-        override suspend fun recordInteraction(screenId: String, clientId: String, nowMs: Long) {
+        override suspend fun recordInteraction(eventName: String, userId: String, nowMs: Long) {
             recordCalled = true
         }
     }
 
     private class FakeSheetPresenter : SheetPresenter {
         var showCount = 0
-        var lastScreenId: String? = null
-        var lastConfig: EligibilityConfig? = null
+        var lastEventName: String? = null
+        var lastResult: EligibilityResult? = null
 
-        override fun show(screenId: String, config: EligibilityConfig) {
+        override fun show(eventName: String, result: EligibilityResult) {
             showCount++
-            lastScreenId = screenId
-            lastConfig = config
+            lastEventName = eventName
+            lastResult = result
         }
     }
 
@@ -129,7 +122,6 @@ class TrackEventTest {
                 "http://localhost/".toHttpUrl(), "test-app-key",
             ),
             scope = scope,
-            dwellTimer = com.beatroute.signal.internal.DwellTimer(scope) { },
             clock = { fixedNow },
         )
     }
@@ -141,12 +133,12 @@ class TrackEventTest {
 
     @Test
     fun `locally suppressed short-circuits before any network call`() = runTest {
-        val eligibility = FakeEligibilitySource(result = config())
+        val eligibility = FakeEligibilitySource(result = result())
         val suppression = FakeSuppressionStore(suppressed = true)
         val presenter = FakeSheetPresenter()
         Signal.state = buildState(testScheduler, eligibility, suppression, presenter)
 
-        Signal.trackEvent("delivery")
+        Signal.trackEvent("order_completion")
         advanceUntilIdle()
 
         assertTrue(suppression.isSuppressedCalled)
@@ -161,7 +153,7 @@ class TrackEventTest {
         val presenter = FakeSheetPresenter()
         Signal.state = buildState(testScheduler, eligibility, suppression, presenter)
 
-        Signal.trackEvent("delivery")
+        Signal.trackEvent("order_completion")
         advanceUntilIdle()
 
         assertEquals(1, eligibility.callCount)
@@ -171,17 +163,18 @@ class TrackEventTest {
 
     @Test
     fun `not suppressed and eligibility returns config shows sheet once`() = runTest {
-        val cfg = config("trig-show")
-        val eligibility = FakeEligibilitySource(result = cfg)
+        val res = result("trig-show")
+        val eligibility = FakeEligibilitySource(result = res)
         val suppression = FakeSuppressionStore(suppressed = false)
         val presenter = FakeSheetPresenter()
         Signal.state = buildState(testScheduler, eligibility, suppression, presenter)
 
-        Signal.trackEvent("delivery")
+        Signal.trackEvent("order_completion")
         advanceUntilIdle()
 
         assertEquals(1, presenter.showCount)
-        assertEquals(cfg, presenter.lastConfig)
+        assertEquals(res, presenter.lastResult)
+        assertEquals("order_completion", presenter.lastEventName)
     }
 
     @Test
@@ -195,11 +188,11 @@ class TrackEventTest {
         Signal.trackEvent("payment")
         advanceUntilIdle()
 
-        assertEquals("payment", eligibility.lastScreenId)
+        assertEquals("payment", eligibility.lastEventName)
         assertEquals("u-99", eligibility.lastUserId)
-        assertEquals("c-88", eligibility.lastClientId)
-        assertTrue(eligibility.repTenureWasSet)
-        assertEquals(123, eligibility.lastRepTenure)
+        assertNull(eligibility.lastContext)
+        assertTrue(eligibility.sessionAgeWasSet)
+        assertEquals(123, eligibility.lastSessionAgeDays)
     }
 
     @Test
@@ -210,11 +203,11 @@ class TrackEventTest {
         Signal.state = buildState(testScheduler, eligibility, suppression, presenter)
 
         // Must not throw into the host.
-        Signal.trackEvent("delivery")
+        Signal.trackEvent("order_completion")
         advanceUntilIdle()
 
         assertEquals(1, eligibility.callCount)
         assertEquals(0, presenter.showCount)
-        assertNull(presenter.lastConfig)
+        assertNull(presenter.lastResult)
     }
 }

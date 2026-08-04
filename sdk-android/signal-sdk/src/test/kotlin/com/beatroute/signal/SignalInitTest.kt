@@ -44,10 +44,8 @@ class SignalInitTest {
 
         // Must not throw.
         Signal.trackEvent("order_completion")
-        Signal.onScreenEnter("delivery")
-        Signal.onScreenExit("delivery")
 
-        // Still uninitialized after no-op hooks.
+        // Still uninitialized after the no-op hook.
         assertFalse(Signal.isInitialized())
     }
 

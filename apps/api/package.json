@@ -28,6 +28,7 @@
     "@fastify/rate-limit": "^11.1.0",
     "@node-rs/argon2": "^2.0.2",
     "@signal/contracts": "workspace:*",
+    "@signal/web-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.0.0",
     "fastify-plugin": "^6.0.0",
@@ -35,8 +36,11 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@signal/web": "workspace:*",
     "@testcontainers/postgresql": "^12.0.4",
     "drizzle-kit": "^0.31.10",
+    "fake-indexeddb": "^6.0.0",
+    "happy-dom": "^15.11.7",
     "testcontainers": "^12.0.4",
     "tsx": "^4.0.0"
   }

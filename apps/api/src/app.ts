@@ -19,9 +19,11 @@ import { consoleAuthRoutes } from './routes/console/auth.js';
 import { deployRoutes } from './routes/console/deploy.js';
 import { eventRoutes } from './routes/console/events.js';
 import { managementRoutes } from './routes/console/management.js';
+import { previewRoutes } from './routes/console/preview.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { userDataRoutes } from './routes/console/users.js';
 import { workflowRoutes } from './routes/console/workflows.js';
+import { previewServeRoutes } from './routes/preview.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { TokenService } from './tokens/service.js';
@@ -49,6 +51,11 @@ export interface AppDeps {
 export async function buildApp(env: Env, deps: AppDeps = {}) {
   const app = Fastify({
     logger: env.NODE_ENV === 'test' ? false : { level: env.LOG_LEVEL },
+    // Hosted-link preview tokens (F2-D16) are long signed strings carried as a
+    // path param (`/s/preview/:token`); raise the router's param cap (default 100)
+    // so a valid token routes to the handler instead of a 414. Affects routing
+    // only; body/query limits are unchanged.
+    routerOptions: { maxParamLength: 2048 },
   });
 
   let closeDb = deps.closeDb;
@@ -160,6 +167,12 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
     }),
   );
 
+  // Hosted-link preview serving (F2-D7, F2-D16) — PUBLIC, mounted at the root:
+  // `/s/preview/web-core.js` (the bundled IIFE) + `/s/preview/:token` (the
+  // standalone harness). The signed token is the grant; an expired/invalid one
+  // renders a friendly 404. The minting route lives in the guarded console scope.
+  await app.register(previewServeRoutes({ db: resolvedDb, clock, env }));
+
   // CORS (B4-D2). Two console registrations exist (`/v1/console/auth` and the
   // guarded `/v1/console` subtree); both get the SAME credentialed policy so the
   // dashboard can log in AND read reports cross-origin. Allowed origins come from
@@ -192,6 +205,9 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
         prefix: '/workflows',
       });
+      // Hosted-link preview minting (F2-D16) — `POST /preview`, `workflows:read`.
+      // No sub-prefix; carries its own `/preview` path.
+      await consoleApi.register(previewRoutes({ db: resolvedDb, clock, env }));
       // Key & CLI-token management (B3, Task 6) — no sub-prefix; carries its own
       // `/keys` and `/cli-tokens` paths, distinct from `/workflows`.
       await consoleApi.register(managementRoutes({ db: resolvedDb, tokens: tokenService }));

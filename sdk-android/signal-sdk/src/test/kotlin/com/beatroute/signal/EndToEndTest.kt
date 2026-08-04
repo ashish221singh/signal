@@ -13,7 +13,7 @@ import com.beatroute.signal.internal.SignalJson
 import com.beatroute.signal.internal.outbox.OutboxDependencies
 import com.beatroute.signal.internal.outbox.OutboxEntity
 import com.beatroute.signal.internal.outbox.OutboxWorker
-import com.beatroute.signal.ui.SignalBottomSheetFragment
+import com.beatroute.signal.ui.WebViewSheetFragment
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
@@ -34,34 +34,36 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * Milestone 3 exit proof (Task H.1): the WHOLE Signal loop against a real
- * [MockWebServer], driven through the REAL `Signal.init` wiring — a real
- * [com.beatroute.signal.internal.EligibilityClient], the real
- * [com.beatroute.signal.internal.SignalSheetPresenter] (shows the real
- * [SignalBottomSheetFragment] via the [com.beatroute.signal.internal.ActivityTracker]
- * registered on the Application), the real Room outbox, the real
- * [com.beatroute.signal.internal.LocalSuppressionCache] (DataStore), and the real
- * [OutboxWorker]. Nothing is faked except the host [SessionProvider] and the network
- * peer (the mock server).
+ * F2 refit exit proof: the WHOLE Signal loop against a real [MockWebServer], driven
+ * through the REAL `Signal.init` wiring — a real
+ * [com.beatroute.signal.internal.EligibilityClient] (re-keyed to `event_name`), the
+ * real [com.beatroute.signal.internal.WebSheetPresenter] (shows the real
+ * [WebViewSheetFragment] hosting the bundled web-core via the
+ * [com.beatroute.signal.internal.ActivityTracker] registered on the Application), the
+ * real per-sheet [com.beatroute.signal.internal.SignalBridge], the real Room outbox,
+ * the real [com.beatroute.signal.internal.LocalSuppressionCache] (DataStore), and the
+ * real [OutboxWorker]. Nothing is faked except the host [SessionProvider] and the
+ * network peer (the mock server).
  *
- * trackEvent -> eligibility GET -> sheet shown -> submit -> outbox row -> worker
- * flush -> POST /response -> row cleared -> a second trackEvent is short-circuited by
- * local suppression (no second eligibility GET).
+ * trackEvent -> eligibility GET (event_name) -> WebView sheet shown (bundled web-core)
+ * -> bridge SUBMIT -> outbox row -> worker flush -> POST /response -> row cleared ->
+ * a second trackEvent is short-circuited by local suppression (no second GET).
  *
- * DRIVING SUBMIT: the one place we do not drive raw widgets is the submit tap. Raw
- * widget taps under Robolectric are fragile, so — exactly as the G.3 / earlier UI
- * tests did — we invoke the shown fragment's installed `onSubmit` bridge directly with
- * an assembled positive [ResponseBody]. That callback IS the real submit bridge: the
+ * DRIVING SUBMIT under Robolectric: a real WebView cannot execute the bundled web-core
+ * JS in a JVM unit test, so — exactly as the pre-refit test drove the presenter's
+ * onSubmit bridge — we drive the shown fragment's installed [SignalBridge] directly with
+ * the exact SUBMIT JSON web-core emits. That bridge IS the real submit path: the
  * presenter installs it in `show(...)`, so calling it exercises the real
- * presenter -> outbox -> suppression path end to end. Everything else (init wiring,
+ * bridge -> outbox -> suppression path end to end. Everything else (init wiring,
  * eligibility HTTP, fragment show, worker flush, POST HTTP, suppression short-circuit)
- * runs through the genuine production code.
+ * runs through the genuine production code. The visual sheet render is covered by the
+ * web-core JS suite.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class EndToEndTest {
 
-    /** A Material3/AppCompat-themed host so the BottomSheetDialogFragment can inflate. */
+    /** A Material3/AppCompat-themed host so the DialogFragment can attach. */
     class HostActivity : AppCompatActivity() {
         override fun onCreate(savedInstanceState: Bundle?) {
             setTheme(com.beatroute.signal.R.style.Theme_Signal)
@@ -98,12 +100,6 @@ class EndToEndTest {
         OutboxDependencies.feedback = null
     }
 
-    /**
-     * Bounded await: drain the main looper (where the SDK scope's
-     * Dispatchers.Main.immediate continuations resume) and poll [condition] up to ~50x
-     * with a short real sleep between tries, so genuine async completes but a real
-     * wiring failure still fails the test instead of hanging.
-     */
     private fun awaitTrue(condition: () -> Boolean): Boolean {
         repeat(50) {
             shadowOf(getMainLooper()).idle()
@@ -118,7 +114,7 @@ class EndToEndTest {
         runBlocking { OutboxDependencies.dao!!.pending() }
 
     @Test
-    fun `full loop trackEvent to sheet to submit to outbox flush, then suppressed`() {
+    fun `full loop trackEvent to web sheet to bridge submit to outbox flush, then suppressed`() {
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -148,13 +144,11 @@ class EndToEndTest {
             baseUrlOverride = server.url("/").toString(),
             appKeyOverride = "e2e-key",
         )
-        // The presenter's submit path calls Outbox.enqueueAndSchedule ->
-        // WorkManager.getInstance(app); initialize the test WorkManager so it resolves.
         WorkManagerTestInitHelper.initializeTestWorkManager(app)
 
         activity = Robolectric.buildActivity(HostActivity::class.java).setup().get()
 
-        // ---- Step 1: trackEvent -> real eligibility GET ----
+        // ---- Step 1: trackEvent -> real eligibility GET (re-keyed to event_name) ----
         Signal.trackEvent("order_completion")
 
         assertTrue(
@@ -166,34 +160,36 @@ class EndToEndTest {
         assertTrue(eligibilityReq.path!!.startsWith("/v1/sdk/eligibility"))
         assertEquals("e2e-key", eligibilityReq.getHeader("X-Signal-App-Key"))
         val eligibilityUrl = eligibilityReq.requestUrl!!
-        assertEquals("order_completion", eligibilityUrl.queryParameter("screen_id"))
+        assertEquals("order_completion", eligibilityUrl.queryParameter("event_name"))
         assertEquals("user-42", eligibilityUrl.queryParameter("user_id"))
-        assertEquals("client-7", eligibilityUrl.queryParameter("client_id"))
-        assertEquals("90", eligibilityUrl.queryParameter("rep_tenure_days"))
+        assertEquals("90", eligibilityUrl.queryParameter("session_age_days"))
+        // Old screen-model params are gone.
+        assertNull(eligibilityUrl.queryParameter("screen_id"))
+        assertNull(eligibilityUrl.queryParameter("client_id"))
 
-        // ---- Step 2: the sheet fragment is shown on the host ----
+        // ---- Step 2: the WebView sheet fragment is shown on the host ----
         assertTrue(
-            "expected the signal_sheet fragment to be shown",
+            "expected the signal_web_sheet fragment to be shown",
             awaitTrue {
-                activity.supportFragmentManager.findFragmentByTag("signal_sheet") != null
+                activity.supportFragmentManager
+                    .findFragmentByTag(WebViewSheetFragment.SHEET_TAG) != null
             },
         )
         val fragment = activity.supportFragmentManager
-            .findFragmentByTag("signal_sheet") as? SignalBottomSheetFragment
-        assertNotNull("shown fragment should be a SignalBottomSheetFragment", fragment)
+            .findFragmentByTag(WebViewSheetFragment.SHEET_TAG) as? WebViewSheetFragment
+        assertNotNull("shown fragment should be a WebViewSheetFragment", fragment)
+        val bridge = fragment!!.bridge
+        assertNotNull("the presenter wired a SignalBridge into the fragment", bridge)
 
-        // ---- Step 3: drive a POSITIVE submit through the installed bridge ----
-        // Direct callback invocation of the presenter-installed onSubmit bridge (see
-        // class doc). rating_value 5 >= positive_threshold 4 -> positive.
-        fragment!!.onSubmit!!.invoke(
-            ResponseBody(
-                triggerId = fixtureTriggerId,
-                ratingValue = 5,
-                deviceOs = "Android 13",
-                appVersion = "1.0.0",
-                shownAt = "2026-07-09T10:00:00Z",
-                respondedAt = "2026-07-09T10:00:05Z",
-            ),
+        // ---- Step 3: drive a SUBMIT through the installed bridge (see class doc) ----
+        // rating_value 3 on the emoji scale (positive_threshold 3) -> positive.
+        bridge!!.submit(
+            """
+            {
+              "bridge_version": 1,
+              "answer": { "trigger_id": "$fixtureTriggerId", "rating_value": 3, "positive": true }
+            }
+            """.trimIndent(),
         )
 
         assertTrue(
@@ -206,9 +202,9 @@ class EndToEndTest {
         assertEquals(fixtureTriggerId, rows[0].triggerId)
         val enqueued = SignalJson.decodeFromString<ResponseBody>(rows[0].payloadJson)
         assertEquals(fixtureTriggerId, enqueued.triggerId)
-        assertEquals(5, enqueued.ratingValue)
-        // The presenter patched rep tenure from the SessionProvider.
-        assertEquals(90, enqueued.repTenureDays)
+        assertEquals(3, enqueued.ratingValue)
+        // The bridge patched session_age_days from the SessionProvider.
+        assertEquals(90, enqueued.sessionAgeDays)
 
         // ---- Step 4: run the real worker -> POST /response -> row cleared ----
         val worker = TestListenableWorkerBuilder<OutboxWorker>(app).build()
@@ -221,7 +217,7 @@ class EndToEndTest {
         assertEquals("e2e-key", responseReq.getHeader("X-Signal-App-Key"))
         val postedBody = SignalJson.decodeFromString<ResponseBody>(responseReq.body.readUtf8())
         assertEquals(fixtureTriggerId, postedBody.triggerId)
-        assertEquals(5, postedBody.ratingValue)
+        assertEquals(3, postedBody.ratingValue)
 
         assertTrue(
             "outbox should be empty after a successful flush",
@@ -229,27 +225,18 @@ class EndToEndTest {
         )
 
         // ---- Step 5: a second trackEvent is short-circuited by local suppression ----
-        // The submit records local suppression for (order_completion, client-7) at the real
-        // clock's "now", but that write happens in the presenter's launched coroutine AFTER
-        // the outbox enqueue (which we already awaited). Wait until the SDK's OWN real
-        // LocalSuppressionCache actually reports the pair as suppressed before firing the
-        // second trackEvent — otherwise we'd race the DataStore write. This queries the exact
-        // cache instance Signal.init built (via the internal SignalState), so it's deterministic.
         val realCache = Signal.state!!.suppressionCache
         assertTrue(
             "the submit should have recorded local suppression for the pair",
             awaitTrue {
                 runBlocking {
-                    realCache.isSuppressed("order_completion", "client-7", System.currentTimeMillis())
+                    realCache.isSuppressed("order_completion", "user-42", System.currentTimeMillis())
                 }
             },
         )
 
-        // The 7-day floor means a second trackEvent must never reach the network. Capture the
-        // eligibility count, fire again, and assert it is unchanged.
         val getsBeforeSecond = eligibilityGets.get()
         Signal.trackEvent("order_completion")
-        // Give the flow room to (not) run: idle + poll, then assert no new GET happened.
         repeat(20) {
             shadowOf(getMainLooper()).idle()
             Thread.sleep(10)
@@ -259,7 +246,6 @@ class EndToEndTest {
             getsBeforeSecond,
             eligibilityGets.get(),
         )
-        // No further request should be queued for the mock either.
         assertNull(server.takeRequest(500, TimeUnit.MILLISECONDS))
     }
 }

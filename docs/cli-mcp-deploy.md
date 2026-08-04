@@ -53,10 +53,21 @@ signal login --password …    # interim credential login
 signal whoami                # show the stored login
 signal deploy <file>         # apply a config-as-code file
 signal workflows list        # list the account's workflows
+signal init <pk_…> [--dir d] # install the Web SDK + wire Signal.init (F2-D8)
 ```
 
 Config lives in `~/.signal/config.json` (`SIGNAL_CONFIG_DIR` overrides the dir;
 `--api-url` / `SIGNAL_API_URL` overrides the API base URL).
+
+### `signal init` — Web SDK install (F2-D8)
+
+One-time setup for a web/npm project. It (idempotently) adds `@signal/web` to the
+project's `package.json` dependencies and writes a `signal-setup.js` snippet that
+calls `Signal.init('<publishableKey>')`, then prints next steps (install + import
+the snippet, then `Signal.track('event')`). It never rewrites your own entry/source
+files (guessing wrong is worse than a one-line manual step); an unknown project
+(no `package.json`) prints manual steps instead of guessing. Native SDK install is
+out of scope. Does not require login (offline, no API call).
 
 ## Config-as-code deploy
 

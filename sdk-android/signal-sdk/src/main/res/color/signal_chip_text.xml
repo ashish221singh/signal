@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  Chip text color (Task E.4). Selected chips use signal_orange_800; default is
-  the secondary ink so chips read as quiet until chosen.
--->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@color/signal_orange_800" android:state_checked="true" />
-    <item android:color="@color/signal_ink_secondary" />
-</selector>

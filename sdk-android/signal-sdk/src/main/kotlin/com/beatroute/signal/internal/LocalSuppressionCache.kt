@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.first
 /**
  * DataStore-backed local suppression cache (M3-D9).
  *
- * OPTIMIZATION ONLY, never authoritative. After any completed interaction for a
- * `(screenId, clientId)` pair, this short-circuits eligibility calls for a 7-day
+ * OPTIMIZATION ONLY, never authoritative. After any completed interaction for an
+ * `(eventName, userId)` pair, this short-circuits eligibility calls for a 7-day
  * local floor — the minimum real server cooldown. The backend's atomic claim
  * remains the source of truth: a 7-day floor can never suppress a legitimate ask
  * early (min real cooldown is 7 days), and under-caching only costs one harmless 204.
@@ -21,20 +21,20 @@ import kotlinx.coroutines.flow.first
 internal class LocalSuppressionCache(
     private val dataStore: DataStore<Preferences>,
 ) : SuppressionStore {
-    private fun key(screenId: String, clientId: String) =
-        longPreferencesKey("$screenId|$clientId")
+    private fun key(eventName: String, userId: String) =
+        longPreferencesKey("$eventName|$userId")
 
     /** Records a completed interaction at [nowMs] for the given pair. */
-    override suspend fun recordInteraction(screenId: String, clientId: String, nowMs: Long) {
-        dataStore.edit { prefs -> prefs[key(screenId, clientId)] = nowMs }
+    override suspend fun recordInteraction(eventName: String, userId: String, nowMs: Long) {
+        dataStore.edit { prefs -> prefs[key(eventName, userId)] = nowMs }
     }
 
     /**
      * Returns true iff a prior interaction is recorded for the pair and it falls
      * within the 7-day suppression floor relative to [nowMs]. Missing key -> false.
      */
-    override suspend fun isSuppressed(screenId: String, clientId: String, nowMs: Long): Boolean {
-        val stored = dataStore.data.first()[key(screenId, clientId)]
+    override suspend fun isSuppressed(eventName: String, userId: String, nowMs: Long): Boolean {
+        val stored = dataStore.data.first()[key(eventName, userId)]
         return stored != null && (nowMs - stored) < SUPPRESS_FLOOR_MS
     }
 

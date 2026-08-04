@@ -47,6 +47,9 @@ importers:
       '@signal/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@signal/web-core':
+        specifier: workspace:*
+        version: link:../../packages/web-core
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)
@@ -63,12 +66,21 @@ importers:
         specifier: ^4.0.0
         version: 4.4.3
     devDependencies:
+      '@signal/web':
+        specifier: workspace:*
+        version: link:../../packages/web
       '@testcontainers/postgresql':
         specifier: ^12.0.4
         version: 12.0.4
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      fake-indexeddb:
+        specifier: ^6.0.0
+        version: 6.2.5
+      happy-dom:
+        specifier: ^15.11.7
+        version: 15.11.7
       testcontainers:
         specifier: ^12.0.4
         version: 12.0.4
@@ -121,6 +133,22 @@ importers:
         version: 4.23.0
 
   packages/tokens: {}
+
+  packages/web:
+    dependencies:
+      '@signal/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@signal/web-core':
+        specifier: workspace:*
+        version: link:../web-core
+    devDependencies:
+      fake-indexeddb:
+        specifier: ^6.0.0
+        version: 6.2.5
+      happy-dom:
+        specifier: ^15.11.7
+        version: 15.11.7
 
   packages/web-core:
     dependencies:
@@ -2004,6 +2032,10 @@ packages:
   express@5.2.1:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
+
+  fake-indexeddb@6.2.5:
+    resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
+    engines: {node: '>=18'}
 
   fast-decode-uri-component@1.0.1:
     resolution: {integrity: sha512-WKgKWg5eUxvRZGwW8FvfbaH7AXSh2cL+3j5fMGzUMCxWBJ3dV3a7Wz8y2f/uQ0e3B6WmodD3oS54jTQ9HVTIIg==}
@@ -4609,6 +4641,8 @@ snapshots:
       vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
+
+  fake-indexeddb@6.2.5: {}
 
   fast-decode-uri-component@1.0.1: {}
 

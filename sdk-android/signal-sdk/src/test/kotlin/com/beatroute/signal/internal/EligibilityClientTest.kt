@@ -14,6 +14,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+/**
+ * Re-keyed to the event model (F2-D3/D13): the request carries
+ * `{ event_name, user_id, context?, session_age_days? }` and the response is kept as
+ * the RAW config JSON (native never parses the full config, GR-2) — only `trigger_id`
+ * is extracted for outbox idempotency + forwarding.
+ */
 @RunWith(RobolectricTestRunner::class)
 class EligibilityClientTest {
 
@@ -42,15 +48,18 @@ class EligibilityClientTest {
     }
 
     @Test
-    fun `200 with config body returns non-null config matching fixture`() = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(200).setBody(fixture("eligibility_config.json")))
+    fun `200 with config body returns result carrying trigger_id and raw json`() = runBlocking {
+        val body = fixture("eligibility_config.json")
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
 
         val result = clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = 30,
         )
 
         assertNotNull(result)
         assertEquals("11111111-1111-4111-8111-111111111111", result!!.triggerId)
+        // The raw config is forwarded verbatim to web-core (still parses to the fixture).
+        assertEquals(body, result.rawConfigJson)
     }
 
     @Test
@@ -58,7 +67,7 @@ class EligibilityClientTest {
         server.enqueue(MockResponse().setResponseCode(204))
 
         val result = clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = 30,
         )
 
         assertNull(result)
@@ -69,7 +78,7 @@ class EligibilityClientTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody(fixture("error_body.json")))
 
         val result = clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = 30,
         )
 
         assertNull(result)
@@ -86,7 +95,7 @@ class EligibilityClientTest {
         val fastTimeout = OkHttpClient.Builder().callTimeout(2, TimeUnit.SECONDS).build()
 
         val result = clientUnder(server, fastTimeout).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = 30,
         )
 
         assertNull(result)
@@ -97,41 +106,46 @@ class EligibilityClientTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody("{ this is not json"))
 
         val result = clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = 30,
         )
 
         assertNull(result)
     }
 
     @Test
-    fun `request carries app key header and query params`() = runBlocking {
+    fun `request carries app key header and re-keyed query params`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(204))
 
         clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = 30,
+            eventName = "order_completion", userId = "u1", context = "checkout", sessionAgeDays = 30,
         )
 
         val request = server.takeRequest()
         assertEquals("test-app-key", request.getHeader("X-Signal-App-Key"))
         val url = request.requestUrl!!
-        assertEquals("delivery", url.queryParameter("screen_id"))
+        assertEquals("order_completion", url.queryParameter("event_name"))
         assertEquals("u1", url.queryParameter("user_id"))
-        assertEquals("c1", url.queryParameter("client_id"))
-        assertEquals("30", url.queryParameter("rep_tenure_days"))
+        assertEquals("checkout", url.queryParameter("context"))
+        assertEquals("30", url.queryParameter("session_age_days"))
+        // Old screen-model params are gone.
+        assertNull(url.queryParameter("screen_id"))
+        assertNull(url.queryParameter("client_id"))
+        assertNull(url.queryParameter("rep_tenure_days"))
     }
 
     @Test
-    fun `rep_tenure_days omitted when null`() = runBlocking {
+    fun `optional context and session_age_days omitted when null`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(204))
 
         clientUnder(server).check(
-            screenId = "delivery", userId = "u1", clientId = "c1", repTenureDays = null,
+            eventName = "order_completion", userId = "u1", context = null, sessionAgeDays = null,
         )
 
         val request = server.takeRequest()
         val url = request.requestUrl!!
-        assertEquals("delivery", url.queryParameter("screen_id"))
-        assertNull(url.queryParameter("rep_tenure_days"))
-        assertEquals(false, url.queryParameterNames.contains("rep_tenure_days"))
+        assertEquals("order_completion", url.queryParameter("event_name"))
+        assertNull(url.queryParameter("context"))
+        assertNull(url.queryParameter("session_age_days"))
+        assertEquals(false, url.queryParameterNames.contains("session_age_days"))
     }
 }
