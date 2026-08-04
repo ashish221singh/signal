@@ -12,8 +12,21 @@ android {
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   kotlinOptions { jvmTarget = "17" }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  buildFeatures { viewBinding = true }
 }
+
+// F2-D14: web-core is a BUNDLED build artifact, never fetched at show time. The IIFE
+// bundle is committed under src/main/assets/web-core/, but this task re-copies it from
+// the workspace dist when that dist is present (freshly built via
+// `pnpm --filter @signal/web-core build`) so the shipped asset never drifts from the
+// renderer. When the dist is absent (Android-only checkout / CI without Node) it is a
+// no-op and the committed asset is used as-is.
+val syncWebCore by tasks.registering(Copy::class) {
+  val dist = rootProject.file("../packages/web-core/dist/web-core.global.js")
+  onlyIf { dist.exists() }
+  from(dist)
+  into(layout.projectDirectory.dir("src/main/assets/web-core"))
+}
+tasks.named("preBuild") { dependsOn(syncWebCore) }
 dependencies {
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")

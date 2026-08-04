@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Signal</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+</style>
+</head><body>
+<script src="web-core.global.js"></script>
+<script>
+/*
+ * Native WebView harness for the bundled web-core (F2 Task 4, docs/sheet-bridge-v1.md).
+ *
+ * web-core is pure: it renders a WorkflowConfig and drives the state machine but
+ * never touches the network. This harness supplies a `SheetHost` whose impure
+ * intents cross the JS<->native boundary:
+ *   - JS -> native: `window.SignalBridge.<method>(json)`  (@JavascriptInterface)
+ *   - native -> JS: `window.SignalSheet.init(configJson)`  (evaluateJavascript)
+ *
+ * Handshake: the harness signals READY once the bundle is live; native then calls
+ * `SignalSheet.init(configJson)` with the raw eligibility config it forwarded
+ * unparsed (GR-2). Uploads use web-core's <input type=file> path routed through
+ * WebChromeClient.onShowFileChooser to the native picker; web-core performs the
+ * PUT itself, so the host `requestUpload` is a no-op reject (GR-3 default).
+ */
+(function () {
+  'use strict';
+
+  var BRIDGE_VERSION = 1;
+
+  // The native side, injected via addJavascriptInterface(name = "SignalBridge").
+  function nativeBridge() {
+    return window.SignalBridge || null;
+  }
+
+  // Resolvers for in-flight requestUpload calls, keyed by a monotonic ref id.
+  var uploadSeq = 0;
+  var pendingUploads = {};
+
+  var handle = null; // the SheetHandle mount() returns.
+  var mounted = false;
+
+  function callNative(method, payload) {
+    var b = nativeBridge();
+    if (!b || typeof b[method] !== 'function') return;
+    try {
+      b[method](JSON.stringify(payload || {}));
+    } catch (e) {
+      // Never let a bridge failure crash the sheet JS.
+    }
+  }
+
+  // The SheetHost web-core consumes. Every method relays to native.
+  var host = {
+    submit: function (answer) {
+      // Precious: resolves only when native confirms it was queued/persisted.
+      // A rejection makes web-core show a Retry (sheet-bridge-v1).
+      callNative('submit', { bridge_version: BRIDGE_VERSION, answer: answer });
+      return Promise.resolve();
+    },
+    dismiss: function (reason) {
+      callNative('dismiss', { bridge_version: BRIDGE_VERSION, reason: reason });
+    },
+    requestUpload: function (file) {
+      // Default (GR-3): native provides the file to web-core via the file chooser,
+      // and web-core performs the presign+PUT. If we ever reach here it means
+      // web-core delegated the whole upload to the host; native does not do PUTs,
+      // so surface a rejection => the user submits text-only.
+      var ref = 'u' + (++uploadSeq);
+      return new Promise(function (resolve, reject) {
+        pendingUploads[ref] = { resolve: resolve, reject: reject };
+        callNative('requestUpload', { bridge_version: BRIDGE_VERSION, ref: ref });
+      });
+    },
+    openUrl: function (url) {
+      callNative('openUrl', { bridge_version: BRIDGE_VERSION, url: url });
+    },
+    openReview: function () {
+      callNative('openReview', { bridge_version: BRIDGE_VERSION });
+    },
+    onResize: function (height) {
+      callNative('resize', { bridge_version: BRIDGE_VERSION, height: height });
+    }
+  };
+
+  // native -> JS entry points.
+  window.SignalSheet = {
+    /** INIT: hand over the raw eligibility config JSON string (host -> core). */
+    init: function (configJson) {
+      if (mounted) return;
+      var config;
+      try {
+        config = JSON.parse(configJson);
+      } catch (e) {
+        // Malformed config: report a config_invalid dismiss and do not mount.
+        callNative('dismiss', { bridge_version: BRIDGE_VERSION, reason: 'config_invalid' });
+        return;
+      }
+      if (!window.SignalWebCore || typeof window.SignalWebCore.mount !== 'function') {
+        callNative('dismiss', { bridge_version: BRIDGE_VERSION, reason: 'config_invalid' });
+        return;
+      }
+      mounted = true;
+      handle = window.SignalWebCore.mount(document.body, config, host);
+    },
+
+    /** UPLOAD_RESULT: native resolves a pending host.requestUpload (unused by default). */
+    uploadResult: function (ref, url, error) {
+      var p = pendingUploads[ref];
+      if (!p) return;
+      delete pendingUploads[ref];
+      if (error) p.reject(new Error(error));
+      else p.resolve(url);
+    },
+
+    /** Force-close from native (e.g. hardware back handled outside the sheet). */
+    close: function () {
+      if (handle && typeof handle.close === 'function') handle.close();
+    }
+  };
+
+  // Signal READY once the bundle is parsed and the host is installed. Native waits
+  // for this before calling SignalSheet.init (injection-timing race, plan Android).
+  callNative('ready', { bridge_version: BRIDGE_VERSION });
+})();
+</script>
+</body></html>
