@@ -85,6 +85,7 @@ export class SheetView {
     this.sheet.appendChild(grabber);
 
     this.body = document.createElement('div');
+    this.body.className = 'sig-body';
     this.sheet.appendChild(this.body);
 
     this.live = document.createElement('div');
