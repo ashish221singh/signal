@@ -10,11 +10,12 @@ import {
   workflowsList,
 } from './commands.js';
 import { defaultApiUrl } from './config.js';
+import { runInit } from './init.js';
 
 /**
- * `@signal/cli` entrypoint (B3-D9). Commands: `login` (device flow), `login
- * --password`, `whoami`, `deploy <file>`, `workflows list`. `init`/SDK-install is
- * deferred to the frontend phase. Credentials live in `~/.signal/config.json`.
+ * `@signal/cli` entrypoint (B3-D9, F2-D8). Commands: `login` (device flow), `login
+ * --password`, `whoami`, `deploy <file>`, `workflows list`, and `init` (Web SDK
+ * install + `Signal.init` wiring). Credentials live in `~/.signal/config.json`.
  */
 const deps: CommandDeps = {
   makeClient: (apiUrl) => new CliClient(apiUrl),
@@ -75,6 +76,19 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
       try {
         const results = await deploy(commandDeps, file);
         if (results.some((r) => r.action === 'failed')) process.exit(2);
+      } catch (err) {
+        fail(err);
+      }
+    });
+
+  program
+    .command('init')
+    .description('Install the Web SDK and wire Signal.init(publishableKey) into a web project')
+    .argument('<publishableKey>', 'your account publishable key (pk_…)')
+    .option('--dir <dir>', 'the project directory (defaults to the current directory)')
+    .action(async (publishableKey: string, opts: { dir?: string }) => {
+      try {
+        await runInit(opts.dir ?? process.cwd(), publishableKey, commandDeps.out);
       } catch (err) {
         fail(err);
       }
