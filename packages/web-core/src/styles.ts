@@ -74,8 +74,8 @@ export const componentCss = `
   color: var(--s-ink);
   border-radius: var(--s-radius-lg) var(--s-radius-lg) 0 0;
   box-shadow: var(--s-shadow-sheet);
-  padding: var(--space-3) var(--space-5) var(--space-5);
-  padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
   transform: translateY(100%);
   transition: transform var(--motion-sheet) var(--ease-sheet);
   max-height: 90vh;
@@ -95,8 +95,8 @@ export const componentCss = `
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 .sig-question {
   font: 600 20px/1.28 var(--font-display);
@@ -360,7 +360,7 @@ export const componentCss = `
     opacity: 0;
     transition: transform var(--motion-base) var(--ease-out),
                 opacity var(--motion-base) var(--ease-out);
-    padding-top: var(--space-5);
+    padding: 26px;
   }
   .sig-backdrop[data-open='true'] .sig-sheet { transform: none; opacity: 1; }
   .sig-grabber { display: none; }
