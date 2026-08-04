@@ -7,7 +7,7 @@
  * self-hosted subset fonts inlined as data-URI @font-face rules (F1-D19) so it is
  * fully portable into a shadow root with zero runtime font fetches.
  */
-export { tokensCss } from './generated.js';
+export { fontFaceCss, tokensCss } from './generated.js';
 
 /** Font families shipped as subset woff2 in this package (F1-D19). */
 export const FONT_FILES = [
