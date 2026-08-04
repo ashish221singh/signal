@@ -6,15 +6,17 @@ import { hashPassword } from '../src/auth/password.js';
 import type { Db } from '../src/db/client.js';
 import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, startTestDb } from './testDb.js';
 
-const env = parseEnv({ NODE_ENV: 'test', SIGNAL_APP_KEYS: 'test-app-key' });
+const env = parseEnv({ NODE_ENV: 'test' });
 
 const ADMIN_EMAIL = 'admin@example.com';
 const ADMIN_PASSWORD = 'somepassword';
 
 async function seedAdmin(db: Db) {
+  const accountId = await seedAccount(db);
   await db.insert(s.consoleUsers).values({
+    accountId,
     email: ADMIN_EMAIL,
     passwordHash: await hashPassword(ADMIN_PASSWORD),
     name: 'Admin User',

@@ -20,7 +20,7 @@ export const responseBodySchema = z.object({
   location: locationSchema.nullish(),
   device_os: z.string().min(1),
   app_version: z.string().min(1),
-  rep_tenure_days: z.number().int().nonnegative().nullish(),
+  session_age_days: z.number().int().nonnegative().nullish(),
   shown_at: isoInstant,
   responded_at: isoInstant,
 });

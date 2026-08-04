@@ -1,32 +1,42 @@
+import { HeadBucketCommand } from '@aws-sdk/client-s3';
 import cookie from '@fastify/cookie';
+import cors, { type FastifyCorsOptionsDelegatePromise } from '@fastify/cors';
+import formbody from '@fastify/formbody';
 import rateLimit from '@fastify/rate-limit';
 import { SIGNAL_API_VERSION } from '@signal/contracts';
+import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyError } from 'fastify';
-import { CampaignCache } from './campaigns/cache.js';
-import { makeDbCampaignLoader } from './campaigns/loader.js';
+import { AccountsService } from './accounts/service.js';
+import { DeviceService } from './cli/deviceService.js';
 import { type Clock, systemClock } from './clock.js';
 import { createDb, type Db } from './db/client.js';
 import { EligibilityService } from './eligibility/service.js';
 import type { Env } from './env.js';
-import { appKeyAuth } from './plugins/appKeyAuth.js';
-import { sessionGuard } from './plugins/sessionGuard.js';
+import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
+import { resolveAuth } from './plugins/resolveAuth.js';
+import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
-import { campaignRoutes } from './routes/console/campaigns.js';
-import { clientRoutes } from './routes/console/clients.js';
+import { deployRoutes } from './routes/console/deploy.js';
+import { eventRoutes } from './routes/console/events.js';
+import { managementRoutes } from './routes/console/management.js';
 import { reportingRoutes } from './routes/console/reporting.js';
-import { targetRoutes } from './routes/console/targets.js';
+import { userDataRoutes } from './routes/console/users.js';
+import { workflowRoutes } from './routes/console/workflows.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
+import { TokenService } from './tokens/service.js';
 import { makeS3 } from './uploads/presign.js';
+import { WorkflowCache } from './workflows/cache.js';
+import { makeDbWorkflowLoader } from './workflows/loader.js';
 
 /**
- * Expose the SDK campaign cache on the Fastify instance so its `refresh()` is
+ * Expose the SDK workflow cache on the Fastify instance so its `refresh()` is
  * reachable deterministically (the cross-milestone publish→eligibility test, and
- * Task 18's refresh endpoint) without waiting on the 60s auto-refresh timer.
+ * the refresh endpoint) without waiting on the 60s auto-refresh timer.
  */
 declare module 'fastify' {
   interface FastifyInstance {
-    campaignCache: CampaignCache;
+    workflowCache: WorkflowCache;
   }
 }
 
@@ -51,17 +61,20 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   const resolvedDb = db;
   const clock = deps.clock ?? systemClock;
 
-  const cache = new CampaignCache(makeDbCampaignLoader(resolvedDb));
+  const cache = new WorkflowCache(makeDbWorkflowLoader(resolvedDb));
   await cache.refresh();
-  cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'campaign cache refresh failed'));
+  cache.startAutoRefresh(60_000, (e) => app.log.error(e, 'workflow cache refresh failed'));
 
-  // Expose the SDK campaign cache on the app so a deterministic `refresh()` is
+  // Expose the SDK workflow cache on the app so a deterministic `refresh()` is
   // reachable without waiting on the 60s timer. Used by the cross-milestone
-  // publish→eligibility integration test now, and by Task 18's refresh endpoint
-  // later. The eligibility hot path is unchanged — it still reads the same cache.
-  app.decorate('campaignCache', cache);
+  // publish→eligibility integration test and the refresh endpoint. The
+  // eligibility hot path is unchanged — it still reads the same cache.
+  app.decorate('workflowCache', cache);
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
+  const accountsService = new AccountsService(resolvedDb);
+  const tokenService = new TokenService(resolvedDb, clock);
+  const deviceService = new DeviceService(resolvedDb, tokenService, clock);
 
   // One S3 client for the app lifetime — shared by the SDK upload route. Its
   // close is a no-op, so there is nothing to tear down in `onClose`.
@@ -99,28 +112,101 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // (5/min/IP, M2-D4). @fastify/rate-limit v11 honors per-route config in child
   // scopes when the plugin is registered on an ancestor scope.
   await app.register(rateLimit, { global: false });
+  // Parse `application/x-www-form-urlencoded` bodies — the server-rendered CLI
+  // approval page (B3-D3b) posts a native HTML form.
+  await app.register(formbody);
 
+  // Liveness (B4-D3): always 200 while the process is up. Container platforms use
+  // this to decide whether to restart the instance; it does NOT touch the DB/S3.
   app.get('/health', async () => ({ status: 'ok' as const, version: SIGNAL_API_VERSION }));
+
+  // Deep readiness (B4-D3): the DB is required (a failed `select 1` → 503); S3 is
+  // best-effort (a head-bucket failure is reported but does not fail readiness,
+  // since the ingest hot path never touches S3). Distinct from liveness so the
+  // platform can hold traffic off an instance that can't reach Postgres.
+  app.get('/ready', async (_request, reply) => {
+    let dbOk = true;
+    try {
+      await resolvedDb.execute(sql`select 1`);
+    } catch (err) {
+      app.log.error(err, 'readiness: db check failed');
+      dbOk = false;
+    }
+
+    let s3Status: 'ok' | 'down' = 'ok';
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    } catch (err) {
+      app.log.warn(err, 'readiness: s3 head-bucket failed (best-effort)');
+      s3Status = 'down';
+    }
+
+    const status = dbOk ? ('ready' as const) : ('not_ready' as const);
+    return reply.code(dbOk ? 200 : 503).send({
+      status,
+      checks: { db: dbOk ? ('ok' as const) : ('down' as const), s3: s3Status },
+    });
+  });
+
+  // CLI / device-flow + server-rendered auth pages (B3-D3, D4, D3b). Mounted at
+  // the root (absolute paths) and PUBLIC — the approval page self-checks the
+  // console session and redirects to /login when absent.
+  await app.register(
+    cliRoutes({
+      db: resolvedDb,
+      env,
+      devices: deviceService,
+      tokens: tokenService,
+    }),
+  );
+
+  // CORS (B4-D2). Two console registrations exist (`/v1/console/auth` and the
+  // guarded `/v1/console` subtree); both get the SAME credentialed policy so the
+  // dashboard can log in AND read reports cross-origin. Allowed origins come from
+  // `CONSOLE_ORIGINS`. Registering cors on a scope also answers its preflight.
+  const consoleCors: Parameters<typeof cors>[1] = {
+    origin: env.CONSOLE_ORIGINS,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  };
 
   // Console auth (login/logout/me) — NOT behind the session guard; login must be
   // reachable without a session. The guarded console subtree arrives in Task 7.
-  await app.register(consoleAuthRoutes({ db: resolvedDb }), { prefix: '/v1/console/auth' });
+  await app.register(
+    async (consoleAuth) => {
+      await consoleAuth.register(cors, consoleCors);
+      await consoleAuth.register(consoleAuthRoutes({ db: resolvedDb }));
+    },
+    { prefix: '/v1/console/auth' },
+  );
 
-  // Guarded console subtree (M2, Task 7): the fp-wrapped session guard runs on
-  // every request into this encapsulated scope, so the sibling read routes below
-  // are protected. This is a SEPARATE register from `/v1/console/auth` above —
-  // login/logout/me stay reachable without a cookie.
+  // Guarded console subtree (M2 Task 7, B3-D5): the fp-wrapped `resolveAuth` runs
+  // on every request into this encapsulated scope, accepting EITHER a cookie
+  // session (⇒ all scopes) OR an `Authorization: Bearer cli_…` token (⇒ the
+  // token's scopes). Sibling routes are protected. Separate register from
+  // `/v1/console/auth` above — login/logout/me stay reachable without a cookie.
   await app.register(
     async (consoleApi) => {
-      await consoleApi.register(sessionGuard);
-      await consoleApi.register(targetRoutes({ db: resolvedDb }), { prefix: '/targets' });
-      await consoleApi.register(clientRoutes({ db: resolvedDb }), { prefix: '/clients' });
-      await consoleApi.register(campaignRoutes({ db: resolvedDb, clock }), {
-        prefix: '/campaigns',
+      await consoleApi.register(cors, consoleCors);
+      await consoleApi.register(resolveAuth({ db: resolvedDb, tokens: tokenService }));
+      await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
+        prefix: '/workflows',
       });
-      // Reporting (Tasks 16–17): mounted with NO sub-prefix — its routes carry
-      // their own `/campaigns/:id/overview` and `/dashboard` paths, distinct
-      // from campaignRoutes above. The clock feeds the dashboard's 30-day window.
+      // Key & CLI-token management (B3, Task 6) — no sub-prefix; carries its own
+      // `/keys` and `/cli-tokens` paths, distinct from `/workflows`.
+      await consoleApi.register(managementRoutes({ db: resolvedDb, tokens: tokenService }));
+      // config-as-code deploy (B3, Task 7) — `/deploy`, `deploy` scope. Refreshes
+      // the SDK cache after apply so published workflows are immediately eligible.
+      await consoleApi.register(
+        deployRoutes({ db: resolvedDb, clock, refreshCache: () => cache.refresh() }),
+      );
+      // Event surfacing read route (B3, Task 8) — `/events`.
+      await consoleApi.register(eventRoutes({ db: resolvedDb }));
+      // User-data deletion (B4, Task 5) — `/users/:userId/data`, `workflows:write`.
+      await consoleApi.register(userDataRoutes({ db: resolvedDb }));
+      // Reporting: mounted with NO sub-prefix — its routes carry their own
+      // `/workflows/:id/overview` and `/dashboard` paths, distinct from
+      // workflowRoutes above. The clock feeds the dashboard's 30-day window.
       await consoleApi.register(reportingRoutes({ db: resolvedDb, clock }));
     },
     { prefix: '/v1/console' },
@@ -128,11 +214,55 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   await app.register(
     async (sdk) => {
-      await sdk.register(appKeyAuth(env.appKeys));
+      // CORS (B4-D2): the SDK ingest surface reflects an allowed `Origin` per the
+      // calling account's `allowed_origins` (B2). The delegator reads the request
+      // so it can resolve the account from the `X-Signal-App-Key` header; when the
+      // origin is not allow-listed (or the key/origin is absent) NO CORS headers
+      // are emitted. Native SDKs send no Origin and are unaffected. An empty
+      // allow-list means "any origin" (mirroring publishableKeyAuth's rule).
+      const sdkCorsDelegate: FastifyCorsOptionsDelegatePromise = async (req) => {
+        const key = req.headers['x-signal-app-key'];
+        const origin = req.headers.origin;
+        if (typeof origin !== 'string' || typeof key !== 'string') {
+          return { origin: false };
+        }
+        const resolved = await accountsService.resolveKey(key);
+        if (!resolved) return { origin: false };
+        const allowed =
+          resolved.allowedOrigins.length === 0 || resolved.allowedOrigins.includes(origin);
+        return { origin: allowed ? origin : false, credentials: false };
+      };
+      await sdk.register(cors, () => sdkCorsDelegate);
+
+      // Hardening-lite (B2-D7): rate-limit the SDK ingest surface keyed by
+      // publishableKey + user_id (60/min). Publishable keys are public, so this
+      // blunts spoofing/abuse without per-tenant infra. Keyed off the header +
+      // the request's user_id (query for GET, body for POST); falls back to the
+      // key alone when no user_id is present. Over-limit → 429 (envelope in the
+      // error handler above).
+      await sdk.register(rateLimit, {
+        max: env.SDK_RATE_LIMIT_MAX,
+        timeWindow: '1 minute',
+        keyGenerator: (request) => {
+          const key =
+            typeof request.headers['x-signal-app-key'] === 'string'
+              ? request.headers['x-signal-app-key']
+              : 'anon';
+          const q = request.query as { user_id?: unknown } | undefined;
+          const b = request.body as { trigger_id?: unknown } | undefined;
+          const user =
+            (q && typeof q.user_id === 'string' && q.user_id) ||
+            (b && typeof b.trigger_id === 'string' && b.trigger_id) ||
+            'anon';
+          return `${key}:${user}`;
+        },
+      });
+      await sdk.register(publishableKeyAuth((key) => accountsService.resolveKey(key)));
       await sdk.register(
         sdkRoutes({
           db: resolvedDb,
           clock,
+          env,
           eligibility,
         }),
       );

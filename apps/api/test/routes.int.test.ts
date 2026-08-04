@@ -6,33 +6,15 @@ import { buildApp } from '../src/app.js';
 import type { Db } from '../src/db/client.js';
 import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, seedApiKey, startTestDb } from './testDb.js';
 
-const APP_KEY = 'test-app-key';
-const env = parseEnv({ NODE_ENV: 'test', SIGNAL_APP_KEYS: APP_KEY });
+const APP_KEY = 'pk_test_sdkroutesxxxxxxxxxxxx';
+const env = parseEnv({ NODE_ENV: 'test' });
 
-async function seedStarCampaign(db: Db) {
-  const [inserted] = await db
-    .insert(s.targetRegistry)
-    .values({
-      name: 'Order Completion',
-      screenId: 'order_completion',
-      triggerMechanism: 'action',
-      integrationStatus: 'confirmed_live',
-    })
-    .onConflictDoNothing()
-    .returning();
-  const target =
-    inserted ??
-    (
-      await db
-        .select()
-        .from(s.targetRegistry)
-        .where(eq(s.targetRegistry.screenId, 'order_completion'))
-    )[0];
-  await db.insert(s.campaigns).values({
-    targetId: target!.id,
-    clientIds: ['cl_A'],
+async function seedStarWorkflow(db: Db, accountId: string) {
+  await db.insert(s.workflows).values({
+    accountId,
+    eventName: 'checkout_completed',
     metricType: 'CSAT',
     ratingType: 'star',
     ratingScaleMax: 5,
@@ -45,28 +27,10 @@ async function seedStarCampaign(db: Db) {
   });
 }
 
-async function seedEmojiCampaign(db: Db) {
-  const [inserted] = await db
-    .insert(s.targetRegistry)
-    .values({
-      name: 'New Customer Creation',
-      screenId: 'new_customer_creation',
-      triggerMechanism: 'action',
-      integrationStatus: 'confirmed_live',
-    })
-    .onConflictDoNothing()
-    .returning();
-  const target =
-    inserted ??
-    (
-      await db
-        .select()
-        .from(s.targetRegistry)
-        .where(eq(s.targetRegistry.screenId, 'new_customer_creation'))
-    )[0];
-  await db.insert(s.campaigns).values({
-    targetId: target!.id,
-    clientIds: ['cl_A'],
+async function seedEmojiWorkflow(db: Db, accountId: string) {
+  await db.insert(s.workflows).values({
+    accountId,
+    eventName: 'customer_created',
     metricType: 'CSAT',
     ratingType: 'emoji',
     ratingScaleMax: 3,
@@ -83,6 +47,7 @@ const AUTH = { 'x-signal-app-key': APP_KEY };
 
 describe('/v1/sdk routes (real Postgres)', () => {
   let t: Awaited<ReturnType<typeof startTestDb>>;
+  let accountId: string;
 
   beforeAll(async () => {
     t = await startTestDb();
@@ -93,6 +58,8 @@ describe('/v1/sdk routes (real Postgres)', () => {
 
   beforeEach(async () => {
     await t.truncateAll();
+    accountId = await seedAccount(t.db);
+    await seedApiKey(t.db, accountId, APP_KEY);
   });
 
   describe('GET /health', () => {
@@ -118,13 +85,13 @@ describe('/v1/sdk routes (real Postgres)', () => {
 
   describe('eligibility', () => {
     it('scenario 1+2: eligible → 200 then suppressed → 204', async () => {
-      await seedStarCampaign(t.db);
+      await seedStarWorkflow(t.db, accountId);
       const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
       try {
         const first = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { screen_id: 'order_completion', user_id: 'u_1', client_id: 'cl_A' },
+          query: { event_name: 'checkout_completed', user_id: 'u_1' },
           headers: AUTH,
         });
         expect(first.statusCode).toBe(200);
@@ -133,7 +100,7 @@ describe('/v1/sdk routes (real Postgres)', () => {
         const second = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { screen_id: 'order_completion', user_id: 'u_1', client_id: 'cl_A' },
+          query: { event_name: 'checkout_completed', user_id: 'u_1' },
           headers: AUTH,
         });
         expect(second.statusCode).toBe(204);
@@ -143,13 +110,13 @@ describe('/v1/sdk routes (real Postgres)', () => {
       }
     });
 
-    it('scenario 3: missing screen_id → 422 with error body', async () => {
+    it('scenario 3: missing event_name → 422 with error body', async () => {
       const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
       try {
         const res = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { user_id: 'u_1', client_id: 'cl_A' },
+          query: { user_id: 'u_1' },
           headers: AUTH,
         });
         expect(res.statusCode).toBe(422);
@@ -213,13 +180,13 @@ describe('/v1/sdk routes (real Postgres)', () => {
 
   describe('scenario 5+6: response', () => {
     it('valid → 204, replay → 204, exactly one row', async () => {
-      await seedStarCampaign(t.db);
+      await seedStarWorkflow(t.db, accountId);
       const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
       try {
         const elig = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { screen_id: 'order_completion', user_id: 'u_1', client_id: 'cl_A' },
+          query: { event_name: 'checkout_completed', user_id: 'u_1' },
           headers: AUTH,
         });
         const triggerId = elig.json().trigger_id as string;
@@ -283,13 +250,13 @@ describe('/v1/sdk routes (real Postgres)', () => {
     });
 
     it('emoji campaign + rating 4 → 422 invalid_rating', async () => {
-      await seedEmojiCampaign(t.db);
+      await seedEmojiWorkflow(t.db, accountId);
       const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
       try {
         const elig = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { screen_id: 'new_customer_creation', user_id: 'u_e', client_id: 'cl_A' },
+          query: { event_name: 'customer_created', user_id: 'u_e' },
           headers: AUTH,
         });
         const triggerId = elig.json().trigger_id as string;
@@ -317,13 +284,13 @@ describe('/v1/sdk routes (real Postgres)', () => {
 
   describe('scenario 7: dismiss', () => {
     it('valid → 204', async () => {
-      await seedStarCampaign(t.db);
+      await seedStarWorkflow(t.db, accountId);
       const app = await buildApp(env, { db: t.db, closeDb: async () => {} });
       try {
         const elig = await app.inject({
           method: 'GET',
           url: '/v1/sdk/eligibility',
-          query: { screen_id: 'order_completion', user_id: 'u_d', client_id: 'cl_A' },
+          query: { event_name: 'checkout_completed', user_id: 'u_d' },
           headers: AUTH,
         });
         const triggerId = elig.json().trigger_id as string;

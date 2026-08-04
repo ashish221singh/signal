@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — lockup (code-style wordmark)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:wght@400;500;600;700&family=Spline+Sans+Mono:ital@1&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#191815;--paper:#FCFCFB;--orange:#F78200;--muted:#7C7B75;--line:#E5E4E1;
+    --mono:'Spline Sans Mono',ui-monospace,SFMono-Regular,Menlo,monospace;}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{font-family:var(--mono);color:var(--ink);background:var(--paper)}
+  .band{padding:70px 40px;display:flex;flex-direction:column;gap:44px;align-items:center}
+  .band.dark{background:
+      radial-gradient(90% 60% at 50% 130%, rgba(247,130,0,.14), transparent 62%),
+      radial-gradient(120% 100% at 50% -10%, #232019 0%, #191815 55%);color:var(--paper)}
+  .band.light{background:linear-gradient(180deg,#fff,#F7F7F6)}
+  .label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .band.dark .label{color:#7C7B75}
+
+  .lock{display:flex;align-items:center;gap:18px}
+  .lock svg{display:block}
+  .lock .h1{width:46px;height:46px}
+  .lock .h2{width:34px;height:34px}
+  .wm{font-weight:500;letter-spacing:-.01em;line-height:1}
+  .wm.big{font-size:44px}
+  .wm.mid{font-size:30px}
+  .cursor{display:inline-block;width:.5em;height:1em;background:currentColor;transform:translateY(.12em);margin-left:.12em;border-radius:2px}
+  .accent{color:var(--orange)}
+  .row{display:flex;gap:60px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .stack{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .cap{font-size:11px;color:var(--muted);letter-spacing:.06em}
+  .band.dark .cap{color:#5B5A55}
+</style>
+</head>
+<body>
+
+<!-- PRIMARY on dark -->
+<div class="band dark">
+  <div class="label">primary lockup · code-style wordmark</div>
+  <div class="lock">
+    <svg class="h1" viewBox="0 0 96 96" aria-label="Signal mark"><g fill="#FCFCFB"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg>
+    <span class="wm big">Signal</span>
+  </div>
+
+  <div class="row" style="margin-top:8px">
+    <div class="stack">
+      <div class="lock"><svg class="h2" viewBox="0 0 96 96"><g fill="#FCFCFB"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg><span class="wm mid">signal</span></div>
+      <div class="cap">lowercase · package vibe</div>
+    </div>
+    <div class="stack">
+      <div class="lock"><svg class="h2" viewBox="0 0 96 96"><g fill="#FCFCFB"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg><span class="wm mid">signal<span class="cursor"></span></span></div>
+      <div class="cap">with cursor · terminal nod</div>
+    </div>
+    <div class="stack">
+      <div class="lock"><svg class="h2" viewBox="0 0 96 96"><g fill="#FCFCFB"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg><span class="wm mid"><span class="accent">@</span>signal</span></div>
+      <div class="cap">@signal · scope handle</div>
+    </div>
+  </div>
+</div>
+
+<!-- on light -->
+<div class="band light">
+  <div class="label">on light</div>
+  <div class="lock">
+    <svg class="h1" viewBox="0 0 96 96" aria-label="Signal mark"><g fill="#191815"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg>
+    <span class="wm big">Signal</span>
+  </div>
+  <div class="row">
+    <div class="stack">
+      <div class="lock"><svg class="h2" viewBox="0 0 96 96"><g fill="#191815"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg><span class="wm mid">signal</span></div>
+      <div class="cap">lowercase</div>
+    </div>
+    <div class="stack">
+      <div class="lock"><svg class="h2" viewBox="0 0 96 96"><g fill="#191815"><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg><span class="wm mid" style="color:#191815">signal<span class="cursor"></span></span></div>
+      <div class="cap">with cursor</div>
+    </div>
+  </div>
+
+  <!-- terminal usage, to show the code-style fit -->
+  <div style="margin-top:20px;background:#191815;color:#FCFCFB;border-radius:12px;padding:18px 22px;font-size:14px;letter-spacing:.01em">
+    <span style="color:#7C7B75">$</span> npx <span class="accent">@signal</span>/cli init<span class="cursor"></span>
+  </div>
+</div>
+
+</body>
+</html>

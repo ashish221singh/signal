@@ -19,7 +19,14 @@ export function uploadRoutes(deps: { s3: S3Client; env: Env }): FastifyPluginAsy
           error: { code: 'invalid_body', message: parsed.error.issues[0]?.message ?? 'invalid' },
         });
       }
-      const ticket = await presignUpload(deps.s3, deps.env, parsed.data.content_type);
+      // B4-D1: presign only within the caller's `acct/<accountId>/` prefix. The
+      // publishableKeyAuth hook set `request.accountId` for this SDK scope.
+      const ticket = await presignUpload(
+        deps.s3,
+        deps.env,
+        request.accountId as string,
+        parsed.data.content_type,
+      );
       return reply.code(200).send(ticket);
     });
   };

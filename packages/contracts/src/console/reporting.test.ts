@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   campaignOverviewSchema,
-  clientBreakdownSchema,
   dashboardSummarySchema,
+  eventsOverviewSchema,
   reasonsSchema,
   responseFeedQuerySchema,
   responseFeedSchema,
@@ -131,51 +131,6 @@ describe('reasonsSchema', () => {
   });
 });
 
-describe('clientBreakdownSchema', () => {
-  const breakdown = {
-    campaign_id: CID,
-    clients: [
-      {
-        client_id: 'acme',
-        triggers: 20,
-        responses: 6,
-        response_rate: 0.3,
-        positive_score: 0.5,
-      },
-    ],
-  };
-
-  it('parses a fully-populated client breakdown', () => {
-    expect(clientBreakdownSchema.safeParse(breakdown).success).toBe(true);
-  });
-
-  it('accepts null rate/score (zero triggers/responses)', () => {
-    expect(
-      clientBreakdownSchema.safeParse({
-        campaign_id: CID,
-        clients: [
-          {
-            client_id: 'acme',
-            triggers: 0,
-            responses: 0,
-            response_rate: null,
-            positive_score: null,
-          },
-        ],
-      }).success,
-    ).toBe(true);
-  });
-
-  it('rejects a missing response_rate field', () => {
-    expect(
-      clientBreakdownSchema.safeParse({
-        campaign_id: CID,
-        clients: [{ client_id: 'acme', triggers: 20, responses: 6, positive_score: 0.5 }],
-      }).success,
-    ).toBe(false);
-  });
-});
-
 describe('responseFeedSchema', () => {
   const item = {
     id: CID,
@@ -184,7 +139,6 @@ describe('responseFeedSchema', () => {
     other_text: null,
     other_image_url: null,
     location: { lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' },
-    client_id: 'acme',
     device_os: 'android',
     app_version: '1.2.3',
     shown_at: '2026-07-08T10:00:00Z',
@@ -250,6 +204,46 @@ describe('trendSchema', () => {
       trendSchema.safeParse({
         campaign_id: CID,
         points: [{ date: '2026-07-08', responses: 6.5, positive_score: 0.5 }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('eventsOverviewSchema', () => {
+  it('parses a populated events overview with null-safe ratios', () => {
+    const ok = eventsOverviewSchema.safeParse({
+      events: [
+        {
+          event_name: 'checkout_completed',
+          triggers: 10,
+          responses: 4,
+          response_rate: 0.4,
+          positive_score: 0.75,
+        },
+        {
+          event_name: 'app_opened',
+          triggers: 0,
+          responses: 0,
+          response_rate: null,
+          positive_score: null,
+        },
+      ],
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  it('rejects a non-integer triggers count', () => {
+    expect(
+      eventsOverviewSchema.safeParse({
+        events: [
+          {
+            event_name: 'x',
+            triggers: 1.5,
+            responses: 0,
+            response_rate: null,
+            positive_score: null,
+          },
+        ],
       }).success,
     ).toBe(false);
   });

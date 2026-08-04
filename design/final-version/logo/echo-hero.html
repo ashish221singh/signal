@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — Echo mark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:56px;
+    font-family:'Schibsted Grotesk',sans-serif;color:#FCFCFB;
+    background:
+      radial-gradient(90% 60% at 50% 128%, rgba(247,130,0,.16), transparent 62%),
+      radial-gradient(120% 100% at 50% -10%, #232019 0%, #191815 55%);
+  }
+  .stage{display:flex;flex-direction:column;align-items:center;gap:30px}
+  /* the mark, static */
+  .mark{width:180px;height:180px;display:block}
+  .mark rect{fill:#FCFCFB}
+  .wordmark{display:flex;align-items:center;gap:20px}
+  .wordmark svg{width:56px;height:56px}
+  .wordmark .name{font-weight:700;font-size:56px;letter-spacing:-.035em}
+  .tag{font-family:'Spline Sans Mono',monospace;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#7C7B75}
+  .divider{width:1px;height:64px;background:linear-gradient(#ffffff22,transparent)}
+
+  /* small applications strip */
+  .apps{display:flex;gap:22px;align-items:center}
+  .chip{border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .chip.big{width:72px;height:72px}
+  .chip.mid{width:48px;height:48px}
+  .chip.sm{width:30px;height:30px}
+  .chip svg{width:100%;height:100%;display:block}
+  .caption{font-family:'Spline Sans Mono',monospace;font-size:11px;color:#5B5A55;letter-spacing:.1em;margin-top:14px;text-transform:uppercase}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <!-- primary mark on the dark background, static -->
+    <svg class="mark" viewBox="0 0 96 96" aria-label="Signal">
+      <g>
+        <rect x="14" y="44" width="42" height="42" rx="13"/>
+        <rect x="58" y="14" width="30" height="30" rx="10"/>
+      </g>
+    </svg>
+
+    <div class="tag">Signal · feedback, alive</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- wordmark lockup -->
+  <div class="wordmark">
+    <svg viewBox="0 0 96 96" aria-hidden="true"><g><rect x="14" y="44" width="42" height="42" rx="13"/><rect x="58" y="14" width="30" height="30" rx="10"/></g></svg>
+    <span class="name">Signal</span>
+  </div>
+
+  <!-- app icon tiles -->
+  <div style="text-align:center">
+    <div class="apps">
+      <div class="chip big"><svg viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#191815"/><g fill="#FCFCFB"><rect x="18" y="46" width="36" height="36" rx="11"/><rect x="56" y="16" width="26" height="26" rx="8"/></g></svg></div>
+      <div class="chip mid"><svg viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#191815"/><g fill="#FCFCFB"><rect x="18" y="46" width="36" height="36" rx="11"/><rect x="56" y="16" width="26" height="26" rx="8"/></g></svg></div>
+      <div class="chip sm"><svg viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#191815"/><g fill="#FCFCFB"><rect x="18" y="46" width="36" height="36" rx="11"/><rect x="56" y="16" width="26" height="26" rx="8"/></g></svg></div>
+      <div class="chip big"><svg viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#F78200"/><g fill="#FCFCFB"><rect x="18" y="46" width="36" height="36" rx="11"/><rect x="56" y="16" width="26" height="26" rx="8"/></g></svg></div>
+    </div>
+    <div class="caption">app icon · 72 / 48 / 16px · dark + orange tile</div>
+  </div>
+</body>
+</html>

@@ -3,10 +3,11 @@ import { uploadTicketSchema } from '@signal/contracts';
 import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import * as s from '../src/db/schema.js';
 import { parseEnv } from '../src/env.js';
-import { startTestDb } from './testDb.js';
+import { seedAccount, seedApiKey, startTestDb } from './testDb.js';
 
-const APP_KEY = 'test-app-key';
+const APP_KEY = 'pk_test_uploadsxxxxxxxxxxxxxx';
 const BUCKET = 'signal-feedback-images';
 const ACCESS_KEY = 'signal';
 const SECRET_KEY = 'signal_local_dev';
@@ -18,9 +19,12 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
   let db: Awaited<ReturnType<typeof startTestDb>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let endpoint: string;
+  let accountId: string;
 
   beforeAll(async () => {
     db = await startTestDb();
+    accountId = await seedAccount(db.db);
+    await seedApiKey(db.db, accountId, APP_KEY);
 
     container = await new GenericContainer('minio/minio')
       .withCommand(['server', '/data'])
@@ -59,7 +63,6 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
 
     const env = parseEnv({
       NODE_ENV: 'test',
-      SIGNAL_APP_KEYS: APP_KEY,
       S3_ENDPOINT: endpoint,
       S3_REGION: REGION,
       S3_BUCKET: BUCKET,
@@ -96,6 +99,10 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
     const ticket = res.json();
     expect(uploadTicketSchema.safeParse(ticket).success).toBe(true);
 
+    // B4-D1: the presigned key + object URL live under the caller's account prefix.
+    expect(ticket.key).toMatch(new RegExp(`^acct/${accountId}/feedback/`));
+    expect(ticket.object_url.startsWith(`${endpoint}/${BUCKET}/acct/${accountId}/`)).toBe(true);
+
     const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
 
     const put = await fetch(ticket.upload_url, {
@@ -120,5 +127,52 @@ describe('/v1/sdk/uploads (real MinIO)', () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().error).toBeDefined();
+  });
+
+  it('POST /response rejects an other_image_url under a DIFFERENT account prefix → 422 (B4-D1)', async () => {
+    // Seed an active workflow + a real trigger for this account so the response
+    // reaches the image-URL validation.
+    const [wf] = await db.db
+      .insert(s.workflows)
+      .values({
+        accountId,
+        eventName: 'checkout_completed',
+        metricType: 'CSAT',
+        ratingType: 'star',
+        ratingScaleMax: 5,
+        headerText: 'How was it?',
+        positiveThreshold: 4,
+        status: 'active',
+        createdBy: 'test',
+      })
+      .returning();
+    const [trigger] = await db.db
+      .insert(s.triggerLog)
+      .values({
+        accountId,
+        workflowId: wf!.id,
+        userId: 'u',
+        eventName: 'checkout_completed',
+        shownAt: new Date(),
+      })
+      .returning();
+
+    const forged = `${endpoint}/${BUCKET}/acct/00000000-0000-4000-8000-000000000000/feedback/x.png`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/sdk/response',
+      headers: AUTH,
+      payload: {
+        trigger_id: trigger!.id,
+        rating_value: 3,
+        other_image_url: forged,
+        device_os: 'android',
+        app_version: '1.0.0',
+        shown_at: '2026-07-09T10:00:00Z',
+        responded_at: '2026-07-09T10:00:05Z',
+      },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('invalid_image_url');
   });
 });

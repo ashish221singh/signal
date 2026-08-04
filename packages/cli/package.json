@@ -1,0 +1,25 @@
+{
+  "name": "@signal/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "signal": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@signal/contracts": "workspace:*",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@signal/api": "workspace:*",
+    "tsx": "^4.23.0",
+    "vitest": "^4.1.10"
+  }
+}

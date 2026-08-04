@@ -1,0 +1,155 @@
+/* ============================================================================
+   Signal — Design Tokens (final version)
+   Dark-first, code-native. Palette carried from the previous system.
+   Source of truth: primitives → semantic (theme) → component tokens.
+   ========================================================================== */
+
+:root {
+  /* ---- Primitive: warm neutral ramp ------------------------------------ */
+  --white:    #FFFFFF;
+  --gray-25:  #FCFCFB;
+  --gray-50:  #F7F7F6;
+  --gray-100: #F0F0EE;
+  --gray-200: #E5E4E1;
+  --gray-300: #D2D1CD;
+  --gray-400: #A8A7A1;
+  --gray-500: #7C7B75;
+  --gray-600: #5B5A55;
+  --gray-700: #42413D;
+  --gray-800: #2A2926;
+  --gray-850: #201E1A;
+  --gray-900: #191815;
+  --black:    #100F0D;
+
+  /* ---- Primitive: orange (brand accent) -------------------------------- */
+  --orange-50:  #FFF5EB;
+  --orange-100: #FFE8D1;
+  --orange-200: #FFD3A8;
+  --orange-300: #FFB870;
+  --orange-400: #FD9D38;
+  --orange-500: #F78200;   /* brand */
+  --orange-600: #D96F00;
+  --orange-700: #B25B00;
+  --orange-800: #7F4100;
+  --orange-900: #552C00;
+
+  /* ---- Primitive: blue (secondary / info) ------------------------------ */
+  --blue-50:  #EBF7FD;
+  --blue-300: #70C9F1;
+  --blue-400: #38B3E9;
+  --blue-500: #0094DD;
+  --blue-700: #00659A;
+  --blue-900: #00344F;
+
+  /* ---- Primitive: status ----------------------------------------------- */
+  --green-400: #45B36B;
+  --green-600: #2E8F52;
+  --red-400:   #E5544B;
+  --red-600:   #CC3D33;
+
+  /* ---- Type ------------------------------------------------------------ */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  /* fluid type scale */
+  --text-display: 600 clamp(44px, 6vw, 76px)/1.02 var(--font-mono);
+  --text-h1:      600 40px/1.08 var(--font-mono);
+  --text-h2:      600 30px/1.15 var(--font-mono);
+  --text-h3:      600 22px/1.25 var(--font-mono);
+  --text-body-lg: 400 18px/1.6 var(--font-sans);
+  --text-body:    400 16px/1.6 var(--font-sans);
+  --text-small:   400 14px/1.5 var(--font-sans);
+  --text-code:    400 14px/1.5 var(--font-mono);
+  --text-label:   500 12px/1.4 var(--font-mono);   /* uppercase + tracking */
+  --tracking-label: 0.14em;
+
+  /* ---- Radius ---------------------------------------------------------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-full: 999px;
+
+  /* ---- Spacing (4px base) --------------------------------------------- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --space-12: 48px; --space-16: 64px; --space-20: 80px; --space-24: 96px;
+
+  /* ---- Motion ---------------------------------------------------------- */
+  --motion-fast:  140ms;
+  --motion-base:  200ms;
+  --motion-slow:  320ms;
+  --motion-sheet: 480ms;
+  --ease-out:   cubic-bezier(.22, 1, .36, 1);
+  --ease-inout: cubic-bezier(.65, 0, .35, 1);
+  --ease-sheet: cubic-bezier(.32, .72, 0, 1);
+  --ease-exit:  cubic-bezier(.4, 0, 1, 1);
+
+  /* ====================================================================
+     Semantic — DARK (default, brand-primary)
+     ==================================================================== */
+  --bg:            var(--gray-900);
+  --bg-hero: radial-gradient(90% 60% at 50% 128%, rgba(247,130,0,.14), transparent 62%),
+             radial-gradient(120% 100% at 50% -10%, #232019 0%, #191815 55%);
+  --surface:       var(--gray-850);
+  --surface-2:     var(--gray-800);
+  --overlay:       rgba(16,15,13,.72);
+  --line:          rgba(255,255,255,.09);
+  --line-strong:   rgba(255,255,255,.16);
+
+  --ink:           var(--gray-25);
+  --ink-secondary: var(--gray-400);
+  --ink-tertiary:  var(--gray-500);
+
+  --action:        var(--orange-500);
+  --action-hover:  var(--orange-400);
+  --action-press:  var(--orange-600);
+  --action-ink:    var(--gray-900);   /* text on orange */
+  --focus:         var(--orange-400);
+
+  --info:    var(--blue-400);
+  --success: var(--green-400);
+  --danger:  var(--red-400);
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-2: 0 8px 24px rgba(0,0,0,.45);
+  --glow:     0 0 0 1px rgba(247,130,0,.35), 0 8px 40px rgba(247,130,0,.18);
+}
+
+/* ======================================================================
+   Semantic — LIGHT (opt-in via .theme-light)
+   ====================================================================== */
+.theme-light {
+  --bg:            var(--gray-25);
+  --bg-hero: radial-gradient(90% 60% at 50% 120%, rgba(247,130,0,.08), transparent 62%),
+             linear-gradient(180deg, #FFFFFF, var(--gray-50));
+  --surface:       var(--white);
+  --surface-2:     var(--gray-50);
+  --overlay:       rgba(25,24,21,.5);
+  --line:          var(--gray-200);
+  --line-strong:   var(--gray-300);
+
+  --ink:           var(--gray-900);
+  --ink-secondary: var(--gray-600);
+  --ink-tertiary:  var(--gray-400);
+
+  --action:        var(--orange-500);
+  --action-hover:  var(--orange-600);
+  --action-press:  var(--orange-700);
+  --action-ink:    var(--white);
+  --focus:         var(--orange-500);
+
+  --info:    var(--blue-700);
+  --success: var(--green-600);
+  --danger:  var(--red-600);
+
+  --shadow-1: 0 1px 2px rgba(25,24,21,.06);
+  --shadow-2: 0 12px 32px rgba(25,24,21,.10);
+  --glow:     0 0 0 1px rgba(247,130,0,.28), 0 10px 34px rgba(247,130,0,.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; --motion-sheet: 0ms; }
+}

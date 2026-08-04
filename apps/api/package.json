@@ -3,19 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./env": "./src/env.ts",
+    "./password": "./src/auth/password.ts",
+    "./schema": "./src/db/schema.ts",
+    "./test-helpers": "./test/testDb.ts",
+    "./tokens": "./src/tokens/service.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx src/scripts/seed-dev.ts",
-    "create-admin": "tsx src/scripts/create-admin.ts",
-    "sync-clients": "tsx src/scripts/sync-clients.ts"
+    "create-account": "tsx src/scripts/create-account.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1083.0",
     "@aws-sdk/s3-request-presigner": "^3.1083.0",
     "@fastify/cookie": "^11.1.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/rate-limit": "^11.1.0",
     "@node-rs/argon2": "^2.0.2",
     "@signal/contracts": "workspace:*",

@@ -2,42 +2,49 @@ import { describe, expect, it } from 'vitest';
 import { eligibilityConfigSchema, eligibilityQuerySchema } from './index.js';
 
 describe('eligibilityQuerySchema', () => {
-  it('accepts minimal valid query and coerces tenure from string', () => {
+  it('accepts minimal valid query and coerces session_age_days from string', () => {
     const r = eligibilityQuerySchema.safeParse({
-      screen_id: 'order_completion',
+      event_name: 'checkout_completed',
       user_id: 'u_1',
-      client_id: 'cl_A',
-      rep_tenure_days: '210',
+      session_age_days: '210',
     });
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.rep_tenure_days).toBe(210);
+    if (r.success) expect(r.data.session_age_days).toBe(210);
   });
-  it('tenure is optional', () => {
+  it('accepts an optional context string', () => {
     const r = eligibilityQuerySchema.safeParse({
-      screen_id: 's',
-      user_id: 'u',
-      client_id: 'c',
+      event_name: 'checkout_completed',
+      user_id: 'u_1',
+      context: 'OrderSummaryScreen',
     });
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.rep_tenure_days).toBeUndefined();
+    if (r.success) expect(r.data.context).toBe('OrderSummaryScreen');
   });
-  it('rejects negative tenure and empty ids', () => {
-    expect(
-      eligibilityQuerySchema.safeParse({ screen_id: '', user_id: 'u', client_id: 'c' }).success,
-    ).toBe(false);
+  it('session_age_days and context are optional', () => {
+    const r = eligibilityQuerySchema.safeParse({
+      event_name: 'e',
+      user_id: 'u',
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.session_age_days).toBeUndefined();
+      expect(r.data.context).toBeUndefined();
+    }
+  });
+  it('rejects negative session_age_days and empty ids', () => {
+    expect(eligibilityQuerySchema.safeParse({ event_name: '', user_id: 'u' }).success).toBe(false);
     expect(
       eligibilityQuerySchema.safeParse({
-        screen_id: 's',
+        event_name: 'e',
         user_id: 'u',
-        client_id: 'c',
-        rep_tenure_days: '-4',
+        session_age_days: '-4',
       }).success,
     ).toBe(false);
   });
 });
 
 describe('eligibilityConfigSchema', () => {
-  it('accepts a full campaign config with trigger_id', () => {
+  it('accepts a full workflow config with trigger_id', () => {
     const r = eligibilityConfigSchema.safeParse({
       trigger_id: '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2e',
       campaign_id: '3f0e6f2e-6f2e-4e2e-8e2e-6f2e6f2e6f2f',

@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { campaignStatusSchema, ratingBoundsFor } from './index.js';
+import { ratingBoundsFor, workflowStatusSchema } from './index.js';
 
-describe('campaignStatusSchema', () => {
-  it('accepts every DB campaign_status value including archived', () => {
+describe('workflowStatusSchema', () => {
+  it('accepts every DB workflow_status value including archived', () => {
     for (const status of ['draft', 'active', 'paused', 'archived']) {
-      expect(campaignStatusSchema.safeParse(status).success).toBe(true);
+      expect(workflowStatusSchema.safeParse(status).success).toBe(true);
     }
   });
   it('rejects an unknown status', () => {
-    expect(campaignStatusSchema.safeParse('live').success).toBe(false);
+    expect(workflowStatusSchema.safeParse('live').success).toBe(false);
   });
 });
 

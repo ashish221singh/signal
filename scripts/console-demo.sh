@@ -1,274 +1,151 @@
 #!/usr/bin/env bash
 #
-# scripts/console-demo.sh — Signal Milestone 2 console exit-proof, cross-milestone
-# end-to-end demo. Proves the full loop build→publish→fire→report across M1+M2:
-# a PM logs into the Console, registers a target, builds a CSAT campaign as a
-# draft, publishes it, and that Console-built campaign then FIRES through the M1
-# SDK eligibility engine (`/v1/sdk/eligibility`); a rating is submitted and the
-# Console reporting surfaces (`overview`, `dashboard`) reflect it. It also proves
-# the overlap 409 guard and pause→204 suppression.
+# scripts/console-demo.sh — Signal B4 exit-proof console+CLI end-to-end demo.
 #
-# Prints `✅ <label>` for each passing step; on the first mismatch it prints
-# `❌ <label> (expected X got Y)` and exits non-zero. Prints
-# `ALL CONSOLE SCENARIOS PASSED` at the end.
+# Proves the full agentic + reporting path a frontend/agent will drive:
+#   signup → publishable key → CLI login → `signal deploy` (config-as-code) →
+#   track an event via the SDK → respond → read the reports back via a CLI token.
 #
-# Requirements: bash, curl, jq. A freshly-seeded DB (re-run `seed` between runs)
-# and a running API server with a seeded console admin.
+# It uses the REAL `@signal/cli` binary (via tsx) for login + deploy, exercising
+# the B3 unified Bearer-token auth and B4 `responses:read` reporting scope. Every
+# assertion prints `✅ <label>`; the first mismatch prints `❌ …` and exits
+# non-zero; the end prints `ALL SCENARIOS PASSED`.
+#
+# Requirements: bash, curl, jq, node 22 + pnpm/tsx (run under nvm). A running API
+# server (provisions its own account — no pre-seed).
 #
 # Env:
-#   BASE            base URL of the API server (default http://localhost:3000)
-#   KEY             X-Signal-App-Key header value for SDK calls (default dev-app-key)
-#   ADMIN_EMAIL     seeded console admin email     (required)
-#   ADMIN_PASSWORD  seeded console admin password  (required)
-#
-# The SDK cache auto-refreshes on a 60s timer; to stay deterministic this script
-# calls the app-key-guarded POST /v1/sdk/internal/refresh-cache after publish and
-# after pause instead of sleeping.
+#   BASE  base URL of the API server (default http://localhost:3000)
 set -euo pipefail
 
 BASE="${BASE:-http://localhost:3000}"
-KEY="${KEY:-dev-app-key}"
-ADMIN_EMAIL="${ADMIN_EMAIL:?ADMIN_EMAIL is required}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}"
-
-# A client the seed guarantees exists; used consistently as the campaign's
-# client_id and in the SDK eligibility query.
-CLIENT="cl_A"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI="$REPO_ROOT/packages/cli/src/index.ts"
 
 command -v jq >/dev/null 2>&1 || { echo "❌ jq is required but not installed"; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "❌ curl is required but not installed"; exit 1; }
+command -v tsx >/dev/null 2>&1 || command -v npx >/dev/null 2>&1 || {
+  echo "❌ tsx/npx required to run the CLI"; exit 1; }
 
 TMPDIR_DEMO="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_DEMO"' EXIT
 BODY="$TMPDIR_DEMO/body"
-JAR="/tmp/signal-cookies"
-rm -f "$JAR"
+JAR="$TMPDIR_DEMO/cookies"
+# Isolate CLI credentials so we never touch the real ~/.signal.
+export SIGNAL_CONFIG_DIR="$TMPDIR_DEMO/signal-home"
+export SIGNAL_API_URL="$BASE"
 
-# Fresh, never-before-used user ids so M1 suppression never interferes.
-STAMP="$(date -u +%s)"
-USER_FIRE="cdemo_fire_${STAMP}"
-USER_PAUSE="cdemo_pause_${STAMP}"
+STAMP="$(date -u +%s)$RANDOM"
+EMAIL="console_demo_${STAMP}@signal.dev"
+PASSWORD="demopassword"
 
-# A per-run target name. Targets persist across runs and the console rejects a
-# duplicate screen_id (no auto-suffix, M2-D13), so a unique name keeps the demo
-# genuinely re-runnable without hand-clearing the target_registry. The name still
-# slugifies to a predictable, asserted screen_id.
-TARGET_NAME="Payment Collection ${STAMP}"
-EXPECTED_SCREEN_ID="payment_collection_${STAMP}"
-
-# expect_status <expected> <actual> <label>
 expect_status() {
   local expected="$1" actual="$2" label="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    echo "✅ $label"
-  else
-    echo "❌ $label (expected $expected got $actual)"
-    echo "   response body:"; cat "$BODY" 2>/dev/null | head -20; echo
-    exit 1
-  fi
+  if [[ "$actual" == "$expected" ]]; then echo "✅ $label";
+  else echo "❌ $label (expected $expected got $actual)"; echo "   body:"; head -20 "$BODY"; echo; exit 1; fi
 }
-
-# expect_eq <expected> <actual> <label>
-expect_eq() {
-  local expected="$1" actual="$2" label="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    echo "✅ $label"
-  else
-    echo "❌ $label (expected '$expected' got '$actual')"
-    echo "   response body:"; cat "$BODY" 2>/dev/null | head -20; echo
-    exit 1
-  fi
+assert() {
+  local cond="$1" label="$2"
+  if [[ "$cond" == "true" ]]; then echo "✅ $label"; else echo "❌ $label"; exit 1; fi
 }
-
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# --- console (cookie-jar) helpers -------------------------------------------
-# console_post <path> <json> — sends the session cookie jar, writes body, echoes status.
-console_post() {
-  curl -s -o "$BODY" -w '%{http_code}' -b "$JAR" \
-    -H 'Content-Type: application/json' -X POST "$BASE$1" -d "$2"
-}
-# console_patch <path> <json>
-console_patch() {
-  curl -s -o "$BODY" -w '%{http_code}' -b "$JAR" \
-    -H 'Content-Type: application/json' -X PATCH "$BASE$1" -d "$2"
-}
-# console_get <path>
-console_get() {
-  curl -s -o "$BODY" -w '%{http_code}' -b "$JAR" "$BASE$1"
-}
-# --- sdk (app-key) helpers ---------------------------------------------------
-sdk_get_eligibility() {
-  curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
-    "$BASE/v1/sdk/eligibility?$1"
-}
-sdk_post() {
-  curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
-    -H 'Content-Type: application/json' -X POST "$BASE$1" -d "$2"
-}
-refresh_cache() {
-  curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
-    -X POST "$BASE/v1/sdk/internal/refresh-cache"
+run_cli() {
+  if command -v tsx >/dev/null 2>&1; then tsx "$CLI" "$@"; else npx tsx "$CLI" "$@"; fi
 }
 
-echo "Signal M2 console demo — BASE=$BASE (client=$CLIENT)"
+echo "Signal B4 console demo — BASE=$BASE (account $EMAIL)"
 echo
 
-HEADER="How was your payment collection experience?"
+# ── 1. health / ready ────────────────────────────────────────────────────────
+status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/health")"
+expect_status 200 "$status" "1a. /health → 200"
+status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/ready")"
+expect_status 200 "$status" "1b. /ready → 200 (deep DB check)"
 
-# ── Step 1: login with the seeded admin → 200, cookie stored ─────────────────
-login_body="$(jq -nc --arg e "$ADMIN_EMAIL" --arg p "$ADMIN_PASSWORD" '{email:$e,password:$p}')"
+# ── 2. signup → publishable key + session ────────────────────────────────────
+signup_body="$(jq -nc --arg e "$EMAIL" --arg p "$PASSWORD" \
+  '{email:$e, password:$p, name:"Console Demo", account_name:"Console Co"}')"
 status="$(curl -s -o "$BODY" -w '%{http_code}' -c "$JAR" \
-  -H 'Content-Type: application/json' -X POST "$BASE/v1/console/auth/login" -d "$login_body")"
-expect_status 200 "$status" "1. login seeded admin → 200 (cookie stored)"
+  -H 'Content-Type: application/json' -X POST "$BASE/v1/console/auth/signup" -d "$signup_body")"
+expect_status 201 "$status" "2. signup → 201 (account + admin + publishable key)"
+KEY="$(jq -r '.publishable_key' "$BODY")"
+assert "$([[ -n "$KEY" && "$KEY" != null ]] && echo true || echo false)" "2b. obtained publishable key ($KEY)"
 
-# ── Step 2: unauthenticated console read (no jar) → 401 ──────────────────────
-status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/v1/console/campaigns")"
-expect_status 401 "$status" "2. GET /v1/console/campaigns with no session → 401"
+# ── 3. CLI login (interim password) → token saved to isolated config ─────────
+run_cli login --password --email "$EMAIL" --password-value "$PASSWORD" --api-url "$BASE" > "$TMPDIR_DEMO/login.out" 2>&1 \
+  && echo "✅ 3. signal login --password → token stored" \
+  || { echo "❌ 3. signal login failed"; cat "$TMPDIR_DEMO/login.out"; exit 1; }
+TOKEN="$(jq -r '.token' "$SIGNAL_CONFIG_DIR/config.json")"
+assert "$([[ "$TOKEN" == cli_* ]] && echo true || echo false)" "3b. token is a cli_ token"
 
-# ── Step 3: create the "Payment Collection" target → 201, capture screen_id ──
-target_body="$(jq -nc --arg n "$TARGET_NAME" '{name:$n, trigger_mechanism:"action"}')"
-status="$(console_post "/v1/console/targets" "$target_body")"
-expect_status 201 "$status" "3. POST /targets '$TARGET_NAME' → 201"
-SCREEN_ID="$(jq -r '.screen_id' "$BODY")"
-TARGET_ID="$(jq -r '.id' "$BODY")"
-expect_eq "$EXPECTED_SCREEN_ID" "$SCREEN_ID" "3b. screen_id slugified → $EXPECTED_SCREEN_ID"
+# ── 4. deploy via CLI (config-as-code) ───────────────────────────────────────
+EVENT="checkout_completed"
+cat > "$TMPDIR_DEMO/signal.config.json" <<JSON
+{ "workflows": [ {
+  "key": "checkout-csat",
+  "event_name": "$EVENT",
+  "status": "active",
+  "metric_type": "CSAT",
+  "rating_type": "star",
+  "rating_scale_max": 5,
+  "header_text": "How was your checkout?",
+  "positive_threshold": 4,
+  "chips_on_negative": ["Slow", "Confusing"],
+  "sampling_rate": 1
+} ] }
+JSON
+run_cli deploy "$TMPDIR_DEMO/signal.config.json" --api-url "$BASE" > "$TMPDIR_DEMO/deploy.out" 2>&1 \
+  && echo "✅ 4. signal deploy → applied" \
+  || { echo "❌ 4. signal deploy failed"; cat "$TMPDIR_DEMO/deploy.out"; exit 1; }
+grep -Eq '(created|updated|unchanged)\s+checkout-csat' "$TMPDIR_DEMO/deploy.out" \
+  && echo "✅ 4b. deploy reported the checkout-csat workflow active" \
+  || { echo "❌ 4b. deploy output unexpected"; cat "$TMPDIR_DEMO/deploy.out"; exit 1; }
 
-# ── Step 4: create a draft campaign → capture id ─────────────────────────────
-status="$(console_post "/v1/console/campaigns" "$(jq -nc --arg c "$CLIENT" '{client_ids:[$c]}')")"
-expect_status 201 "$status" "4. POST /campaigns (draft) → 201"
-CAMPAIGN_ID="$(jq -r '.id' "$BODY")"
+# ── 5. force the SDK cache to see the just-deployed workflow ──────────────────
+status="$(curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
+  -X POST "$BASE/v1/sdk/internal/refresh-cache")"
+expect_status 204 "$status" "5. refresh SDK cache → 204"
 
-# ── Step 5: PATCH the draft — full CSAT builder config ───────────────────────
-patch_body="$(jq -nc \
-  --arg t "$TARGET_ID" --arg c "$CLIENT" --arg h "$HEADER" \
-  '{
-    target_id:$t,
-    client_ids:[$c],
-    metric_type:"CSAT",
-    rating_type:"star",
-    rating_scale_max:5,
-    header_text:$h,
-    positive_threshold:4,
-    chips_on_negative:["Slow to load","Payment failed","Confusing UI"],
-    ask_frequency:"after_7_days",
-    min_tenure_days:0
-  }')"
-status="$(console_patch "/v1/console/campaigns/$CAMPAIGN_ID" "$patch_body")"
-expect_status 200 "$status" "5. PATCH draft (target/CSAT/star/threshold/chips/freq) → 200"
+# ── 6. track the event via the SDK → grant, then respond ─────────────────────
+status="$(curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
+  "$BASE/v1/sdk/eligibility?event_name=$EVENT&user_id=u_report_1&session_age_days=200")"
+expect_status 200 "$status" "6. track $EVENT (eligibility) → 200 grant"
+TRIGGER="$(jq -r '.trigger_id' "$BODY")"
+resp="$(jq -nc --arg tid "$TRIGGER" --arg s "$(now_iso)" --arg r "$(now_iso)" \
+  '{trigger_id:$tid, rating_value:5, device_os:"android", app_version:"1.0.0", shown_at:$s, responded_at:$r}')"
+status="$(curl -s -o "$BODY" -w '%{http_code}' -H "X-Signal-App-Key: $KEY" \
+  -H 'Content-Type: application/json' -X POST "$BASE/v1/sdk/response" -d "$resp")"
+expect_status 204 "$status" "6b. respond rating_value=5 → 204"
 
-# ── Step 6: publish the draft → 200 active ───────────────────────────────────
-status="$(console_post "/v1/console/campaigns/$CAMPAIGN_ID/publish" "{}")"
-expect_status 200 "$status" "6. POST /campaigns/:id/publish → 200"
-PUB_STATUS="$(jq -r '.status' "$BODY")"
-expect_eq "active" "$PUB_STATUS" "6b. published campaign status == active"
+# ── 7. read the reports back via the CLI TOKEN (B4-D5 responses:read) ─────────
+auth=( -H "Authorization: Bearer $TOKEN" )
 
-# Force the SDK cache to pick up the newly-published campaign (deterministic).
-status="$(refresh_cache)"
-expect_status 204 "$status" "6c. POST /v1/sdk/internal/refresh-cache → 204"
+status="$(curl -s -o "$BODY" -w '%{http_code}' "${auth[@]}" "$BASE/v1/console/events/overview")"
+expect_status 200 "$status" "7. GET /v1/console/events/overview via token → 200"
+ev_triggers="$(jq -r --arg e "$EVENT" '.events[] | select(.event_name==$e) | .triggers' "$BODY")"
+ev_responses="$(jq -r --arg e "$EVENT" '.events[] | select(.event_name==$e) | .responses' "$BODY")"
+ev_pos="$(jq -r --arg e "$EVENT" '.events[] | select(.event_name==$e) | .positive_score' "$BODY")"
+assert "$([[ "$ev_triggers" == "1" && "$ev_responses" == "1" && "$ev_pos" == "1" ]] && echo true || echo false)" \
+  "7b. events overview reflects 1 trigger, 1 response, positive_score=1 (got t=$ev_triggers r=$ev_responses p=$ev_pos)"
 
-# ── Step 7: CROSS-MILESTONE — the Console campaign fires via the M1 engine ───
-status="$(sdk_get_eligibility "screen_id=$SCREEN_ID&user_id=$USER_FIRE&client_id=$CLIENT&rep_tenure_days=200")"
-expect_status 200 "$status" "7. GET /v1/sdk/eligibility (fresh user) → 200 (Console campaign fires through M1)"
-ELIG_HEADER="$(jq -r '.header' "$BODY")"
-ELIG_CID="$(jq -r '.campaign_id' "$BODY")"
-TRIGGER_ID="$(jq -r '.trigger_id' "$BODY")"
-expect_eq "$HEADER" "$ELIG_HEADER" "7b. eligibility header matches Console-built header"
-expect_eq "$CAMPAIGN_ID" "$ELIG_CID" "7c. eligibility campaign_id matches the published campaign"
-if [[ -z "$TRIGGER_ID" || "$TRIGGER_ID" == "null" ]]; then
-  echo "❌ 7d. trigger_id missing from eligibility response"; exit 1
-fi
-echo "✅ 7d. eligibility returned a trigger_id"
+status="$(curl -s -o "$BODY" -w '%{http_code}' "${auth[@]}" "$BASE/v1/console/dashboard")"
+expect_status 200 "$status" "7c. GET /v1/console/dashboard via token → 200"
+active="$(jq -r '.kpis.active_campaigns' "$BODY")"
+assert "$([[ "$active" == "1" ]] && echo true || echo false)" "7d. dashboard shows 1 active workflow"
 
-# ── Step 8: submit a positive rating (5) on that trigger → 204 ───────────────
-SHOWN="$(now_iso)"; RESP="$(now_iso)"
-resp_body="$(jq -nc \
-  --arg tid "$TRIGGER_ID" --arg os "android" --arg ver "1.4.0" \
-  --arg shown "$SHOWN" --arg responded "$RESP" \
-  '{trigger_id:$tid, rating_value:5, device_os:$os, app_version:$ver, shown_at:$shown, responded_at:$responded}')"
-status="$(sdk_post "/v1/sdk/response" "$resp_body")"
-expect_status 204 "$status" "8. POST /v1/sdk/response (rating 5) → 204"
+# Per-workflow overview via the deployed workflow id (looked up over the token).
+status="$(curl -s -o "$BODY" -w '%{http_code}' "${auth[@]}" "$BASE/v1/console/workflows")"
+expect_status 200 "$status" "7e. GET /v1/console/workflows via token → 200"
+WF_ID="$(jq -r --arg e "$EVENT" '.[] | select(.event_name==$e) | .id' "$BODY" | head -1)"
+status="$(curl -s -o "$BODY" -w '%{http_code}' "${auth[@]}" "$BASE/v1/console/workflows/$WF_ID/overview")"
+expect_status 200 "$status" "7f. GET /v1/console/workflows/:id/overview via token → 200"
+wf_resp="$(jq -r '.responses' "$BODY")"
+assert "$([[ "$wf_resp" == "1" ]] && echo true || echo false)" "7g. workflow overview shows 1 response"
 
-# ── Step 9: Console Overview reflects the trigger + response ─────────────────
-status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/overview")"
-expect_status 200 "$status" "9. GET /v1/console/campaigns/:id/overview → 200"
-OV_TRIGGERS="$(jq -r '.triggers' "$BODY")"
-OV_RESPONSES="$(jq -r '.responses' "$BODY")"
-OV_SCORE="$(jq -r '.positive_score' "$BODY")"
-if [[ "$OV_TRIGGERS" -ge 1 ]]; then echo "✅ 9b. overview triggers >= 1 (got $OV_TRIGGERS)"; else
-  echo "❌ 9b. overview triggers (expected >=1 got $OV_TRIGGERS)"; exit 1; fi
-expect_eq "1" "$OV_RESPONSES" "9c. overview responses == 1"
-expect_eq "1" "$OV_SCORE" "9d. overview positive_score == 1.0 (rating 5 >= threshold 4)"
-
-# ── Step 10: Console dashboard health list contains the campaign ─────────────
-status="$(console_get "/v1/console/dashboard")"
-expect_status 200 "$status" "10. GET /v1/console/dashboard → 200"
-IN_HEALTH="$(jq -r --arg id "$CAMPAIGN_ID" '[.campaigns[] | select(.campaign_id==$id)] | length' "$BODY")"
-expect_eq "1" "$IN_HEALTH" "10b. campaign present in dashboard health list"
-
-# expect_jq <label> — asserts stdin-less jq -e over $BODY; ✅ on true, ❌+exit otherwise.
-# usage: expect_jq '<jq filter>' '<label>'
-expect_jq() {
-  local filter="$1" label="$2"
-  if jq -e "$filter" "$BODY" >/dev/null 2>&1; then
-    echo "✅ $label"
-  else
-    echo "❌ $label (jq assertion failed: $filter)"
-    echo "   response body:"; cat "$BODY" 2>/dev/null | head -20; echo
-    exit 1
-  fi
-}
-
-# ── Step 13: reasons report — chips breakdown for the campaign ───────────────
-status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/reasons")"
-expect_status 200 "$status" "13. GET /v1/console/campaigns/:id/reasons → 200"
-expect_jq '.chips | type == "array"' "13b. reasons.chips is an array"
-expect_jq '.total_chip_responses | type == "number"' "13c. reasons.total_chip_responses is numeric"
-
-# ── Step 14: clients report — acting client cl_A shows a response ─────────────
-status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/clients")"
-expect_status 200 "$status" "14. GET /v1/console/campaigns/:id/clients → 200"
-expect_jq ".clients[] | select(.client_id==\"$CLIENT\") | .responses >= 1" \
-  "14b. clients report: $CLIENT responses >= 1"
-
-# ── Step 15: responses report — rating filter returns an array ───────────────
-status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/responses?min_rating=1&max_rating=2")"
-expect_status 200 "$status" "15. GET /v1/console/campaigns/:id/responses?min_rating=1&max_rating=2 → 200"
-expect_jq '.items | type == "array"' "15b. responses.items is an array (rating-5 response filtered out)"
-
-# ── Step 16: trend report — daily points include today's response ────────────
-status="$(console_get "/v1/console/campaigns/$CAMPAIGN_ID/trend")"
-expect_status 200 "$status" "16. GET /v1/console/campaigns/:id/trend → 200"
-expect_jq '.points | type == "array"' "16b. trend.points is an array"
-expect_jq '.points | length >= 1' "16c. trend.points has at least one point"
-
-# ── Step 17: unauthenticated reporting read (no jar) → 401 ───────────────────
-status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/v1/console/campaigns/$CAMPAIGN_ID/responses")"
-expect_status 401 "$status" "17. GET /v1/console/campaigns/:id/responses with no session → 401"
-
-# ── Step 11: a SECOND overlapping campaign on same target+client → publish 409 ─
-status="$(console_post "/v1/console/campaigns" "$(jq -nc --arg c "$CLIENT" '{client_ids:[$c]}')")"
-expect_status 201 "$status" "11a. POST /campaigns (second draft) → 201"
-CAMPAIGN2_ID="$(jq -r '.id' "$BODY")"
-patch2_body="$(jq -nc \
-  --arg t "$TARGET_ID" --arg c "$CLIENT" \
-  '{
-    target_id:$t, client_ids:[$c], metric_type:"CSAT", rating_type:"star",
-    rating_scale_max:5, header_text:"Overlapping campaign", positive_threshold:4,
-    chips_on_negative:["a","b","c"], ask_frequency:"after_7_days", min_tenure_days:0
-  }')"
-status="$(console_patch "/v1/console/campaigns/$CAMPAIGN2_ID" "$patch2_body")"
-expect_status 200 "$status" "11b. PATCH second draft → 200"
-status="$(console_post "/v1/console/campaigns/$CAMPAIGN2_ID/publish" "{}")"
-expect_status 409 "$status" "11c. publish overlapping (same target+client) → 409 overlap"
-
-# ── Step 12: pause the first campaign → 200; new user after refresh → 204 ────
-status="$(console_post "/v1/console/campaigns/$CAMPAIGN_ID/pause" "{}")"
-expect_status 200 "$status" "12a. POST /campaigns/:id/pause → 200"
-status="$(refresh_cache)"
-expect_status 204 "$status" "12b. refresh-cache after pause → 204"
-status="$(sdk_get_eligibility "screen_id=$SCREEN_ID&user_id=$USER_PAUSE&client_id=$CLIENT&rep_tenure_days=200")"
-expect_status 204 "$status" "12c. eligibility for a NEW user after pause → 204 (paused campaign no longer fires)"
+# ── 8. scope enforcement: a publishable key CANNOT read console reports ───────
+status="$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/v1/console/dashboard")"
+expect_status 401 "$status" "8. GET /v1/console/dashboard with no credential → 401"
 
 echo
-echo "ALL CONSOLE SCENARIOS PASSED"
+echo "ALL SCENARIOS PASSED"

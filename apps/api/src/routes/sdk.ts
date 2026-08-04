@@ -3,12 +3,14 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Clock } from '../clock.js';
 import type { Db } from '../db/client.js';
 import type { EligibilityService } from '../eligibility/service.js';
+import type { Env } from '../env.js';
 import { recordDismiss } from '../feedback/dismiss.js';
 import { recordResponse } from '../feedback/respond.js';
 
 export function sdkRoutes(deps: {
   db: Db;
   clock: Clock;
+  env: Env;
   eligibility: EligibilityService;
 }): FastifyPluginAsync {
   return async (app) => {
@@ -20,10 +22,11 @@ export function sdkRoutes(deps: {
         });
       }
       const config = await deps.eligibility.check({
-        screenId: parsed.data.screen_id,
+        accountId: request.accountId as string,
+        eventName: parsed.data.event_name,
         userId: parsed.data.user_id,
-        clientId: parsed.data.client_id,
-        repTenureDays: parsed.data.rep_tenure_days,
+        context: parsed.data.context,
+        sessionAgeDays: parsed.data.session_age_days,
       });
       if (!config) return reply.code(204).send();
       return reply.code(200).send(config);
@@ -36,7 +39,13 @@ export function sdkRoutes(deps: {
           error: { code: 'invalid_body', message: parsed.error.issues[0]?.message ?? 'invalid' },
         });
       }
-      const result = await recordResponse(deps.db, deps.clock, parsed.data);
+      const result = await recordResponse(
+        deps.db,
+        deps.clock,
+        deps.env,
+        request.accountId as string,
+        parsed.data,
+      );
       if (result === 'unknown_trigger')
         return reply
           .code(404)
@@ -44,7 +53,15 @@ export function sdkRoutes(deps: {
       if (result === 'invalid_rating')
         return reply
           .code(422)
-          .send({ error: { code: 'invalid_rating', message: 'rating outside campaign scale' } });
+          .send({ error: { code: 'invalid_rating', message: 'rating outside workflow scale' } });
+      // B4-D1: a supplied image URL outside the caller's account prefix → 422.
+      if (result === 'invalid_image_url')
+        return reply.code(422).send({
+          error: {
+            code: 'invalid_image_url',
+            message: 'other_image_url is not under this account prefix',
+          },
+        });
       return reply.code(204).send();
     });
 
@@ -64,14 +81,14 @@ export function sdkRoutes(deps: {
     });
 
     // POST /internal/refresh-cache — operational/test hook that forces an
-    // immediate reload of active campaigns into the SDK cache, so a
+    // immediate reload of active workflows into the SDK cache, so a
     // publish/pause is reflected in `/eligibility` without waiting on the 60s
     // auto-refresh timer. It is idempotent (just reloads from the DB) and sits
     // inside this app-key-guarded SDK scope, so the same `X-Signal-App-Key`
     // header protects it. Used by the console end-to-end demo for a
     // deterministic build→publish→fire→pause loop.
     app.post('/internal/refresh-cache', async (request, reply) => {
-      await request.server.campaignCache.refresh();
+      await request.server.workflowCache.refresh();
       return reply.code(204).send();
     });
   };
