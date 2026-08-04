@@ -47,6 +47,9 @@ importers:
       '@signal/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@signal/web-core':
+        specifier: workspace:*
+        version: link:../../packages/web-core
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)

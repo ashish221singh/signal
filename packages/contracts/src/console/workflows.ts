@@ -89,3 +89,20 @@ export const workflowListItemSchema = z.object({
   updated_at: timestampSchema,
 });
 export type WorkflowListItem = z.infer<typeof workflowListItemSchema>;
+
+/**
+ * Hosted-link preview (F2-D16). `POST /v1/console/preview` mints a short-lived
+ * signed token for a workflow the caller owns; the response carries the shareable
+ * `/s/preview/:token` URL. Preview never persists, so no config is echoed back.
+ */
+export const previewRequestSchema = z.object({
+  workflow_id: z.uuid(),
+});
+export type PreviewRequest = z.infer<typeof previewRequestSchema>;
+
+export const previewResponseSchema = z.object({
+  token: z.string(),
+  preview_url: z.url(),
+  expires_at: z.iso.datetime(),
+});
+export type PreviewResponse = z.infer<typeof previewResponseSchema>;

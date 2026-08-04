@@ -128,6 +128,31 @@ Console-managed workflow builder + lifecycle. `code`-managed workflows (owned by
 | `POST /v1/console/workflows/:id/archive` | Archive. | → `200 workflowSchema`. |
 | `DELETE /v1/console/workflows/:id` | Delete a draft. | → `204`; `404 not_found`. |
 
+### Hosted-link preview (guarded — scope `workflows:read`, F2-D16)
+
+Mints a short-lived signed link that renders a workflow's sheet in a standalone
+page for the agent's "instant preview" / share-anywhere surveys. Preview is
+**read-only** — it never persists a response and needs no publishable key or
+schema change. The token is a stateless HMAC grant (signed with `SESSION_SECRET`,
+`exp` ≈ 30 min) embedding `{account_id, workflow_id, mode:'preview'}`. Contract:
+`@signal/contracts` (`console/workflows.ts` → `previewRequestSchema`/`previewResponseSchema`).
+
+| Method & path | Purpose | Response |
+|---|---|---|
+| `POST /v1/console/preview` | Mint a preview link for a workflow the account owns. | `previewRequestSchema` (`{workflow_id}`) → `201 previewResponseSchema` (`{token, preview_url, expires_at}`); `404 not_found` if the workflow is not in the account. |
+
+### Hosted-link preview surface — `/s/preview/*` (public, F2-D7)
+
+Public, unauthenticated: the signed token IS the grant, and the workflow lookup is
+scoped to the token's `account_id`, so a token can only ever render its own
+account's workflow. Serves a self-contained HTML harness that loads the bundled
+web-core IIFE and mounts the config with a **non-persisting** preview `SheetHost`.
+
+| Method & path | Purpose | Response |
+|---|---|---|
+| `GET /s/preview/:token` | Render the standalone preview harness for a valid token. | `200 text/html` (the sheet page); expired/invalid/wrong-account/incomplete → `404 text/html` (friendly page, not a stack trace). |
+| `GET /s/preview/web-core.js` | The bundled web-core IIFE artifact the harness mounts (F2-D14). | `200 application/javascript` (cached 1h). |
+
 ### Reporting (guarded — scope `responses:read`, B4-D5)
 
 All account-scoped and null-safe; readable via session **or** a token carrying

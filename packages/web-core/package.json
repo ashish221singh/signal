@@ -10,7 +10,9 @@
     ".": {
       "types": "./dist/web-core.d.ts",
       "import": "./dist/web-core.mjs"
-    }
+    },
+    "./bundle": "./dist/web-core.global.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
