@@ -197,11 +197,14 @@ export class SheetView {
       field.className = 'sig-field';
       const label = document.createElement('label');
       label.className = 'sig-label';
-      label.textContent = this.cfg.other_requires_text ? 'Tell us more (required)' : 'Tell us more';
+      label.textContent = 'Tell us more';
       const ta = document.createElement('textarea');
       ta.className = 'sig-textarea';
       ta.maxLength = COMMENT_MAX;
       ta.setAttribute('aria-label', 'Comment');
+      ta.placeholder = this.cfg.other_requires_text
+        ? 'Tell us what happened… (required)'
+        : 'Tell us what happened… (optional)';
       label.htmlFor = 'sig-comment';
       ta.id = 'sig-comment';
       const counter = document.createElement('div');
@@ -261,7 +264,7 @@ export class SheetView {
     field.className = 'sig-field';
     const label = document.createElement('div');
     label.className = 'sig-label';
-    label.textContent = 'Add a photo';
+    label.textContent = 'Attach a screenshot (optional)';
     field.appendChild(label);
 
     const row = document.createElement('div');
@@ -275,8 +278,7 @@ export class SheetView {
     const attachBtn = document.createElement('button');
     attachBtn.type = 'button';
     attachBtn.className = 'sig-btn sig-btn-ghost';
-    attachBtn.textContent = 'Attach';
-    attachBtn.style.flex = 'none';
+    attachBtn.textContent = 'Add a photo';
     attachBtn.addEventListener('click', () => input.click());
 
     const thumb = document.createElement('img');

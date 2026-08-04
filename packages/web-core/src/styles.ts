@@ -184,13 +184,14 @@ export const componentCss = `
 .sig-field { margin-top: var(--space-4); }
 .sig-label {
   display: block;
-  font: 600 13px/1.4 var(--font-sans);
-  color: var(--s-ink);
-  margin-bottom: var(--space-2);
+  font: 500 12.5px/1.4 var(--font-sans);
+  color: var(--s-ink-2);
+  margin-bottom: 6px;
 }
 .sig-textarea {
   width: 100%;
-  min-height: 78px;
+  min-height: 84px;
+  max-height: 150px;
   resize: none;
   font: 400 14px/1.5 var(--font-sans);
   color: var(--s-ink);
@@ -231,8 +232,8 @@ export const componentCss = `
 .sig-btn-primary { background: var(--s-accent); color: #FFFFFF; }
 .sig-btn-primary:hover { background: var(--s-accent-hover); }
 .sig-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.sig-btn-ghost { background: var(--s-surface); color: var(--s-ink); box-shadow: var(--s-shadow-1); border-color: transparent; }
-.sig-btn-ghost:hover { box-shadow: var(--s-shadow-2); }
+.sig-btn-ghost { flex: none; background: var(--s-surface); color: var(--s-ink-2); border-color: var(--s-line); box-shadow: none; padding: 0 16px; font-weight: 500; }
+.sig-btn-ghost:hover { color: var(--s-ink); border-color: var(--s-line-strong); background: var(--s-surface-2); }
 .sig-btn:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
 
 /* --- submitting / done --- */
