@@ -2,12 +2,22 @@
 
 In-app CSAT / CES feedback for BeatRoute's field-rep app. Signal turns a single
 one-line hook at the right moment into a full feedback loop: it asks the backend
-whether *this* rep, on *this* screen, for *this* client is eligible; if so it
-renders a config-driven bottom sheet (rating → follow-up → optional photo),
-persists the answer, and reports it. When nothing should be asked, the SDK stays
-completely invisible — no sheet, no blocking, no crash. It is guest-safe by
-construction: every hook is a no-op before `init` and no failure path is allowed
-to degrade the host app.
+whether *this* user, on *this* named **event**, is eligible; if so it renders a
+config-driven sheet — a **WebView hosting the bundled `@signal/web-core`**, the
+same renderer that powers the web SDK — persists the answer, and reports it. When
+nothing should be asked, the SDK stays completely invisible — no sheet, no
+blocking, no crash. It is guest-safe by construction: every hook is a no-op before
+`init` and no failure path is allowed to degrade the host app.
+
+> **F2 refit.** The sheet is no longer a native Android View. It is a WebView
+> shell that loads a **bundled** web-core build (`assets/web-core/`, never fetched
+> at show time) and bridges the sheet's impure intents — submit / dismiss / upload
+> / redirect / review — to native over `@JavascriptInterface` per
+> [`docs/sheet-bridge-v1.md`](../docs/sheet-bridge-v1.md). The tested transport
+> (eligibility client, Room + WorkManager outbox, DataStore suppression, the
+> `Signal.init` / `Signal.trackEvent` public API) is reused; only the native sheet
+> was replaced. Triggers are now **event-keyed** (`event_name`), so `screen_id` /
+> `client_id` and the screen-dwell hooks are gone.
 
 This is the canonical integration + testing guide for the SDK. The module README
 (`signal-sdk/README.md`) is just a pointer here.
@@ -16,9 +26,9 @@ This is the canonical integration + testing guide for the SDK. The module README
 
 ## 1. What it is
 
-- **One hook, full loop.** You place `trackEvent` / `onScreenEnter` /
-  `onScreenExit` at meaningful moments. The SDK owns everything after that:
-  eligibility, suppression, the sheet, upload, and delivery.
+- **One hook, full loop.** You place `trackEvent` at meaningful moments. The SDK
+  owns everything after that: eligibility, suppression, the (WebView) sheet,
+  upload, and delivery.
 - **Invisible when there's nothing to ask.** Eligibility is checked silently;
   the sheet only appears when the backend says yes and the local suppression
   floor allows it.
@@ -36,7 +46,8 @@ This is the canonical integration + testing guide for the SDK. The module README
 | JDK            | 17                                                  |
 | Android SDK    | platform-34 (`compileSdk 34`)                       |
 | `minSdk`       | 24                                                  |
-| Language       | Kotlin, plain Android Views (no Compose)            |
+| Language       | Kotlin; sheet renders in a `WebView` (bundled web-core) |
+| WebView        | System WebView present + enabled (fail-silent if absent) |
 
 The release artifact is `signal-sdk-release.aar`, produced by CI (see
 [§6 Build & test](#6-build--test)) at
@@ -55,8 +66,11 @@ platform-34 installed.
 
 Implement `SessionProvider` and call `Signal.init(...)` once, in
 `Application.onCreate`. Identity is resolved by the SDK **on demand** from this
-provider — you never pass `user_id` / `client_id` / `rep_tenure_days` into the
-hooks.
+provider — you never pass identity into the hooks. `userId()` is the eligibility +
+suppression subject; `repTenureDays()` feeds the optional min-session-age gate
+(sent as `session_age_days`). `clientId()` is retained on the interface for
+source compatibility but is no longer sent to eligibility (the event model dropped
+`client_id`).
 
 ```kotlin
 import android.app.Application
@@ -111,27 +125,27 @@ state, so you may safely re-init on an identity change.
 
 ---
 
-## 4. Per-screen hooks
+## 4. Event hooks
 
-The entire public surface is four methods. The hooks are one-liners; identity is
-pulled internally from your `SessionProvider` and is **never** passed in.
+The entire public surface is `Signal.init` + `Signal.trackEvent`. The hook is a
+one-liner; identity is pulled internally from your `SessionProvider` and is
+**never** passed in.
 
 ```kotlin
-// Action moment — a meaningful in-app event just completed.
+// A meaningful, named in-app event just completed.
 Signal.trackEvent("order_completion")
-
-// Dwell-based trigger — the rep entered / left a screen. If they dwell past the
-// configured threshold without leaving, the trigger flow runs.
-Signal.onScreenEnter("client_dashboard")
-Signal.onScreenExit("client_dashboard")
 ```
 
-- Use `trackEvent(screenId)` for **action** triggers (an order placed, a visit
-  logged, etc.).
-- Use `onScreenEnter` / `onScreenExit` (as a matched pair) for **dwell** triggers
-  where lingering on a screen is the signal.
+- Call `trackEvent(eventName)` at meaningful moments (an order placed, a visit
+  logged, checkout completed, etc.). A workflow configured for that `event_name`
+  decides whether a sheet appears.
+- An event with no matching workflow shows nothing (the backend records it for
+  surfacing but returns not-eligible).
 - Every hook is a silent no-op before `Signal.init` — a host that never inits (or
   chooses not to) is never affected.
+
+> The screen-dwell hooks (`onScreenEnter` / `onScreenExit`) were removed in the F2
+> refit; Signal fires on named events only.
 
 ---
 
@@ -150,21 +164,27 @@ deliberately asymmetric:
   double-delivers.
 
 **7-day local suppression floor.** A DataStore-backed cache records the last ask
-per `(screenId, clientId)` and short-circuits eligibility calls for 7 days. This
+per `(eventName, userId)` and short-circuits eligibility calls for 7 days. This
 is a floor, not the source of truth — the backend still owns real cooldowns; the
 floor only avoids obviously-too-soon network round-trips.
 
-**Config-driven sheet.** The bottom sheet renders entirely from campaign config:
-the rating control is **star**, **emoji**, or **effort** (CES) as configured, and
-the follow-up branches on the rating into a **positive**, **negative**, or
-**other** path (e.g. positive thanks, negative chips + free text). Nothing about
-the sheet is hardcoded per campaign.
+**Config-driven sheet (bundled web-core).** The sheet is a `WebView` that loads
+the bundled `assets/web-core/sheet.html` harness, waits for its JS `ready` signal,
+then receives the **raw** eligibility config JSON — native does not parse the full
+config (per [`docs/sheet-bridge-v1.md`](../docs/sheet-bridge-v1.md), GR-2), it
+relays it verbatim into web-core. web-core renders the rating control and the
+positive / negative / other branches entirely from that config; the shared
+renderer guarantees the sheet looks identical on web and Android. The sheet's
+impure intents cross to native via the `SignalBridge` `@JavascriptInterface`:
+`submit` → the precious outbox, `dismiss` → outbox dismiss + cooldown, `openUrl` →
+browser, `openReview` → Play Store review, `resize` → sizing.
 
-**Image attach.** Where enabled, the rep can attach a photo. The SDK downscales
-it (long edge ≤ 1600 px, re-encoded to JPEG, capped at 5 MB with one lower-quality
-retry) and uploads it via a two-step **pre-signed** flow: `POST /v1/sdk/uploads`
-returns an upload URL, the bytes are `PUT` directly to it. The image is optional —
-any upload failure is swallowed and the response is still delivered.
+**Image attach.** Where enabled, the user can attach a photo. The photo
+`<input type=file>` is routed to the native system picker via
+`WebChromeClient.onShowFileChooser`; **web-core** then applies its own guardrails
+(downscale, type/size caps) and performs the two-step **pre-signed** upload
+(`POST /v1/sdk/uploads` → `PUT`) itself. The image is optional — any upload
+failure lets the user submit text-only and the response is still delivered.
 
 ---
 
@@ -217,37 +237,32 @@ baseUrlOverride = "http://10.0.2.2:3000/"   // 10.0.2.2 = host loopback from the
 
 ## 8. Manual QA checklist
 
-Robolectric unit tests cover bottom-inset padding, the scrollable content
-wrapper, the `values-night` dark paper, and rating content descriptions. The
-items below need a **real device / emulator and a human** — motion, focus order,
-and true inset / rotation behaviour can't be asserted in unit tests.
+Robolectric unit tests cover the transport wiring end to end: `trackEvent` →
+eligibility (re-keyed to `event_name`) → the WebView sheet fragment shows and is
+handed the bundled web-core → a bridge `submit` lands in the outbox and flushes →
+suppression short-circuits the next event. A real WebView cannot execute the
+web-core JS under Robolectric, so the **visual sheet render** (rating, branches,
+dark mode, motion, a11y) is covered by the web-core JS test suite. The items below
+need a **real device / emulator and a human** — they exercise the WebView bridge
+in situ and the visual parity of the bundled renderer.
 
-- **Rotation mid-flow** — open the sheet, select a low rating to reach NEGATIVE
-  (or OTHER), rotate the device, and confirm the sheet survives the config change
-  without losing typed text / crashing and re-lays out correctly.
-- **Keyboard overlap on OTHER free-text** — in the OTHER sub-branch, focus the
-  text field so the soft keyboard shows. The Submit button must stay visible
-  above the keyboard (bottom IME inset padding), and the content must scroll if
-  the sheet is shrunk.
-- **Gesture-nav insets** — on a device using gesture navigation, confirm the
-  Submit button and sheet bottom edge are not hidden behind the nav bar (bottom
-  `systemBars` inset padding applied).
-- **Small vs large devices** — verify on a compact phone (sheet full-width) and
-  on a large phone / tablet (`sw600dp`: sheet width-capped and centred, not
-  stretched edge-to-edge).
-- **Long chip list** — configure many `chips_on_negative` entries and confirm the
-  chip area scrolls inside the capped-height content region instead of clipping
-  the Submit button.
-- **Dark mode** — toggle system dark theme and confirm the sheet renders the dark
-  paper / near-white ink (brand orange unchanged), with legible contrast in every
-  state.
-- **Reduced motion** — enable "Remove animations" (or set animator duration scale
-  to 0 in Developer options) and confirm state transitions swap instantly with no
-  fade; then re-enable and confirm the subtle fade returns.
-- **TalkBack focus order** — enable TalkBack and confirm a sensible traversal:
-  header → close, then rating elements announce "Rate N of M", chips announce
-  their label + selected state, and Submit / Add photo are reachable and
-  labelled.
+- **Full loop on device** — fire a `trackEvent` that matches a published workflow
+  and confirm the WebView sheet appears, a submit is accepted, and (offline) the
+  answer flushes on reconnect.
+- **Rotation mid-flow** — open the sheet, type into the free-text field, rotate;
+  confirm the retained fragment keeps the WebView state (no lost text / crash).
+- **Hardware back** — press back with the sheet open; confirm it dismisses (a
+  `dismiss` bridge message → cooldown) without crashing the host.
+- **Photo attach** — in a config that allows an image, tap add-photo; confirm the
+  native system picker opens (`onShowFileChooser`), the picked image uploads
+  inside web-core, and a text-only submit still works if you cancel.
+- **Redirect / store review** — for a workflow whose post-submit action is a
+  redirect or store review, confirm `openUrl` opens the browser and `openReview`
+  opens the Play Store listing.
+- **Dark mode & motion** — toggle system dark theme and reduced-motion; confirm
+  the web-core sheet honours them (this is web-core behaviour, verified visually).
+- **WebView disabled/missing** — on a device with the system WebView disabled,
+  confirm `trackEvent` fails silently (no sheet, no crash).
 
 ---
 

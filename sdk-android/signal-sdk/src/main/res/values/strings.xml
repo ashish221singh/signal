@@ -1,21 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Content description for the bottom-sheet close affordance. -->
+  <!-- The sheet UI (rating / thanks / chips / photo copy) now lives inside the
+       bundled web-core; the native-sheet strings were removed in the F2 refit.
+       Only host-facing labels remain. -->
   <string name="signal_close_content_description">Close</string>
-
-  <!-- Content description for a rating element: "Rate 4 of 5" (Task E.2). -->
-  <string name="signal_rate_n_of_m">Rate %1$d of %2$d</string>
-
-  <!-- POSITIVE state (Task E.3): thank-you message + optional Play Store prompt. -->
-  <string name="signal_positive_thanks">Thanks for the feedback!</string>
-  <string name="signal_positive_rate_us">Rate us</string>
-
-  <!-- NEGATIVE state (Task E.4): chips, Other sub-branch, submit, add photo. -->
-  <string name="signal_negative_prompt">What went wrong?</string>
-  <string name="signal_negative_other">Other</string>
-  <string name="signal_submit">Submit</string>
-  <string name="signal_other_hint">Tell us more</string>
-  <string name="signal_add_photo">Add photo</string>
-  <string name="signal_photo_uploading">Uploading photo…</string>
-  <string name="signal_photo_attached">Photo attached · tap to remove</string>
 </resources>

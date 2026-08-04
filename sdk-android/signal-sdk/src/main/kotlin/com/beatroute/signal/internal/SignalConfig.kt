@@ -24,6 +24,5 @@ internal class SignalState(
     val sheetPresenter: SheetPresenter,
     val feedbackClient: FeedbackClient,
     val scope: CoroutineScope,
-    val dwellTimer: DwellTimer,
     val clock: () -> Long = System::currentTimeMillis,
 )

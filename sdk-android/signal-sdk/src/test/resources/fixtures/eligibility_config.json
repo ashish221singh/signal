@@ -3,12 +3,13 @@
   "campaign_id": "22222222-2222-4222-8222-222222222222",
   "metric_type": "CSAT",
   "header": "How was your delivery?",
-  "rating_type": "star",
-  "rating_scale_max": 5,
-  "positive_threshold": 4,
+  "rating_type": "emoji",
+  "rating_scale_max": 3,
+  "positive_threshold": 3,
   "chips_on_negative": ["Too slow", "Wrong item"],
   "other_requires_text": true,
   "other_allows_image": true,
-  "on_positive_action": "play_store_review",
+  "positive_action": { "type": "store_review" },
+  "negative_action": { "type": "none" },
   "skip_enabled": true
 }

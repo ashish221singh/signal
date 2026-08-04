@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <!-- ============================================================= -->
-  <!-- Signal theme (DayNight so values-night colors apply for free) -->
+  <!-- Signal theme (DayNight so values-night colors apply for free). -->
+  <!-- The native sheet is gone (F2 refit); the sheet now renders in a -->
+  <!-- WebView hosting the bundled web-core, which carries its own      -->
+  <!-- (inlined-token) styling. This base theme is kept for the host    -->
+  <!-- Activity/container and the design-token color palette below.     -->
   <!-- ============================================================= -->
   <style name="Theme.Signal" parent="Theme.Material3.DayNight.NoActionBar">
     <item name="colorPrimary">@color/signal_orange_500</item>
@@ -16,57 +20,12 @@
     <item name="colorError">@color/signal_danger</item>
   </style>
 
-  <!-- ============================================================= -->
-  <!-- Bottom sheet look, applied by Phase E when rendering the sheet -->
-  <!-- ============================================================= -->
-  <style name="ShapeAppearance.Signal.BottomSheet" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
-    <item name="cornerFamily">rounded</item>
-    <item name="cornerSizeTopLeft">@dimen/signal_radius_sheet</item>
-    <item name="cornerSizeTopRight">@dimen/signal_radius_sheet</item>
-    <item name="cornerSizeBottomLeft">0dp</item>
-    <item name="cornerSizeBottomRight">0dp</item>
-  </style>
-
-  <style name="Widget.Signal.BottomSheet" parent="Widget.Material3.BottomSheet.Modal">
-    <item name="shapeAppearance">@style/ShapeAppearance.Signal.BottomSheet</item>
-    <item name="backgroundTint">@color/signal_bg</item>
-  </style>
-
-  <style name="ThemeOverlay.Signal.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
-    <item name="colorPrimary">@color/signal_orange_500</item>
-    <item name="colorOnPrimary">@color/signal_action_ink</item>
-    <item name="colorSurface">@color/signal_bg</item>
-    <item name="colorOnSurface">@color/signal_ink</item>
-    <item name="bottomSheetStyle">@style/Widget.Signal.BottomSheet</item>
-    <!-- drag-handle tint -->
-    <item name="colorOnSurfaceVariant">@color/signal_ink_tertiary</item>
-  </style>
-
-  <!-- ============================================================= -->
-  <!-- Negative-branch chip (Task E.4): single-select pill, white bg + -->
-  <!-- subtle ring by default; orange fill + ring + ink when checked.  -->
-  <!-- ============================================================= -->
-  <style name="Widget.Signal.Chip" parent="Widget.Material3.Chip.Filter">
-    <item name="chipBackgroundColor">@color/signal_chip_bg</item>
-    <item name="android:textColor">@color/signal_chip_text</item>
-    <item name="chipStrokeColor">@color/signal_chip_stroke</item>
-    <item name="chipStrokeWidth">@dimen/signal_chip_stroke</item>
-    <item name="chipCornerRadius">@dimen/signal_radius_chip</item>
-    <item name="android:textSize">@dimen/signal_text_chip</item>
-    <item name="checkedIconEnabled">false</item>
-    <item name="chipMinHeight">@dimen/signal_chip_min_height</item>
-  </style>
-
-  <!-- ============================================================= -->
-  <!-- Dialog theme returned from SignalBottomSheetFragment.getTheme; -->
-  <!-- carries the Signal look via bottomSheetStyle + Signal colors.  -->
-  <!-- ============================================================= -->
-  <style name="Theme.Signal.BottomSheetDialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
-    <item name="colorPrimary">@color/signal_orange_500</item>
-    <item name="colorOnPrimary">@color/signal_action_ink</item>
-    <item name="colorSurface">@color/signal_bg</item>
-    <item name="colorOnSurface">@color/signal_ink</item>
-    <item name="colorOnSurfaceVariant">@color/signal_ink_tertiary</item>
-    <item name="bottomSheetStyle">@style/Widget.Signal.BottomSheet</item>
+  <!-- Transparent dialog theme hosting the WebView sheet: no dim/frame so the -->
+  <!-- web-core sheet (its own backdrop + card) is the only visible chrome. -->
+  <style name="Theme.Signal.WebSheetDialog" parent="Theme.Material3.DayNight.Dialog">
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowIsFloating">false</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:backgroundDimEnabled">false</item>
   </style>
 </resources>
