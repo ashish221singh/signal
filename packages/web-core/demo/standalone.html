@@ -62,8 +62,10 @@
   <div id="log" aria-live="polite"></div>
 </div>
 
-<script type="module">
-  import { mount } from '../dist/web-core.mjs';
+<!-- classic script (not a module) so this works when opened via file:// — browsers block ES-module imports over file:// (CORS). The IIFE build exposes window.SignalWebCore. -->
+<script src="../dist/web-core.global.js"></script>
+<script>
+  const { mount } = SignalWebCore;
 
   const logEl = document.getElementById('log');
   const log = (msg) => {
