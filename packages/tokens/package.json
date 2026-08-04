@@ -1,0 +1,23 @@
+{
+  "name": "@signal/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./tokens.css",
+    "./fonts/*": "./fonts/*"
+  },
+  "files": [
+    "tokens.css",
+    "fonts",
+    "src"
+  ],
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "prebuild": "node scripts/generate.mjs",
+    "build": "node scripts/generate.mjs",
+    "pretypecheck": "node scripts/generate.mjs",
+    "typecheck": "tsc --noEmit"
+  }
+}

@@ -5,6 +5,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# generated token/font bundle (reproducible from tokens.css + fonts via scripts/generate.mjs)
+packages/tokens/src/generated.ts
+
 # environment — never commit real env values
 .env
 .env.*

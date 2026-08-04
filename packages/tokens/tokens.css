@@ -2,7 +2,61 @@
    Signal — Design Tokens (final version)
    Dark-first, code-native. Palette carried from the previous system.
    Source of truth: primitives → semantic (theme) → component tokens.
+
+   CANONICAL HOME: packages/tokens (@signal/tokens). Do not copy this file —
+   consumers import it (styleguide via <link>, web-core via the tokensCss string,
+   later shells + hosted link). See F1-D17.
    ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   Self-hosted fonts (F1-D19). Real subset woff2 (Latin + common punctuation),
+   no runtime Google Fonts fetch. font-display:swap + system fallback stack so
+   text never blocks on font load (F1-D14). URLs are relative to this file; when
+   web-core inlines tokensCss into a shadow root it swaps these for data-URI
+   @font-face rules (see @signal/tokens fontFaceDataUriCss + web-core injection).
+   ---------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/inter-600.woff2') format('woff2');
+}
 
 :root {
   /* ---- Primitive: warm neutral ramp ------------------------------------ */
