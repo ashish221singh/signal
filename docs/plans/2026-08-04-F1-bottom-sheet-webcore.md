@@ -30,6 +30,12 @@
 | F1-D12 | **Negative branch with no capture configured** (`other_requires_text=false` AND `other_allows_image=false`) → the detail step is **skipped**; the rating alone submits. | A negative rating with nothing to collect shouldn't show an empty step. |
 | F1-D13 | **One sheet at a time.** `mount` while a sheet is already open is a **no-op** (returns the existing handle); the state machine is single-instance. | Re-entrant triggers must not stack sheets over each other. |
 | F1-D14 | **Fonts bundled/degrade gracefully.** JetBrains Mono + Inter are bundled or `font-display:swap` with a system fallback stack; the sheet never blocks on font load. | No FOIT / invisible text in a guest context; layout must not jump. |
+| F1-D15 | **Bundler = `tsup`.** Outputs: ESM (`dist/web-core.mjs`), an IIFE global `SignalWebCore` (`dist/web-core.global.js`), and `.d.ts`. Target ES2020, zero runtime deps, **no CSS file** — `tokens.css` is imported as a string and injected into the shadow root. Bundle budget **≤ 35 KB gzip** (excluding font files), asserted in CI. | One small, dependency-free artifact every shell can bundle; the size budget keeps it a good guest. |
+| F1-D16 | **Tests = Vitest + `happy-dom`**; DOM assertions via `@testing-library/dom` + `@testing-library/user-event`; a11y via `@testing-library/jest-dom` matchers. An optional Playwright visual smoke sits behind a `PLAYWRIGHT=1` flag (not required for `pnpm verify`). | Fast, headless, deterministic; Playwright stays opt-in so CI needs no browser download. |
+| F1-D17 | **Tokens single source = new `packages/tokens` (`@signal/tokens`).** It becomes the **canonical home** of `tokens.css` (raw file + a `tokensCss` string export). `design/final-version/tokens.css` is updated to re-export/point at it (styleguide imports from the package); web-core, and later the shells/hosted-link, all consume `@signal/tokens`. No copies. | Kills brand drift across web-core + shells + styleguide; one file, one workspace dep. |
+| F1-D18 | **Custom emoji = 3 in-package inline SVG faces** (`src/assets/emoji/{negative,neutral,positive}.svg`), drawn in the brand style, **monochrome via `currentColor`** so they theme with tokens and animate. A dedicated task authors them; never system emoji (F1-D11). | Identical, themeable, animatable rating across every surface. |
+| F1-D19 | **Fonts self-hosted, no runtime fetch.** JetBrains Mono + Inter shipped as **subset woff2** in `@signal/tokens`, referenced via `@font-face` with `font-display:swap` + a system fallback stack. No Google Fonts network call at runtime. | Privacy, offline, and no third-party dependency inside a guest app. |
+| F1-D20 | **Config type source = `@signal/contracts`.** The SDK eligibility config schema (extended by B5 with `positive_action`/`negative_action`) is the single type; web-core imports the inferred `WorkflowConfig` + `Answer` types and reads a `config_version` field for the F1-D10 handshake. | One contract shared by backend, web-core, and (via the bridge envelope) the shells. |
 
 ---
 
@@ -51,16 +57,67 @@ interface SheetHandle { close(): void }
 
 ---
 
+## Implementation details (pinned)
+
+**Package layout**
+```
+packages/tokens/                 # @signal/tokens (NEW, canonical brand source)
+  tokens.css                     # moved here from design/final-version (which now re-exports)
+  fonts/*.woff2                  # subset JetBrains Mono + Inter
+  src/index.ts                   # export const tokensCss: string; font URLs
+packages/web-core/               # @signal/web-core
+  src/
+    mount.ts                     # public mount(); shadow-root + tokens injection
+    machine.ts                   # pure state machine (no DOM)
+    view/                        # rating.ts, detail.ts, submitting.ts, done.ts, backdrop.ts
+    host.ts                      # SheetHost + bridge message types
+    assets/emoji/{negative,neutral,positive}.svg
+    types.ts                     # re-exports WorkflowConfig/Answer from @signal/contracts
+  demo/standalone.html           # hosted-link harness + mock host
+  tsup.config.ts
+```
+
+**State machine states** (F1-D4): `rating → detail → submitting → done` with `done` resolving the
+action (`close | thanks | redirect | store_review`). `dismissed` is terminal and reachable from
+`rating`, `detail`, `submitting` (submit still completes via host). `detail` is **skipped** when the
+negative branch has no capture (F1-D12). Guards: `positive = rating >= positive_threshold`.
+
+**Cross-language bridge (authored here as `docs/sheet-bridge-v1.md`, consumed by F2 shells)**
+```
+host → core:   INIT { config, config_version }          // mount the sheet
+core → host:   READY {}                                  // core mounted, ready for INIT ack
+core → host:   SUBMIT { answer }                         // record (precious)
+core → host:   DISMISS { reason }
+core → host:   REQUEST_UPLOAD { fileRef } → UPLOAD_RESULT { url | error }
+core → host:   OPEN_URL { url } | OPEN_REVIEW {}
+core → host:   RESIZE { height }                         // native sizes the WebView
+```
+On web the "bridge" is direct function calls (the `SheetHost` object); on native the same messages
+cross the `@JavascriptInterface` / `WKScriptMessageHandler` boundary as JSON. Versioned by
+`bridge_version`; unknown message types are ignored (forward-compat).
+
+**Build outputs / budget** (F1-D15): ESM + IIFE + d.ts; `tokensCss` + emoji inlined; **≤ 35 KB gzip**
+(core, excl. fonts) checked in CI. No runtime dependencies.
+
 ## Tasks
 
-### Task 1 — Package scaffold (F1-D1,D2)
+### Task 0 — `@signal/tokens` package (F1-D17,D19)
+Create `packages/tokens`; **move** `design/final-version/tokens.css` here as canonical and update the
+design styleguide + `design/final-version` to import/point at it; add subset woff2 fonts + `@font-face`;
+export `tokensCss` string. **Verify:** styleguide still renders; `@signal/tokens` builds; no duplicate
+tokens file remains.
+
+### Task 1 — Package scaffold (F1-D1,D2,D15,D16)
 `packages/web-core`: `package.json`, tsconfig (extends base), `tsup`/Vite lib build (ESM + IIFE), `@signal/contracts` dep, Vitest + happy-dom. A Shadow-DOM root helper that injects `tokens.css` (imported as a string). **Verify:** builds; a trivial `mount` renders an empty sheet into a shadow root in a DOM test.
 
 ### Task 2 — Config + host types + state machine (F1-D3,D4)
 Types from contracts (`WorkflowConfig`, `Answer`), the `SheetHost` interface, and a pure state machine (states, transitions, guards using `positive_threshold`). **Verify:** state-machine unit tests cover every transition incl. dismiss-from-any-state and the positive-immediate-submit path.
 
-### Task 3 — Rating step (emoji) (F1-D5)
-The header question + 3-point emoji control (keyboard + pointer), wired to the branch guard. **Verify:** DOM test — selecting each emoji routes to the right branch per threshold; keyboard arrows/enter work.
+### Task 3 — Emoji SVG assets + rating step (F1-D5,D11,D18)
+Author the 3 brand-style `currentColor` emoji SVGs (`negative/neutral/positive`); build the header
+question + 3-point emoji control (keyboard + pointer), wired to the branch guard. **Verify:** DOM test
+— selecting each emoji routes to the right branch per threshold; keyboard arrows/enter work; emoji are
+inline SVG (not font glyphs) and inherit `currentColor`.
 
 ### Task 4 — Negative detail step (F1-D6,D7)
 Comment field (required iff `other_requires_text`) + photo attach (guardrails + `host.requestUpload`, thumbnail, remove). **Verify:** DOM test — required-comment blocks submit; photo attach calls host and shows thumbnail; oversized/wrong-type rejected.
