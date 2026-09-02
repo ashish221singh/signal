@@ -20,7 +20,7 @@ export interface CommandDeps {
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-async function requireToken(): Promise<{ apiUrl: string; token: string }> {
+export async function requireToken(): Promise<{ apiUrl: string; token: string }> {
   const config = await readConfig();
   if (!config?.token) {
     throw new Error('not logged in — run `signal login` first');
