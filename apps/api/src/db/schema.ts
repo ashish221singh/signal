@@ -255,7 +255,14 @@ export const consoleUsers = pgTable('console_users', {
     .references(() => accounts.id),
   // email stays globally unique (B1-D10): one owner, one account, simple login lookup.
   email: text('email').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  // Nullable since F3: Google-OAuth users have no password. A row must have EITHER
+  // a password_hash OR a google_sub (enforced by a CHECK in the migration). Password
+  // login guards against a null hash and returns the same invalid_credentials 401.
+  passwordHash: text('password_hash'),
+  // Google's stable subject id (`sub`), the canonical identity link for "Log in with
+  // Google" (F3). Unique when present; null for password-only users. We find-or-create
+  // by google_sub, falling back to linking an existing account by verified email.
+  googleSub: text('google_sub').unique(),
   name: text('name').notNull(),
   role: consoleUserRoleEnum('role').notNull().default('admin'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

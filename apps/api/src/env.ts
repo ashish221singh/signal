@@ -44,6 +44,14 @@ const envSchema = z.object({
   CONSOLE_ORIGINS: z.string().optional(),
   // Interim password→CLI-token login gate (B3-D4, GR-10).
   ALLOW_PASSWORD_CLI_LOGIN: booleanish.optional(),
+  // Google OAuth (F3): "Log in with Google". Both id+secret must be present for the
+  // Google routes to activate; when absent, /auth/google returns 503 and the login
+  // page hides the button (dev/test run fine without them). The callback URL
+  // defaults to `${PUBLIC_BASE_URL}/v1/console/auth/google/callback` and can be
+  // overridden (e.g. behind a proxy) via GOOGLE_CALLBACK_URL.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.url().optional(),
   DATABASE_URL: z.url().optional(),
   SESSION_SECRET: z.string().min(16).optional(),
   S3_ENDPOINT: z.url().optional(),
@@ -67,6 +75,7 @@ export type Env = Omit<
   | 'PUBLIC_BASE_URL'
   | 'CONSOLE_ORIGINS'
   | 'ALLOW_PASSWORD_CLI_LOGIN'
+  | 'GOOGLE_CALLBACK_URL'
 > & {
   DATABASE_URL: string;
   SESSION_SECRET: string;
@@ -79,6 +88,8 @@ export type Env = Omit<
   PUBLIC_BASE_URL: string;
   CONSOLE_ORIGINS: string[];
   ALLOW_PASSWORD_CLI_LOGIN: boolean;
+  // Present only when both id+secret are configured (Google login enabled).
+  GOOGLE_CALLBACK_URL: string;
 };
 
 export function parseEnv(source: Record<string, string | undefined>): Env {
@@ -102,6 +113,7 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     PUBLIC_BASE_URL,
     CONSOLE_ORIGINS,
     ALLOW_PASSWORD_CLI_LOGIN,
+    GOOGLE_CALLBACK_URL,
     ...rest
   } = result.data;
   const isProduction = rest.NODE_ENV === 'production';
@@ -146,6 +158,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     throw new Error(`Missing required environment variables in production: ${missing.join(', ')}`);
   }
 
+  // Google callback URL defaults to the public base + the callback route path, so
+  // in most deployments only GOOGLE_CLIENT_ID/SECRET need to be set.
+  const googleCallbackUrl =
+    GOOGLE_CALLBACK_URL ?? `${publicBaseUrl}/v1/console/auth/google/callback`;
+
   return {
     ...rest,
     DATABASE_URL: databaseUrl,
@@ -159,5 +176,6 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     PUBLIC_BASE_URL: publicBaseUrl,
     CONSOLE_ORIGINS: parseOriginList(consoleOriginsRaw),
     ALLOW_PASSWORD_CLI_LOGIN: allowPasswordCliLogin,
+    GOOGLE_CALLBACK_URL: googleCallbackUrl,
   };
 }

@@ -15,6 +15,13 @@
       "when": 1785816000000,
       "tag": "0001_b5_post_submit_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785902400000,
+      "tag": "0002_google_auth",
+      "breakpoints": true
     }
   ]
 }

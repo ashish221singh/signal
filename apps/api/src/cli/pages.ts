@@ -33,6 +33,15 @@ const STYLE = `
   button { width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
     background: var(--sg-orange); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
   button.secondary { background: #fff; color: var(--sg-ink); border: 1px solid var(--sg-line); }
+  a.gbtn { display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin-top: 20px; padding: 11px; border: 1px solid var(--sg-line); border-radius: 8px;
+    background: #fff; color: var(--sg-ink); font-size: 15px; font-weight: 600;
+    text-decoration: none; }
+  a.gbtn:hover { background: #FAFAF9; }
+  a.gbtn svg { width: 18px; height: 18px; }
+  .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 4px;
+    color: var(--sg-gray); font-size: 13px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--sg-line); }
   .row { display: flex; gap: 10px; }
   .row button { margin-top: 0; }
   .msg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
@@ -90,17 +99,29 @@ f.addEventListener('submit', async (e) => {
   );
 }
 
+/** The Google "G" mark + "Continue with Google", linking to the OAuth start route. */
+function googleButton(next: string): string {
+  const href = `/v1/console/auth/google?next=${encodeURIComponent(next)}`;
+  return `<a class="gbtn" href="${escapeHtml(href)}">
+  <svg viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92a8.78 8.78 0 0 0 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.94l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+  Continue with Google
+</a>`;
+}
+
 /**
  * GET /login — posts to the B1 login endpoint. `next` (a same-origin path) is where
- * we redirect on success; defaults to `/`.
+ * we redirect on success; defaults to `/`. When Google login is configured, a
+ * "Continue with Google" button is shown above the password form (F3).
  */
-export function loginPage(next: string): string {
+export function loginPage(next: string, opts: { googleEnabled?: boolean } = {}): string {
   const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  const google = opts.googleEnabled ? `${googleButton(safeNext)}<div class="divider">or</div>` : '';
   return layout(
     'Log in',
     `<h1>Log in to Signal</h1>
 <p class="sub">Access your dashboard and approve CLI logins.</p>
-<form id="f">
+<div id="banner"></div>
+${google}<form id="f">
   <label for="email">Email</label>
   <input id="email" name="email" type="email" required autocomplete="email" />
   <label for="password">Password</label>
@@ -112,6 +133,15 @@ export function loginPage(next: string): string {
 <script>
 const f = document.getElementById('f'), msg = document.getElementById('msg');
 const next = ${JSON.stringify(safeNext)};
+const errs = {
+  google: 'Google sign-in failed. Please try again.',
+  google_state: 'Google sign-in expired. Please try again.',
+  google_unverified: 'Your Google email is not verified.',
+};
+const err = new URLSearchParams(location.search).get('error');
+if (err && errs[err]) {
+  document.getElementById('banner').innerHTML = '<div class="msg err">' + errs[err] + '</div>';
+}
 f.addEventListener('submit', async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(f).entries());

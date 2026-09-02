@@ -64,6 +64,76 @@ export class AccountsService {
     });
   }
 
+  /**
+   * Find-or-create a console user from a verified Google profile (F3). Resolution
+   * order:
+   *   1. Match by `google_sub` — the stable Google identity → log that user in.
+   *   2. Else match by `email` — an existing (e.g. password) account with the same
+   *      verified email → LINK it by stamping `google_sub`, then log in. Google
+   *      emails are verified, so linking by email is safe and avoids duplicate
+   *      accounts for the same person.
+   *   3. Else create a fresh account + admin user (no password) + default
+   *      publishable key, mirroring password signup.
+   * Returns the user, its account id, and whether the account was newly created.
+   */
+  async findOrCreateGoogleUser(
+    input: { googleSub: string; email: string; name: string },
+    environment: KeyEnvironment = 'live',
+  ): Promise<{ user: typeof consoleUsers.$inferSelect; accountId: string; created: boolean }> {
+    const [bySub] = await this.db
+      .select()
+      .from(consoleUsers)
+      .where(eq(consoleUsers.googleSub, input.googleSub))
+      .limit(1);
+    if (bySub) return { user: bySub, accountId: bySub.accountId, created: false };
+
+    const [byEmail] = await this.db
+      .select()
+      .from(consoleUsers)
+      .where(eq(consoleUsers.email, input.email))
+      .limit(1);
+    if (byEmail) {
+      const [linked] = await this.db
+        .update(consoleUsers)
+        .set({ googleSub: input.googleSub })
+        .where(eq(consoleUsers.id, byEmail.id))
+        .returning();
+      const user = linked ?? byEmail;
+      return { user, accountId: user.accountId, created: false };
+    }
+
+    const key = generateKey(environment);
+    return await this.db.transaction(async (tx) => {
+      const [account] = await tx
+        .insert(accounts)
+        .values({ name: input.name || input.email })
+        .returning();
+      if (!account) throw new Error('account insert returned no row');
+
+      const [user] = await tx
+        .insert(consoleUsers)
+        .values({
+          accountId: account.id,
+          email: input.email,
+          passwordHash: null,
+          googleSub: input.googleSub,
+          name: input.name || input.email,
+          role: 'admin',
+        })
+        .returning();
+      if (!user) throw new Error('console user insert returned no row');
+
+      await tx.insert(apiKeys).values({
+        accountId: account.id,
+        key,
+        label: 'default',
+        environment,
+      });
+
+      return { user, accountId: account.id, created: true };
+    });
+  }
+
   /** Create a bare account (bootstrap/seed use). */
   async createAccount(name: string): Promise<typeof accounts.$inferSelect> {
     const [account] = await this.db.insert(accounts).values({ name }).returning();

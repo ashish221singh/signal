@@ -14,7 +14,9 @@ export function hashPassword(plain: string): Promise<string> {
   return hash(plain);
 }
 
-export async function verifyPassword(storedHash: string, plain: string): Promise<boolean> {
+export async function verifyPassword(storedHash: string | null, plain: string): Promise<boolean> {
+  // A Google-OAuth user (F3) has no password hash — never a password match.
+  if (!storedHash) return false;
   try {
     return await verify(storedHash, plain);
   } catch {

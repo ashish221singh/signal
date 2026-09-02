@@ -7,6 +7,7 @@ import { SIGNAL_API_VERSION } from '@signal/contracts';
 import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyError } from 'fastify';
 import { AccountsService } from './accounts/service.js';
+import type { GoogleExchange } from './auth/google.js';
 import { DeviceService } from './cli/deviceService.js';
 import { type Clock, systemClock } from './clock.js';
 import { createDb, type Db } from './db/client.js';
@@ -18,6 +19,7 @@ import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
 import { deployRoutes } from './routes/console/deploy.js';
 import { eventRoutes } from './routes/console/events.js';
+import { googleAuthRoutes } from './routes/console/googleAuth.js';
 import { managementRoutes } from './routes/console/management.js';
 import { previewRoutes } from './routes/console/preview.js';
 import { reportingRoutes } from './routes/console/reporting.js';
@@ -46,6 +48,9 @@ export interface AppDeps {
   db?: Db;
   clock?: Clock;
   closeDb?: () => Promise<void>;
+  // Google OAuth code→profile exchange (F3). Tests inject a stub so the callback
+  // never touches Google; production uses the default network implementation.
+  googleExchange?: GoogleExchange;
 }
 
 export async function buildApp(env: Env, deps: AppDeps = {}) {
@@ -189,6 +194,12 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
     async (consoleAuth) => {
       await consoleAuth.register(cors, consoleCors);
       await consoleAuth.register(consoleAuthRoutes({ db: resolvedDb }));
+      // Google OAuth (F3): GET /google (start) + /google/callback. Browser
+      // navigations, not fetch — they set a session and redirect. The exchange is
+      // injectable for hermetic tests.
+      await consoleAuth.register(
+        googleAuthRoutes({ db: resolvedDb, env, exchange: deps.googleExchange }),
+      );
     },
     { prefix: '/v1/console/auth' },
   );

@@ -1,6 +1,7 @@
 import { cliLoginRequestSchema, deviceTokenRequestSchema } from '@signal/contracts';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { googleEnabled } from '../auth/google.js';
 import { verifyPassword } from '../auth/password.js';
 import { readSession } from '../auth/session.js';
 import type { DeviceService } from '../cli/deviceService.js';
@@ -35,7 +36,9 @@ export function cliRoutes(deps: {
       return reply.type('text/html').send(signupPage());
     });
     app.get<{ Querystring: { next?: string } }>('/login', async (request, reply) => {
-      return reply.type('text/html').send(loginPage(request.query.next ?? '/'));
+      return reply
+        .type('text/html')
+        .send(loginPage(request.query.next ?? '/', { googleEnabled: googleEnabled(env) }));
     });
 
     // ── Device flow (B3-D3) ──
