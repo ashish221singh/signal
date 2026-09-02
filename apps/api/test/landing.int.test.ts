@@ -24,7 +24,7 @@ describe('landing page serving (F3 deploy)', () => {
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('/_assets/tokens.css');
     expect(res.body).not.toContain('../../packages/tokens/tokens.css');
-    expect(res.body).toContain('npx @signal/cli init');
+    expect(res.body).toContain('npx @ashish221/signal-cli init');
   });
 
   it('GET /_assets/tokens.css serves the token stylesheet', async () => {

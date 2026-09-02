@@ -45,6 +45,9 @@ export async function updateConfig(patch: Partial<CliConfig>): Promise<CliConfig
   return next;
 }
 
+/** The hosted Signal API. Override with SIGNAL_API_URL (e.g. for local dev). */
+export const DEFAULT_API_URL = 'https://signal-api-production-eca5.up.railway.app';
+
 export function defaultApiUrl(): string {
-  return process.env.SIGNAL_API_URL ?? 'http://localhost:3000';
+  return process.env.SIGNAL_API_URL ?? DEFAULT_API_URL;
 }

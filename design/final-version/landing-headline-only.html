@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>signal — a satisfaction score for every part of your product</title>
+<meta name="description" content="A satisfaction score for every part of your product.">
+<!-- Fonts self-hosted via @signal/tokens (@font-face in tokens.css). -->
+<link rel="stylesheet" href="../../packages/tokens/tokens.css">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:var(--text-body);-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+
+  /* simple nav */
+  .top{max-width:1120px;margin:0 auto;padding:22px 32px;display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:9px}
+  .logo svg{width:20px;height:20px;color:var(--ink)}
+  .logo .wm{font:600 17px/1 var(--font-mono);letter-spacing:-.02em}
+  .top .cta{font:600 14px/1 var(--font-mono)}
+  .top .cta:hover{color:var(--action)}
+
+  /* headline at top */
+  main{max-width:820px;margin:0 auto;padding:clamp(40px,8vh,88px) 32px 96px;text-align:center}
+  h1{font-family:var(--font-mono);font-weight:600;letter-spacing:-.03em;line-height:1.12;margin:0;color:var(--ink);
+    font-size:clamp(24px,3vw,38px);animation:rise .7s var(--ease-out) both}
+  h1 .em{color:var(--action)}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  @media (max-width:560px){.top{padding:20px 22px}main{padding-left:20px;padding-right:20px}}
+  @media (prefers-reduced-motion:reduce){h1{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="logo" href="#" aria-label="signal home">
+    <svg viewBox="0 0 96 96" aria-hidden="true"><path fill="currentColor" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg>
+    <span class="wm">signal</span>
+  </a>
+  <a class="cta" href="#">Get started →</a>
+</header>
+
+<main>
+  <h1>A satisfaction score for<br><span class="em">every part</span> of your product.</h1>
+</main>
+
+</body>
+</html>

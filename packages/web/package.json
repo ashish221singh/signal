@@ -1,26 +1,50 @@
 {
-  "name": "@signal/web",
+  "name": "@ashish221/signal-web",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "module": "./src/index.ts",
-  "types": "./src/index.ts",
+  "description": "Signal Web SDK — one-tap in-app feedback (CSAT). Signal.init + Signal.track.",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./outbox": "./src/outbox.ts",
-    "./suppression": "./src/suppression.ts",
-    "./webHost": "./src/webHost.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./outbox": {
+      "types": "./dist/outbox.d.ts",
+      "import": "./dist/outbox.js",
+      "require": "./dist/outbox.cjs"
+    },
+    "./suppression": {
+      "types": "./dist/suppression.d.ts",
+      "import": "./dist/suppression.js",
+      "require": "./dist/suppression.cjs"
+    },
+    "./webHost": {
+      "types": "./dist/webHost.d.ts",
+      "import": "./dist/webHost.js",
+      "require": "./dist/webHost.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsup"
   },
-  "dependencies": {
-    "@signal/contracts": "workspace:*",
-    "@signal/web-core": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@signal/contracts": "workspace:*",
+    "@signal/web-core": "workspace:*",
     "fake-indexeddb": "^6.0.0",
-    "happy-dom": "^15.11.7"
+    "happy-dom": "^15.11.7",
+    "tsup": "^8.5.1"
   }
 }

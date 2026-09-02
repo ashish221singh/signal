@@ -1,24 +1,29 @@
 {
-  "name": "@signal/cli",
+  "name": "@ashish221/signal-cli",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "description": "Signal CLI — set up in-app feedback from your terminal. `npx @signal/cli init`.",
+  "license": "MIT",
   "bin": {
-    "signal": "./src/index.ts"
+    "signal": "./dist/bin.js"
   },
-  "exports": {
-    ".": "./src/index.ts"
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "build": "tsup",
     "start": "tsx src/index.ts"
   },
-  "dependencies": {
-    "@signal/contracts": "workspace:*",
-    "commander": "^15.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@signal/api": "workspace:*",
+    "@signal/contracts": "workspace:*",
+    "commander": "^15.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.23.0",
     "vitest": "^4.1.10"
   }

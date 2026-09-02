@@ -19,7 +19,7 @@
 // web-core would invoke. A full headless-browser e2e is out of scope for this pass —
 // stated explicitly rather than faked.
 import 'fake-indexeddb/auto';
-import { __resetForTests, Signal } from '@signal/web';
+import { __resetForTests, Signal } from '@ashish221/signal-web';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { parseEnv } from '../src/env.js';
@@ -189,8 +189,8 @@ describe('E2E: real Web SDK → real API → stored + reported (Testcontainers)'
     // taps a rating; web-core's UI tap itself is covered by the DOM suites, so
     // here we invoke the same `createWebHost(...).submit(answer)` to prove the
     // transport loop end to end.
-    const { createWebHost } = await import('@signal/web/webHost');
-    const { Outbox } = await import('@signal/web/outbox');
+    const { createWebHost } = await import('@ashish221/signal-web/webHost');
+    const { Outbox } = await import('@ashish221/signal-web/outbox');
     const schema = await import('../src/db/schema.js');
     // Reuse the SAME trigger the SDK's eligibility call created server-side.
     const [trigger] = await t.db.select().from(schema.triggerLog);
@@ -259,8 +259,8 @@ describe('E2E: real Web SDK → real API → stored + reported (Testcontainers)'
     const schema = await import('../src/db/schema.js');
     const [trigger] = await t.db.select().from(schema.triggerLog);
     const triggerId = trigger?.id as string;
-    const { createWebHost } = await import('@signal/web/webHost');
-    const { Outbox } = await import('@signal/web/outbox');
+    const { createWebHost } = await import('@ashish221/signal-web/webHost');
+    const { Outbox } = await import('@ashish221/signal-web/outbox');
     const host = createWebHost({
       apiUrl: 'http://api.local',
       publishableKey,

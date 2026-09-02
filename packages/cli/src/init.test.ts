@@ -36,7 +36,7 @@ describe('signal init (F2-D8)', () => {
     // The setup file wires Signal.init with the key.
     const setup = await readFile(join(dir, 'signal-setup.js'), 'utf8');
     expect(setup).toContain(`from '${WEB_SDK_DEP}'`);
-    expect(setup).toContain(`Signal.init('${KEY}')`);
+    expect(setup).toContain(`Signal.init('${KEY}'`);
 
     // Next steps were printed.
     expect(out.join('\n')).toContain('Next steps');
@@ -55,7 +55,7 @@ describe('signal init (F2-D8)', () => {
 
     // The original key is preserved (the snippet was NOT overwritten).
     const setup = await readFile(join(dir, 'signal-setup.js'), 'utf8');
-    expect(setup).toContain(`Signal.init('${KEY}')`);
+    expect(setup).toContain(`Signal.init('${KEY}'`);
     expect(setup).not.toContain('pk_different');
     expect(out.join('\n')).toContain('already');
   });
@@ -86,7 +86,7 @@ describe('signal init (F2-D8)', () => {
     const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
     expect(pkg.dependencies[WEB_SDK_DEP]).toBeTruthy();
     const setup = await readFile(join(dir, 'signal-setup.js'), 'utf8');
-    expect(setup).toContain(`Signal.init('${KEY}')`);
+    expect(setup).toContain(`Signal.init('${KEY}'`);
     expect(lines.join('\n')).toContain('Next steps');
   });
 
@@ -97,6 +97,6 @@ describe('signal init (F2-D8)', () => {
     const joined = out.join('\n');
     expect(joined).toContain('Manual setup');
     expect(joined).toContain(`npm install ${WEB_SDK_DEP}`);
-    expect(joined).toContain(`Signal.init('${KEY}')`);
+    expect(joined).toContain(`Signal.init('${KEY}'`);
   });
 });

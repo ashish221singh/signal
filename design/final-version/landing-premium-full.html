@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en" class="theme-light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal — a satisfaction score for every part of your product</title>
+<meta name="description" content="Signal puts a satisfaction score on every part of your product. Ask one question in-app, at the moment that matters. Your agent wires it up in one line.">
+<!-- Self-hosted fonts (Schibsted Grotesk / Inter / JetBrains Mono) via @signal/tokens. -->
+<link rel="stylesheet" href="../../packages/tokens/tokens.css">
+<style>
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  :root{
+    --page:#FCFCFB;
+    --ring:rgba(25,24,21,.08);
+    --hair:rgba(25,24,21,.09);
+    --hair-2:rgba(25,24,21,.14);
+    --soft:0 1px 2px rgba(25,24,21,.04);
+    --lift:0 2px 4px rgba(25,24,21,.04), 0 12px 28px rgba(25,24,21,.06);
+    --float:0 8px 16px rgba(25,24,21,.06), 0 30px 70px rgba(25,24,21,.12);
+    --good:#2E8F52; --warn:#C6791B; --bad:#CC3D33;
+    --tint:#FFF6EC;
+  }
+  body{margin:0;background:var(--page);color:var(--ink);font:400 16px/1.6 var(--font-sans);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 32px}
+  h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:-.025em;margin:0;color:var(--ink)}
+  .mono{font-family:var(--font-mono)}
+  .em{color:var(--action)}
+  .muted{color:var(--ink-secondary)}
+
+  /* ---------------- NAV ---------------- */
+  .nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--page) 80%,transparent);backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid transparent;transition:border-color .3s}
+  .nav.scrolled{border-color:var(--hair)}
+  .nav .row{max-width:1140px;margin:0 auto;padding:16px 32px;display:flex;align-items:center;gap:32px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand svg{width:22px;height:22px;color:var(--ink)}
+  .brand .wm{font:700 18px/1 var(--font-mono);letter-spacing:-.03em}
+  .nav .links{display:flex;gap:28px;margin-left:8px}
+  .nav .links a{font:500 14.5px/1 var(--font-sans);color:var(--ink-secondary);transition:color .2s}
+  .nav .links a:hover{color:var(--ink)}
+  .nav .right{margin-left:auto;display:flex;align-items:center;gap:18px}
+  .nav .signin{font:500 14.5px/1 var(--font-sans);color:var(--ink-secondary)}
+  .nav .signin:hover{color:var(--ink)}
+
+  /* ---------------- BUTTONS ---------------- */
+  .btn{font:500 14.5px/1 var(--font-sans);border-radius:10px;padding:11px 18px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:transform .18s var(--ease-out),background .2s,border-color .2s,box-shadow .2s;white-space:nowrap}
+  .btn-primary{background:var(--ink);color:var(--page);box-shadow:var(--soft)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:var(--lift)}
+  .btn-accent{background:var(--action);color:#fff}
+  .btn-accent:hover{transform:translateY(-1px);background:var(--action-hover)}
+  .btn-ghost{background:#fff;color:var(--ink);border-color:var(--hair-2)}
+  .btn-ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
+  .btn-lg{padding:14px 24px;font-size:15.5px;border-radius:12px}
+
+  /* ---------------- HERO ---------------- */
+  .hero{position:relative;overflow:hidden;padding:80px 0 40px;text-align:center}
+  .hero::before{content:"";position:absolute;left:50%;top:-140px;transform:translateX(-50%);width:1000px;height:640px;
+    background:radial-gradient(50% 60% at 50% 40%,rgba(247,130,0,.10),transparent 70%);pointer-events:none;z-index:0}
+  .hero .wrap{position:relative;z-index:1}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 var(--font-sans);color:var(--ink-secondary);
+    background:#fff;border:1px solid var(--hair);border-radius:999px;padding:7px 14px;box-shadow:var(--soft)}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--good)}
+  .hero h1{font-size:clamp(38px,6vw,72px);line-height:1.02;letter-spacing:-.035em;margin:26px auto 0;max-width:16ch}
+  .hero .sub{font:400 clamp(17px,1.6vw,20px)/1.55 var(--font-sans);color:var(--ink-secondary);max-width:52ch;margin:22px auto 0}
+  .hero .cta{display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap}
+  .hero .tiny{margin-top:16px;font:400 13.5px/1 var(--font-sans);color:var(--ink-tertiary)}
+
+  /* ---------------- HERO PRODUCT CARD ---------------- */
+  .showcase{position:relative;margin:60px auto 0;max-width:960px;padding:0 32px}
+  .app{position:relative;background:#fff;border:1px solid var(--hair);border-radius:18px;box-shadow:var(--float);overflow:hidden;text-align:left}
+  .app .chrome{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--hair)}
+  .app .chrome .dots{display:flex;gap:7px}
+  .app .chrome .dots i{width:11px;height:11px;border-radius:50%;background:#E5E4E1}
+  .app .chrome .addr{margin:0 auto;font:500 12.5px/1 var(--font-mono);color:var(--ink-tertiary);background:var(--page);border:1px solid var(--hair);border-radius:8px;padding:6px 14px}
+  .app .body{display:grid;grid-template-columns:200px 1fr;min-height:392px}
+  .app .side{border-right:1px solid var(--hair);padding:20px 16px;background:#FDFDFC}
+  .app .side .sh{font:600 10px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-tertiary);margin:0 8px 12px}
+  .app .side a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;font:500 13.5px/1 var(--font-sans);color:var(--ink-secondary)}
+  .app .side a.on{background:var(--tint);color:var(--action)}
+  .app .side a .ic{width:15px;height:15px;flex:none;opacity:.75}
+  .app .main{padding:24px 26px}
+  .app .main .top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .app .main .top h4{font-family:var(--font-display);font-weight:600;font-size:19px;letter-spacing:-.02em}
+  .app .main .top .range{font:500 11px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-tertiary)}
+  .rowcard{display:grid;grid-template-columns:120px 1fr auto auto;align-items:center;gap:16px;padding:14px 2px;border-top:1px solid var(--hair)}
+  .rowcard:first-of-type{border-top:0}
+  .rowcard .nm{font:500 14px/1 var(--font-sans);color:var(--ink)}
+  .rowcard .track{height:8px;border-radius:99px;background:#F0F0EE;overflow:hidden}
+  .rowcard .fill{height:100%;border-radius:99px}
+  .rowcard .sc{font:600 15px/1 var(--font-mono);letter-spacing:-.02em;min-width:3ch;text-align:right}
+  .rowcard .pill{font:500 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;border-radius:99px}
+  .g .fill{background:var(--good)} .g .sc{color:var(--good)} .g .pill{color:var(--good);background:rgba(46,143,82,.10)}
+  .w .fill{background:var(--warn)} .w .sc{color:var(--warn)} .w .pill{color:var(--warn);background:rgba(198,121,27,.12)}
+  .b .fill{background:var(--bad)}  .b .sc{color:var(--bad)}  .b .pill{color:var(--bad);background:rgba(204,61,51,.10)}
+
+  /* floating in-app sheet over the card corner (bottom-left keeps scores visible) */
+  .sheet{position:absolute;left:-28px;bottom:-30px;width:230px;background:#fff;border:1px solid var(--hair);border-radius:18px;box-shadow:var(--float);padding:18px;z-index:3}
+  .sheet .grab{width:30px;height:4px;border-radius:99px;background:#E5E4E1;margin:0 auto 14px}
+  .sheet .q{font-family:var(--font-display);font-weight:600;font-size:15px;letter-spacing:-.01em;margin:0 0 3px}
+  .sheet .cx{font:400 12px/1.4 var(--font-sans);color:var(--ink-tertiary);margin:0 0 12px}
+  .sheet .stars{display:flex;gap:5px;justify-content:space-between;margin-bottom:12px}
+  .sheet .stars span{font-size:22px;color:#E5E4E1}.sheet .stars span.on{color:var(--action)}
+  .sheet .send{text-align:center;background:var(--ink);color:#fff;font:500 12px/1 var(--font-sans);padding:11px;border-radius:9px}
+
+  /* ---------------- TRUST STRIP ---------------- */
+  .trust{padding:56px 0 8px;text-align:center}
+  .trust p{font:500 12px/1 var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-tertiary);margin:0 0 22px}
+  .trust .items{display:flex;gap:40px;justify-content:center;flex-wrap:wrap;color:var(--ink-secondary);font:600 16px/1 var(--font-sans)}
+  .trust .items span{opacity:.7}
+
+  /* ---------------- SECTIONS ---------------- */
+  section.blk{padding:104px 0}
+  .lede{max-width:640px}
+  .lede .k{font:600 12px/1 var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--action)}
+  .lede h2{font-size:clamp(30px,4vw,44px);line-height:1.08;margin:14px 0 0}
+  .lede p{font:400 18px/1.6 var(--font-sans);color:var(--ink-secondary);margin:18px 0 0}
+
+  /* how — 3 steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:52px}
+  .step{background:#fff;border:1px solid var(--hair);border-radius:16px;padding:26px;box-shadow:var(--soft);transition:transform .2s var(--ease-out),box-shadow .2s}
+  .step:hover{transform:translateY(-3px);box-shadow:var(--lift)}
+  .step .n{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--font-mono);color:var(--action);background:var(--tint);border:1px solid rgba(247,130,0,.18)}
+  .step h3{font-size:19px;margin:18px 0 8px;letter-spacing:-.01em}
+  .step p{font:400 14.5px/1.6 var(--font-sans);color:var(--ink-secondary);margin:0}
+  .step .code{margin-top:16px;font:500 12.5px/1.7 var(--font-mono);color:var(--ink);background:var(--page);border:1px solid var(--hair);border-radius:9px;padding:12px 14px;overflow-x:auto}
+  .step .code .d{color:var(--ink-tertiary)} .step .code .o{color:var(--action)}
+
+  /* feature rows */
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;margin-top:96px}
+  .feat:first-of-type{margin-top:56px}
+  .feat.flip .vis{order:-1}
+  .vis{background:#fff;border:1px solid var(--hair);border-radius:18px;box-shadow:var(--lift);padding:28px;min-height:300px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background-image:radial-gradient(120% 100% at 50% 0,rgba(247,130,0,.05),transparent 60%)}
+  .feat .lede h2{font-size:clamp(26px,3.2vw,36px)}
+  .feat ul{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:12px}
+  .feat li{display:flex;gap:11px;font:400 15.5px/1.5 var(--font-sans);color:var(--ink-secondary)}
+  .feat li .ck{color:var(--good);flex:none;margin-top:2px}
+
+  /* big score visual */
+  .bigscore{text-align:center}
+  .bigscore .n{font:600 clamp(60px,9vw,92px)/1 var(--font-mono);letter-spacing:-.04em}
+  .bigscore .n .u{font-size:.26em;color:var(--ink-tertiary);letter-spacing:.1em;margin-left:10px;vertical-align:.9em}
+  .bigscore .spark{display:flex;align-items:flex-end;gap:7px;height:70px;margin:26px auto 0;width:230px}
+  .bigscore .spark i{flex:1;border-radius:4px 4px 2px 2px;background:var(--action);opacity:.9}
+  .bigscore .cap{margin-top:16px;font:500 12px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-tertiary)}
+
+  /* terminal mini */
+  .termmini{width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--hair);box-shadow:var(--lift)}
+  .termmini .bar{background:#26241F;display:flex;gap:7px;padding:12px 14px}
+  .termmini .bar i{width:10px;height:10px;border-radius:50%;background:#4A4842}
+  .termmini .bd{background:#0E0D0B;color:#FCFCFB;padding:20px 22px;font:500 13px/2 var(--font-mono);white-space:pre-wrap}
+  .termmini .p{color:var(--action)} .termmini .d{color:#7C7B75} .termmini .ok{color:#45B36B} .termmini .o{color:var(--action)}
+
+  /* ---------------- CTA BAND ---------------- */
+  .cta-band{margin:24px auto 0;max-width:1076px}
+  .cta-inner{background:var(--ink);border-radius:24px;padding:72px 48px;text-align:center;position:relative;overflow:hidden}
+  .cta-inner::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 120% at 50% 0,rgba(247,130,0,.22),transparent 60%)}
+  .cta-inner h2{position:relative;color:#fff;font-size:clamp(30px,4.4vw,50px);line-height:1.05}
+  .cta-inner p{position:relative;color:rgba(255,255,255,.66);font:400 18px/1.6 var(--font-sans);margin:16px auto 0;max-width:44ch}
+  .cta-inner .cta{position:relative;display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap}
+  .cta-inner .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.24)}
+  .cta-inner .btn-ghost:hover{border-color:#fff}
+
+  /* ---------------- FOOTER ---------------- */
+  footer{padding:72px 0 56px}
+  .foot{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:40px}
+  .foot .about .brand{margin-bottom:14px}
+  .foot .about p{font:400 14px/1.6 var(--font-sans);color:var(--ink-tertiary);max-width:30ch;margin:0}
+  .foot .col h5{font:600 12px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-tertiary);margin:0 0 16px}
+  .foot .col a{display:block;font:400 14.5px/1 var(--font-sans);color:var(--ink-secondary);margin-bottom:12px}
+  .foot .col a:hover{color:var(--ink)}
+  .foot-base{border-top:1px solid var(--hair);margin-top:52px;padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:var(--ink-tertiary);font:400 13px/1.6 var(--font-sans)}
+
+  /* reveal */
+  .rv{opacity:0;transform:translateY(18px);transition:opacity .7s var(--ease-out),transform .7s var(--ease-out)}
+  .rv.in{opacity:1;transform:none}
+  .s1{transition-delay:.06s}.s2{transition-delay:.13s}.s3{transition-delay:.2s}.s4{transition-delay:.27s}
+
+  @media (max-width:900px){
+    .app .body{grid-template-columns:1fr}.app .side{display:none}
+    .feat,.feat.flip{grid-template-columns:1fr;gap:32px}.feat .vis{order:-1}
+    .steps{grid-template-columns:1fr}
+    .foot{grid-template-columns:1fr 1fr}
+    .sheet{left:8px;bottom:-24px;width:210px}
+  }
+  @media (max-width:560px){
+    .wrap,.nav .row{padding-left:22px;padding-right:22px}
+    .nav .links{display:none}
+    .showcase{padding:0 18px}
+    section.blk{padding:72px 0}
+    .cta-inner{padding:52px 26px}
+    .foot{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.rv{transition:none;opacity:1;transform:none}.btn,.step{transition:none}}
+</style>
+<noscript><style>.rv{opacity:1;transform:none}</style></noscript>
+</head>
+<body>
+
+<!-- NAV -->
+<header class="nav" id="nav">
+  <div class="row">
+    <a class="brand" href="#top" aria-label="Signal home">
+      <svg viewBox="0 0 96 96" aria-hidden="true"><path fill="currentColor" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg>
+      <span class="wm">signal</span>
+    </a>
+    <nav class="links">
+      <a href="#how">How it works</a>
+      <a href="#product">Product</a>
+      <a href="#">Docs</a>
+      <a href="#">Pricing</a>
+    </nav>
+    <div class="right">
+      <a class="signin" href="#">Sign in</a>
+      <a class="btn btn-accent" href="#">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow rv"><span class="dot"></span>Feedback, at the speed you ship</span>
+      <h1 class="rv s1">A satisfaction score for <span class="em">every part</span> of your product.</h1>
+      <p class="sub rv s2">Onboarding, checkout, search, support — Signal asks your users one quick question in-app, at the moment that matters, and scores every flow. So you know exactly what to fix.</p>
+      <div class="cta rv s3">
+        <a class="btn btn-accent btn-lg" href="#">Get started free</a>
+        <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+      </div>
+      <p class="tiny rv s3">No credit card · Live in minutes · Your agent sets it up</p>
+    </div>
+
+    <!-- product showcase -->
+    <div class="showcase rv s4" id="product">
+      <div class="app">
+        <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="addr">app.signal.dev / overview</span></div>
+        <div class="body">
+          <aside class="side">
+            <div class="sh">your-app</div>
+            <a class="on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+            <a><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Responses</a>
+            <a><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16M4 20h16"/><path d="M8 14l3-4 3 2 4-6"/></svg>Workflows</a>
+            <a><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Events</a>
+          </aside>
+          <div class="main">
+            <div class="top"><h4>Satisfaction by flow</h4><span class="range">Last 7 days</span></div>
+            <div class="rowcard g"><span class="nm">Onboarding</span><span class="track"><span class="fill" style="width:92%"></span></span><span class="sc">4.6</span><span class="pill">loved</span></div>
+            <div class="rowcard w"><span class="nm">Checkout</span><span class="track"><span class="fill" style="width:76%"></span></span><span class="sc">3.8</span><span class="pill">okay</span></div>
+            <div class="rowcard g"><span class="nm">Search</span><span class="track"><span class="fill" style="width:96%"></span></span><span class="sc">4.8</span><span class="pill">loved</span></div>
+            <div class="rowcard b"><span class="nm">Support</span><span class="track"><span class="fill" style="width:58%"></span></span><span class="sc">2.9</span><span class="pill">needs work</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- floating sheet -->
+      <div class="sheet" aria-hidden="true">
+        <div class="grab"></div>
+        <p class="q">How was checkout?</p>
+        <p class="cx">3 seconds — thanks for the signal.</p>
+        <div class="stars"><span class="on">★</span><span class="on">★</span><span class="on">★</span><span class="on">★</span><span>★</span></div>
+        <div class="send">Send feedback</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="trust">
+    <div class="wrap rv">
+      <p>One SDK · every surface</p>
+      <div class="items"><span>React</span><span>iOS</span><span>Android</span><span>React Native</span><span>Web</span><span>Hosted link</span></div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="blk" id="how">
+    <div class="wrap">
+      <div class="lede rv">
+        <div class="k">How it works</div>
+        <h2>Live in minutes. Three steps, then it runs itself.</h2>
+        <p>Setup lives in your terminal — your agent does the wiring. The dashboard is just for reading the answers.</p>
+      </div>
+      <div class="steps">
+        <div class="step rv s1">
+          <div class="n">01</div>
+          <h3>Your agent wires it up</h3>
+          <p>Install, and let Claude Code or Cursor add one line where it matters — a diff you review.</p>
+          <div class="code"><span class="d">$</span> npx @signal/cli init<br>signal.track(<span class="o">"checkout"</span>)</div>
+        </div>
+        <div class="step rv s2">
+          <div class="n">02</div>
+          <h3>Ask one question, in-app</h3>
+          <p>At the moment that matters — right after the flow — Signal asks your user. Three seconds, then it's gone.</p>
+        </div>
+        <div class="step rv s3">
+          <div class="n">03</div>
+          <h3>Read the score</h3>
+          <p>Answers roll up into a live satisfaction score per flow, so you always know what to fix next.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURE 1 -->
+  <section class="blk" style="padding-top:0">
+    <div class="wrap">
+      <div class="feat">
+        <div class="lede rv">
+          <div class="k">Ask</div>
+          <h2>The right question, at the exact right moment.</h2>
+          <ul>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Fires in-context — right after checkout, right when the feature lands.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>A native bottom sheet — not an email survey no one opens.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Cooldowns &amp; sampling built in — never annoys your users.</li>
+          </ul>
+        </div>
+        <div class="vis rv s2">
+          <div class="sheet" style="position:relative;left:auto;right:auto;bottom:auto;box-shadow:var(--lift);width:250px">
+            <div class="grab"></div>
+            <p class="q">How was checkout?</p>
+            <p class="cx">Takes 3 seconds — thanks for the signal.</p>
+            <div class="stars"><span class="on">★</span><span class="on">★</span><span class="on">★</span><span class="on">★</span><span>★</span></div>
+            <div class="send">Send feedback</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FEATURE 2 -->
+      <div class="feat flip">
+        <div class="lede rv">
+          <div class="k">Score</div>
+          <h2>One number that tells you where you stand.</h2>
+          <ul>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>A satisfaction score per flow, updated live from real users.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Attention rules surface what's slipping before it hurts.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Drill into every response — rating, comment, even a photo.</li>
+          </ul>
+        </div>
+        <div class="vis rv s2">
+          <div class="bigscore">
+            <div class="n">4.3<span class="u">CSAT</span></div>
+            <div class="spark"><i style="height:44%"></i><i style="height:58%"></i><i style="height:50%"></i><i style="height:72%"></i><i style="height:66%"></i><i style="height:88%"></i><i style="height:100%"></i></div>
+            <div class="cap">product-wide · trending up</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FEATURE 3 -->
+      <div class="feat">
+        <div class="lede rv">
+          <div class="k">Setup</div>
+          <h2>Your agent does the boring part.</h2>
+          <ul>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>An MCP server your agent drives — creates the workflow, inserts the call.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>Config-as-code with <span class="mono">signal.config.ts</span> — reviewable, versioned.</li>
+            <li><svg class="ck" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>No dashboard-building. The console is read-only by design.</li>
+          </ul>
+        </div>
+        <div class="vis rv s2" style="padding:20px">
+          <div class="termmini">
+            <div class="bar"><i></i><i></i><i></i></div>
+            <div class="bd"><span class="p">$</span> npx @signal/cli init
+<span class="ok">✓</span> <span class="d">connected — agent drafting your workflow</span>
+<span class="d">// agent inserts, you review the diff:</span>
+signal.track(<span class="o">"checkout"</span>)
+<span class="ok">✓</span> <span class="d">live · scoring every flow</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA BAND -->
+  <section class="blk" style="padding-top:0">
+    <div class="cta-band rv">
+      <div class="cta-inner">
+        <h2>Stop guessing which part to fix.</h2>
+        <p>Put a satisfaction score on every flow in your product — starting today.</p>
+        <div class="cta">
+          <a class="btn btn-accent btn-lg" href="#">Get started free</a>
+          <a class="btn btn-ghost btn-lg" href="#">Read the docs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="about">
+        <a class="brand" href="#top" aria-label="Signal"><svg viewBox="0 0 96 96" aria-hidden="true" style="color:var(--ink)"><path fill="currentColor" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg><span class="wm">signal</span></a>
+        <p>A satisfaction score for every part of your product.</p>
+      </div>
+      <div class="col"><h5>Product</h5><a href="#">Overview</a><a href="#">How it works</a><a href="#">Pricing</a><a href="#">Changelog</a></div>
+      <div class="col"><h5>Developers</h5><a href="#">Docs</a><a href="#">CLI</a><a href="#">SDKs</a><a href="#">MCP server</a></div>
+      <div class="col"><h5>Company</h5><a href="#">About</a><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Contact</a></div>
+    </div>
+    <div class="foot-base">
+      <span>© 2026 Signal</span>
+      <span class="mono">feedback, at the speed you ship</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // nav border on scroll
+  const nav=document.getElementById('nav');
+  addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>8),{passive:true});
+  // reveal
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.16});
+  document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>

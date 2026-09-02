@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-/** The `npx @signal/cli init` chip with a Copy button (reused on empty + settings). */
-export function CopyCommand({ command = 'npx @signal/cli init' }: { command?: string }) {
+/** The `npx @ashish221/signal-cli init` chip with a Copy button (reused on empty + settings). */
+export function CopyCommand({ command = 'npx @ashish221/signal-cli init' }: { command?: string }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {

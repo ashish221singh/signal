@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { defaultApiUrl } from './config.js';
 
 /**
  * `signal init` (F2-D8) — the one-time Web SDK install for a web/npm project. It:
@@ -17,7 +18,7 @@ import { join } from 'node:path';
 
 /** The dependency spec written into package.json. Kept as a caret range so a
  *  published `@signal/web` resolves; within this monorepo it is a workspace pkg. */
-export const WEB_SDK_DEP = '@signal/web';
+export const WEB_SDK_DEP = '@ashish221/signal-web';
 export const WEB_SDK_VERSION = '^0.1.0';
 
 const SETUP_FILENAME = 'signal-setup.js';
@@ -43,8 +44,9 @@ function setupSnippet(publishableKey: string): string {
 // Import this once at your app's entry point, e.g. \`import './${SETUP_FILENAME}';\`.
 import { Signal } from '${WEB_SDK_DEP}';
 
-// Your account's publishable key (safe to ship in client code).
-Signal.init('${publishableKey}');
+// Your account's publishable key (safe to ship in client code). \`apiUrl\` points at
+// the Signal API — the SDK calls it cross-origin from your site.
+Signal.init('${publishableKey}', { apiUrl: '${defaultApiUrl()}' });
 
 // Then, wherever a meaningful moment happens, record it:
 //   Signal.track('checkout_completed');
@@ -74,7 +76,9 @@ export async function runInit(
     out('Manual setup:');
     out(`  1. Install the SDK:   npm install ${WEB_SDK_DEP}`);
     out(`  2. In your entry file: import { Signal } from '${WEB_SDK_DEP}';`);
-    out(`                          Signal.init('${publishableKey}');`);
+    out(
+      `                          Signal.init('${publishableKey}', { apiUrl: '${defaultApiUrl()}' });`,
+    );
     out("  3. Record moments:     Signal.track('checkout_completed');");
     return {
       projectType: 'unknown',

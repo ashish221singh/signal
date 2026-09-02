@@ -61,7 +61,8 @@ export function Login() {
           Continue with Google
         </a>
         <p className="muted">
-          New here? Running <code>npx @signal/cli init</code> signs you in and connects your app.
+          New here? Running <code>npx @ashish221/signal-cli init</code> signs you in and connects
+          your app.
         </p>
       </main>
     </div>

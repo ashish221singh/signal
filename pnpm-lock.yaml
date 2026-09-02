@@ -69,7 +69,7 @@ importers:
         specifier: ^4.0.0
         version: 4.5.4
     devDependencies:
-      '@signal/web':
+      '@ashish221/signal-web':
         specifier: workspace:*
         version: link:../../packages/web
       '@testcontainers/postgresql':
@@ -120,17 +120,19 @@ importers:
         version: 6.4.3(@types/node@26.4.1)(tsx@4.23.13)(yaml@2.9.0)
 
   packages/cli:
-    dependencies:
+    devDependencies:
+      '@signal/api':
+        specifier: workspace:*
+        version: link:../../apps/api
       '@signal/contracts':
         specifier: workspace:*
         version: link:../contracts
       commander:
         specifier: ^15.0.0
         version: 15.0.0
-    devDependencies:
-      '@signal/api':
-        specifier: workspace:*
-        version: link:../../apps/api
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.26)(tsx@4.23.13)(typescript@6.0.3)(yaml@2.9.0)
       tsx:
         specifier: ^4.23.0
         version: 4.23.13
@@ -166,20 +168,22 @@ importers:
   packages/tokens: {}
 
   packages/web:
-    dependencies:
+    devDependencies:
       '@signal/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@signal/web-core':
         specifier: workspace:*
         version: link:../web-core
-    devDependencies:
       fake-indexeddb:
         specifier: ^6.0.0
         version: 6.2.5
       happy-dom:
         specifier: ^15.11.7
         version: 15.11.7
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.26)(tsx@4.23.13)(typescript@6.0.3)(yaml@2.9.0)
 
   packages/web-core:
     dependencies:
