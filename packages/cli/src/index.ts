@@ -15,7 +15,23 @@ import {
 import { defaultApiUrl } from './config.js';
 import { AGENT_TARGETS, runConnect } from './connect.js';
 import { runInit } from './init.js';
+import { runQuickstart } from './quickstart.js';
 import { type AskFn, runSetup } from './setup.js';
+
+/** Build a readline-backed prompt fn (shared by `setup` and `quickstart`). */
+function makeReadlineAsk(
+  rl: ReturnType<typeof createInterface>,
+  out: (line: string) => void,
+): AskFn {
+  return async (question, options) => {
+    if (options && options.length > 0) {
+      out(question);
+      for (const o of options) out(`  - ${o.value}: ${o.label}`);
+      return rl.question('> ');
+    }
+    return rl.question(`${question}\n> `);
+  };
+}
 
 /**
  * `@signal/cli` entrypoint (B3-D9, F2-D8). Commands: `login` (device flow), `login
@@ -131,18 +147,28 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
     });
 
   program
+    .command('quickstart')
+    .description('One command: log in, create + publish feedback, and wire the SDK into a project')
+    .option('--dir <dir>', 'the project directory (defaults to the current directory)')
+    .action(async (opts: { dir?: string }) => {
+      const apiUrl = program.opts().apiUrl as string;
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const ask = makeReadlineAsk(rl, commandDeps.out);
+      try {
+        await runQuickstart(commandDeps, ask, opts.dir ?? process.cwd(), apiUrl);
+      } catch (err) {
+        rl.close();
+        fail(err);
+      }
+      rl.close();
+    });
+
+  program
     .command('setup')
     .description('Interactively create + publish a CSAT/CES workflow (no config file needed)')
     .action(async () => {
       const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const ask: AskFn = async (question, options) => {
-        if (options && options.length > 0) {
-          commandDeps.out(question);
-          for (const o of options) commandDeps.out(`  - ${o.value}: ${o.label}`);
-          return rl.question('> ');
-        }
-        return rl.question(`${question}\n> `);
-      };
+      const ask = makeReadlineAsk(rl, commandDeps.out);
       try {
         await runSetup(commandDeps, ask);
       } catch (err) {

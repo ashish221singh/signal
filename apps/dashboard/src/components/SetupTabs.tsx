@@ -46,12 +46,11 @@ export function SetupTabs({ align = 'center' }: { align?: 'center' | 'start' }) 
       ) : (
         <div className="setup-panel" role="tabpanel">
           <p>
-            Prefer the terminal? <code>setup</code> walks you through the question, rating, and
-            reply chips, then publishes it. <code>init</code> installs the SDK and wires{' '}
-            <code>Signal.init</code> into your project.
+            Prefer the terminal? One command logs you in, walks you through the question, rating,
+            and reply chips, publishes it, and wires the SDK into your project — then prints the{' '}
+            <code>Signal.track()</code> line to add.
           </p>
-          <CopyCommand command="npx @ashish221/signal-cli setup" />
-          <CopyCommand command="npx @ashish221/signal-cli init" />
+          <CopyCommand command="npx @ashish221/signal-cli quickstart" />
         </div>
       )}
     </div>

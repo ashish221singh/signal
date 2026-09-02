@@ -61,7 +61,7 @@ async function askAction(ask: AskFn, key: string): Promise<WorkflowAction> {
 export async function runSetup(
   deps: CommandDeps,
   ask: AskFn,
-): Promise<{ id: string; status: string }> {
+): Promise<{ id: string; status: string; eventName: string }> {
   const { apiUrl, token } = await requireToken();
   const client = deps.makeClient(apiUrl);
   const patch: Record<string, unknown> = {};
@@ -113,5 +113,5 @@ export async function runSetup(
   deps.out('Add this where the moment happens in your code:');
   deps.out(`  Signal.track('${patch.event_name}');`);
   deps.out('Responses will show up on your dashboard at /app/dashboard.');
-  return { id: created.id, status };
+  return { id: created.id, status, eventName: String(patch.event_name) };
 }
