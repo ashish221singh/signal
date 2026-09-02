@@ -87,6 +87,19 @@ describe('@signal/mcp round-trip (real Postgres + ephemeral API)', () => {
     );
   });
 
+  it('exposes the setup_workflow prompt with an interview script', async () => {
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toContain('setup_workflow');
+
+    const got = await client.getPrompt({ name: 'setup_workflow' });
+    const text = got.messages
+      .map((m) => (m.content.type === 'text' ? m.content.text : ''))
+      .join('');
+    expect(text).toMatch(/rating_type/);
+    expect(text).toMatch(/positive_threshold/);
+    expect(text).toMatch(/never asked again/i);
+  });
+
   it('create → publish → get_overview round-trips', async () => {
     const created = await callTool(client, 'create_workflow', {
       event_name: 'checkout_completed',

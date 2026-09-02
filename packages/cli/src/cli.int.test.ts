@@ -11,6 +11,7 @@ import { CliClient } from './client.js';
 import type { CommandDeps } from './commands.js';
 import { deploy, loginDevice, loginPassword, whoami, workflowsList } from './commands.js';
 import { readConfig } from './config.js';
+import { runSetup } from './setup.js';
 
 const env = parseEnv({ NODE_ENV: 'test' });
 const FIXTURE = fileURLToPath(new URL('../test/fixtures/signal.config.ts', import.meta.url));
@@ -94,6 +95,39 @@ describe('@signal/cli e2e (real Postgres + ephemeral API)', () => {
     const joined = out.join('\n');
     expect(joined).toContain('checkout_completed');
     expect(joined).toContain('active');
+  });
+
+  it('setup wizard interviews → creates + publishes an active branched workflow', async () => {
+    await loginPassword(deps, EMAIL, PASSWORD, 'http://api.local');
+    // Scripted answers in the wizard's question order (no TTY needed).
+    const answers = [
+      'checkout_completed', // event_name
+      'CSAT', // metric_type
+      'star', // rating_type (⇒ scale 5)
+      'How was checkout?', // header_text
+      '4', // positive_threshold
+      'yes', // other_allows_image
+      'store_review', // positive_action
+      'redirect', // negative_action
+      'https://support.acme.com', //   redirect url
+      'after_7_days', // ask_frequency
+    ];
+    let i = 0;
+    const ask = async () => answers[i++] ?? '';
+
+    const result = await runSetup(deps, ask);
+    expect(result.status).toBe('active');
+
+    const schema = await import('@signal/api/schema');
+    const [row] = await t.db.select().from(schema.workflows);
+    expect(row?.status).toBe('active');
+    expect(row?.eventName).toBe('checkout_completed');
+    expect(row?.ratingType).toBe('star');
+    expect(row?.ratingScaleMax).toBe(5);
+    expect(row?.positiveThreshold).toBe(4);
+    expect(row?.otherAllowsImage).toBe(true);
+    expect(row?.positiveAction).toEqual({ type: 'store_review' });
+    expect(row?.negativeAction).toEqual({ type: 'redirect', url: 'https://support.acme.com' });
   });
 
   it('whoami reports the login', async () => {

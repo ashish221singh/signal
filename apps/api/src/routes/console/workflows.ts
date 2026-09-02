@@ -1,4 +1,4 @@
-import { workflowDraftCreateSchema, workflowUpdateSchema } from '@signal/contracts';
+import { questionsFor, workflowDraftCreateSchema, workflowUpdateSchema } from '@signal/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Clock } from '../../clock.js';
 import type { Db } from '../../db/client.js';
@@ -101,9 +101,12 @@ export function workflowRoutes(deps: { db: Db; clock: Clock }): FastifyPluginAsy
         });
       }
       if (result.reason === 'incomplete') {
+        // Attach human-readable questions (agent-guided setup) so the caller can ask
+        // the user for exactly what's missing, phrased naturally.
         return reply.code(422).send({
           error: { code: 'incomplete', message: 'workflow is missing required fields to publish' },
           missing: result.missing,
+          questions: questionsFor(result.missing),
         });
       }
       // invalid_action (B5-D2): a stored positive/negative action is malformed.

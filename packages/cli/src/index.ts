@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import { CliClient } from './client.js';
 import {
@@ -11,6 +12,7 @@ import {
 } from './commands.js';
 import { defaultApiUrl } from './config.js';
 import { runInit } from './init.js';
+import { type AskFn, runSetup } from './setup.js';
 
 /**
  * `@signal/cli` entrypoint (B3-D9, F2-D8). Commands: `login` (device flow), `login
@@ -92,6 +94,28 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
       } catch (err) {
         fail(err);
       }
+    });
+
+  program
+    .command('setup')
+    .description('Interactively create + publish a CSAT/CES workflow (no config file needed)')
+    .action(async () => {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const ask: AskFn = async (question, options) => {
+        if (options && options.length > 0) {
+          commandDeps.out(question);
+          for (const o of options) commandDeps.out(`  - ${o.value}: ${o.label}`);
+          return rl.question('> ');
+        }
+        return rl.question(`${question}\n> `);
+      };
+      try {
+        await runSetup(commandDeps, ask);
+      } catch (err) {
+        rl.close();
+        fail(err);
+      }
+      rl.close();
     });
 
   const workflows = program.command('workflows').description('Manage workflows');
