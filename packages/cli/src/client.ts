@@ -94,6 +94,21 @@ export class CliClient {
     return this.req<DeployResponse>('POST', '/v1/console/deploy', { body: { workflows }, token });
   }
 
+  /** Create an empty draft workflow (for the `signal setup` wizard). */
+  createWorkflow(token: string): Promise<{ id: string }> {
+    return this.req<{ id: string }>('POST', '/v1/console/workflows', { body: {}, token });
+  }
+
+  /** Patch a draft's builder fields. */
+  patchWorkflow(token: string, id: string, patch: Record<string, unknown>): Promise<unknown> {
+    return this.req('PATCH', `/v1/console/workflows/${id}`, { body: patch, token });
+  }
+
+  /** Publish a draft → active. Throws CliApiError (e.g. code `incomplete`) on failure. */
+  publishWorkflow(token: string, id: string): Promise<{ status?: string }> {
+    return this.req('POST', `/v1/console/workflows/${id}/publish`, { body: {}, token });
+  }
+
   listCliTokens(token: string): Promise<{ tokens: { name: string; scopes: string[] }[] }> {
     return this.req('GET', '/v1/console/cli-tokens', { token });
   }

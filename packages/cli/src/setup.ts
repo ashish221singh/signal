@@ -1,86 +1,111 @@
-import type { DeployItemResult, DeployWorkflow } from '@signal/contracts';
+import { SETUP_FIELDS, type SetupField, type SetupFieldOption } from '@signal/contracts';
 import { type CommandDeps, requireToken } from './commands.js';
 
 /**
- * `signal setup` (F3) — the NON-agent path to defining a feedback ask. The
- * interactive wizard in `index.ts` collects these answers over readline; the core
- * (`buildWorkflow` + `runSetup`) is decoupled so it's unit-testable. Agent users get
- * the equivalent via the MCP server, but both converge on the same deploy payload.
+ * `signal setup` — the interactive, non-agent fallback for creating a workflow. It
+ * walks the shared SETUP_FIELDS guide, asking the same questions an AI agent would,
+ * then create → patch → publishes through the console API. The prompt function is
+ * injected so it's driveable from a test without a TTY.
  */
-export interface SetupAnswers {
-  /** The named moment the ask fires (e.g. `checkout_completed`). */
-  eventName: string;
-  /** The question shown to the user. */
-  question: string;
-  /** Rating input: 5-star or 3-emoji (CSAT only — CES was dropped). */
-  ratingType: 'star' | 'emoji';
-  /** Rating at/above which a response counts as positive. */
-  positiveThreshold: number;
-  /** Reason chips offered on a negative rating (may be empty). */
-  chips: string[];
+export type AskFn = (question: string, options?: readonly SetupFieldOption[]) => Promise<string>;
+
+export interface WorkflowAction {
+  type: 'none' | 'thanks' | 'redirect' | 'store_review';
+  message?: string;
+  url?: string;
 }
 
-/** Default "positive" threshold for a rating type (4/5 stars, 3/3 emoji). */
-export function defaultThreshold(ratingType: 'star' | 'emoji'): number {
-  return ratingType === 'star' ? 4 : 3;
+function field(key: string): SetupField {
+  const f = SETUP_FIELDS.find((x) => x.key === key);
+  if (!f) throw new Error(`unknown setup field: ${key}`);
+  return f;
 }
 
-/** Derive a stable, slug-like deploy `key` from the event name. */
-export function toKey(eventName: string): string {
-  const slug = eventName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'feedback';
+/** Normalize a free-text answer to one of `allowed`, else the fallback. */
+function pick<T extends string>(answer: string, allowed: readonly T[], fallback: T): T {
+  const a = answer.trim().toLowerCase();
+  return allowed.find((v) => v.toLowerCase() === a) ?? fallback;
 }
 
-/** Turn wizard answers into a valid single-workflow deploy payload. */
-export function buildWorkflow(a: SetupAnswers): DeployWorkflow {
-  return {
-    key: toKey(a.eventName),
-    event_name: a.eventName.trim(),
-    status: 'active',
-    metric_type: 'CSAT',
-    rating_type: a.ratingType,
-    rating_scale_max: a.ratingType === 'star' ? 5 : 3,
-    header_text: a.question.trim(),
-    positive_threshold: a.positiveThreshold,
-    chips_on_negative: a.chips,
-    sampling_rate: 1,
-  };
+function yesNo(answer: string, fallback = false): boolean {
+  const a = answer.trim().toLowerCase();
+  if (/^(y|yes|true|1)$/.test(a)) return true;
+  if (/^(n|no|false|0)$/.test(a)) return false;
+  return fallback;
 }
 
-/** The one line of code the user adds to fire the ask (non-agent: they paste it). */
-export function trackSnippet(eventName: string): string {
-  return `Signal.track('${eventName.trim()}');`;
+function clampInt(answer: string, min: number, max: number, fallback: number): number {
+  const n = Number.parseInt(answer.trim(), 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
 }
 
-/**
- * Deploy the configured ask live and print the outcome + the `track()` snippet to
- * add. Requires a logged-in CLI (`signal login`). Returns the deploy results.
- */
+async function askAction(ask: AskFn, key: string): Promise<WorkflowAction> {
+  const f = field(key);
+  const type = pick(
+    await ask(f.question, f.options),
+    ['none', 'thanks', 'redirect', 'store_review'] as const,
+    'none',
+  );
+  if (type === 'redirect') {
+    const url = (await ask('  Redirect to which https:// URL?')).trim();
+    return { type, url };
+  }
+  if (type === 'thanks') {
+    const message = (await ask('  Thank-you message? (blank for default)')).trim();
+    return message ? { type, message } : { type };
+  }
+  return { type };
+}
+
 export async function runSetup(
   deps: CommandDeps,
-  answers: SetupAnswers,
-): Promise<DeployItemResult[]> {
+  ask: AskFn,
+): Promise<{ id: string; status: string }> {
   const { apiUrl, token } = await requireToken();
   const client = deps.makeClient(apiUrl);
-  const workflow = buildWorkflow(answers);
-  const { results } = await client.deploy(token, [workflow]);
+  const patch: Record<string, unknown> = {};
 
-  for (const r of results) {
-    const suffix = r.error ? ` — ${r.error.code}: ${r.error.message}` : '';
-    deps.out(`${r.action.padEnd(9)} ${r.key} (${r.status ?? '—'})${suffix}`);
-  }
+  patch.event_name = (await ask(field('event_name').question, field('event_name').options)).trim();
+  patch.metric_type = pick(
+    await ask(field('metric_type').question, field('metric_type').options),
+    ['CSAT', 'CES'] as const,
+    'CSAT',
+  );
 
-  const ok = results.every((r) => r.action !== 'failed');
-  if (ok) {
-    deps.out('');
-    deps.out('Add this where the moment happens in your code:');
-    deps.out(`  ${trackSnippet(answers.eventName)}`);
-    deps.out('');
-    deps.out('Responses will show up on your dashboard at /app/dashboard.');
-  }
-  return results;
+  const ratingType = pick(
+    await ask(field('rating_type').question, field('rating_type').options),
+    ['star', 'emoji', 'effort_scale'] as const,
+    'star',
+  );
+  patch.rating_type = ratingType;
+  // Scale is derived from the rating type (emoji ⇒ 3, star/effort ⇒ 5).
+  const scaleMax = ratingType === 'emoji' ? 3 : 5;
+  patch.rating_scale_max = scaleMax;
+
+  patch.header_text = (await ask(field('header_text').question)).trim();
+  patch.positive_threshold = clampInt(
+    await ask(`${field('positive_threshold').question} (1–${scaleMax})`),
+    1,
+    scaleMax,
+    scaleMax === 3 ? 3 : 4,
+  );
+
+  patch.other_allows_image = yesNo(
+    await ask(field('other_allows_image').question, field('other_allows_image').options),
+  );
+  patch.positive_action = await askAction(ask, 'positive_action');
+  patch.negative_action = await askAction(ask, 'negative_action');
+  patch.ask_frequency = pick(
+    await ask(field('ask_frequency').question, field('ask_frequency').options),
+    ['after_7_days', 'after_30_days', 'after_60_days'] as const,
+    'after_7_days',
+  );
+
+  const created = await client.createWorkflow(token);
+  await client.patchWorkflow(token, created.id, patch);
+  const published = await client.publishWorkflow(token, created.id);
+  const status = published.status ?? 'active';
+  deps.out(`✓ workflow ${created.id} for "${patch.event_name}" is ${status}`);
+  return { id: created.id, status };
 }

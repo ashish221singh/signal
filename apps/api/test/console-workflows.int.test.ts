@@ -499,6 +499,11 @@ describe('POST /v1/console/workflows/:id/publish — completeness + overlap 409 
     expect(res.statusCode).toBe(422);
     expect(res.json().error.code).toBe('incomplete');
     expect(res.json().missing).toContain('header_text');
+    // Agent-guided setup: a human question rides alongside each missing field.
+    const q = res.json().questions.find((x: { field: string }) => x.field === 'header_text');
+    expect(q).toBeTruthy();
+    expect(typeof q.question).toBe('string');
+    expect(q.question.length).toBeGreaterThan(0);
     expect((await getWorkflow(id)).status).toBe('draft');
   });
 
@@ -527,6 +532,9 @@ describe('POST /v1/console/workflows/:id/publish — completeness + overlap 409 
         'positive_threshold',
       ]),
     );
+    // A choice field surfaces its options so the agent/UI can offer them.
+    const ratingQ = res.json().questions.find((x: { field: string }) => x.field === 'rating_type');
+    expect(ratingQ.options.map((o: { value: string }) => o.value)).toContain('emoji');
     expect((await getWorkflow(id)).status).toBe('draft');
   });
 

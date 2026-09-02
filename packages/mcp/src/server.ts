@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { setupGuideText } from '@signal/contracts';
 import type { SignalApiClient } from './client.js';
 import { TOOLS } from './tools.js';
 
@@ -64,6 +65,27 @@ export function buildMcpServer(client: SignalApiClient): McpServer {
       }) as any,
     );
   }
+
+  // Guided setup (agent-guided setup): a discoverable interview script an agent can
+  // pull before driving create_workflow → publish_workflow, so it asks the user for
+  // the right things (rating style, media, thresholds, branched actions, cadence).
+  server.registerPrompt(
+    'setup_workflow',
+    {
+      title: 'Set up a CSAT/CES workflow',
+      description:
+        'Interview script + field reference for creating a Signal feedback workflow ' +
+        'from a natural-language request. Pull this before calling create_workflow.',
+    },
+    () => ({
+      messages: [
+        {
+          role: 'user' as const,
+          content: { type: 'text' as const, text: setupGuideText() },
+        },
+      ],
+    }),
+  );
 
   return server;
 }

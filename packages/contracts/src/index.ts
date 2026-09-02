@@ -8,4 +8,5 @@ export * from './eligibility.js';
 export * from './feedback.js';
 export * from './health.js';
 export * from './primitives.js';
+export * from './setup.js';
 export * from './uploads.js';

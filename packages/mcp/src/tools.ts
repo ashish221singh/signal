@@ -87,7 +87,15 @@ export const TOOLS: ToolDef<z.ZodRawShape>[] = [
   tool({
     name: 'create_workflow',
     description:
-      'Create a workflow (draft) and set its builder fields in one step. Returns the created workflow.',
+      'Create a CSAT/CES workflow (draft) and set its builder fields in one step. ' +
+      'Fields: event_name (the Signal.track event), metric_type (CSAT|CES), rating_type ' +
+      '(star 1–5 | emoji 1–3 | effort_scale 1–5), rating_scale_max, header_text, ' +
+      'positive_threshold (ratings >= it are "happy"), other_allows_image (photo on the ' +
+      'unhappy path), other_requires_text, onPositive/onNegative branched post-submit ' +
+      'actions ({type: none|thanks|redirect|store_review, message?, url?}), ask_frequency ' +
+      '(after_7_days|after_30_days|after_60_days), sampling_rate, min_session_age_days. ' +
+      'Then call publish_workflow. Pull the `setup_workflow` prompt to interview the user. ' +
+      'Returns the created workflow.',
     inputShape: workflowContentShape,
     handler: async (args, client) => {
       const created = await client.post<{ id: string }>('/v1/console/workflows', {});
@@ -120,7 +128,10 @@ export const TOOLS: ToolDef<z.ZodRawShape>[] = [
   }),
   tool({
     name: 'publish_workflow',
-    description: 'Publish a complete workflow (draft → active).',
+    description:
+      'Publish a complete workflow (draft → active). If fields are missing it returns ' +
+      'isError with code "incomplete", a `missing` list, and human `questions` to ask ' +
+      'the user — fill them via update_workflow, then publish again.',
     inputShape: { id: z.string().uuid() },
     handler: (args, client) => client.post(`/v1/console/workflows/${args.id}/publish`),
   }),

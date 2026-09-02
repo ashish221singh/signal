@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import * as readline from 'node:readline/promises';
+import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import { CliClient } from './client.js';
 import {
@@ -12,7 +12,7 @@ import {
 } from './commands.js';
 import { defaultApiUrl } from './config.js';
 import { runInit } from './init.js';
-import { defaultThreshold, runSetup, type SetupAnswers } from './setup.js';
+import { type AskFn, runSetup } from './setup.js';
 
 /**
  * `@signal/cli` entrypoint (B3-D9, F2-D8). Commands: `login` (device flow), `login
@@ -98,85 +98,25 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
 
   program
     .command('setup')
-    .description('Create a feedback ask (question, rating, chips) and deploy it')
-    .option('--event <name>', 'event name — when the ask fires (skips the prompt)')
-    .option('--question <text>', 'the question to show users')
-    .option('--rating <star|emoji>', 'rating style (star or emoji)')
-    .option('--threshold <n>', 'rating at/above which a response is positive')
-    .option('--chips <list>', 'comma-separated reason chips shown on a negative rating')
-    .action(
-      async (opts: {
-        event?: string;
-        question?: string;
-        rating?: string;
-        threshold?: string;
-        chips?: string;
-      }) => {
-        const parseChips = (raw: string | undefined) =>
-          (raw ?? '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-        const toRating = (raw: string | undefined): 'star' | 'emoji' =>
-          raw === 'emoji' ? 'emoji' : 'star';
-
-        try {
-          let answers: SetupAnswers;
-          // Non-interactive when the two required flags are present (scriptable / CI
-          // / agent use); otherwise fall back to the interactive TTY wizard.
-          if (opts.event && opts.question) {
-            const ratingType = toRating(opts.rating);
-            const parsed = Number.parseInt(opts.threshold ?? '', 10);
-            answers = {
-              eventName: opts.event,
-              question: opts.question,
-              ratingType,
-              positiveThreshold:
-                Number.isInteger(parsed) && parsed > 0 ? parsed : defaultThreshold(ratingType),
-              chips: parseChips(opts.chips),
-            };
-          } else {
-            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-            try {
-              commandDeps.out("Let's set up a feedback ask. (Log in first with `signal login`.)\n");
-              const eventName = (
-                await rl.question('When should we ask? Event name (e.g. checkout_completed): ')
-              ).trim();
-              if (!eventName) throw new Error('an event name is required');
-              const question = (await rl.question('What question should we show users? ')).trim();
-              if (!question) throw new Error('a question is required');
-              const ratingType = toRating(
-                (await rl.question('Rating style — star or emoji [star]: ')).trim(),
-              );
-              const def = defaultThreshold(ratingType);
-              const parsed = Number.parseInt(
-                (await rl.question(`Count as positive at or above [${def}]: `)).trim(),
-                10,
-              );
-              const chips = parseChips(
-                await rl.question(
-                  'Reason chips on a negative rating, comma-separated (optional): ',
-                ),
-              );
-              answers = {
-                eventName,
-                question,
-                ratingType,
-                positiveThreshold: Number.isInteger(parsed) && parsed > 0 ? parsed : def,
-                chips,
-              };
-            } finally {
-              rl.close();
-            }
-            commandDeps.out('');
-          }
-
-          await runSetup(commandDeps, answers);
-        } catch (err) {
-          fail(err);
+    .description('Interactively create + publish a CSAT/CES workflow (no config file needed)')
+    .action(async () => {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const ask: AskFn = async (question, options) => {
+        if (options && options.length > 0) {
+          commandDeps.out(question);
+          for (const o of options) commandDeps.out(`  - ${o.value}: ${o.label}`);
+          return rl.question('> ');
         }
-      },
-    );
+        return rl.question(`${question}\n> `);
+      };
+      try {
+        await runSetup(commandDeps, ask);
+      } catch (err) {
+        rl.close();
+        fail(err);
+      }
+      rl.close();
+    });
 
   const workflows = program.command('workflows').description('Manage workflows');
   workflows

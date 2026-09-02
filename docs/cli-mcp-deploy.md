@@ -51,6 +51,7 @@ fallback; the dashboard later supersedes them for reporting.
 signal login                 # device flow
 signal login --password …    # interim credential login
 signal whoami                # show the stored login
+signal setup                 # interactive wizard: interview → create → publish a workflow
 signal deploy <file>         # apply a config-as-code file
 signal workflows list        # list the account's workflows
 signal init <pk_…> [--dir d] # install the Web SDK + wire Signal.init (F2-D8)
@@ -68,6 +69,25 @@ the snippet, then `Signal.track('event')`). It never rewrites your own entry/sou
 files (guessing wrong is worse than a one-line manual step); an unknown project
 (no `package.json`) prints manual steps instead of guessing. Native SDK install is
 out of scope. Does not require login (offline, no API call).
+
+## Guided setup (agent-guided setup)
+
+Creating a workflow is an interview, not a form — and it works three ways off one
+shared field guide (`@signal/contracts` `SETUP_FIELDS`):
+
+- **AI agent (MCP).** The `setup_workflow` **prompt** hands the agent a ready interview
+  script (every field, its options, and the never-reask/cooldown behaviour). The agent
+  asks the user, then calls `create_workflow` → `publish_workflow`.
+- **Self-correction.** If `publish_workflow` (or the API's `POST /workflows/:id/publish`)
+  is called incomplete, it returns `422 { error.code: 'incomplete', missing: [...],
+  questions: [{ field, question, options? }] }` — a machine-readable list of exactly what
+  to ask, phrased for a human. The agent fills them via `update_workflow` and re-publishes.
+- **No agent? `signal setup`.** An interactive terminal wizard walks the same questions
+  (stars vs emoji, media, thresholds, thank-you vs redirect, cadence) and publishes for you.
+
+Behaviour worth stating to users: once someone **responds** they're never asked again;
+if they **ignore** it, it returns after the `ask_frequency` window (7/30/60 days). Each
+end-user is tracked independently.
 
 ## Config-as-code deploy
 
@@ -148,6 +168,9 @@ results carrying the server's `{ code, message }` (e.g. `code_managed`,
 `create_workflow`/`update_workflow` accept the branched post-submit actions in the
 same plain terms as the deploy config — `onPositive` and `onNegative`, each an
 `{ type, message?, url? }` action (see the deploy section above).
+
+The server also exposes a **prompt**, `setup_workflow` — the interview script an agent
+pulls before creating a workflow (see *Guided setup* above).
 
 ## Event surfacing
 
