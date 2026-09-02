@@ -1,6 +1,12 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { googleLoginUrl } from '../api';
 import { useAuth } from '../auth';
+
+const ERRORS: Record<string, string> = {
+  google: 'Google sign-in failed. Please try again.',
+  google_state: 'Google sign-in expired. Please try again.',
+  google_unverified: 'Your Google email is not verified.',
+};
 
 const GOOGLE_ICON = (
   <svg viewBox="0 0 18 18" aria-hidden="true">
@@ -25,6 +31,8 @@ const GOOGLE_ICON = (
 
 export function Login() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
+  const errorMsg = ERRORS[params.get('error') ?? ''];
   // Already signed in → straight to the dashboard.
   if (user) return <Navigate to="/dashboard" replace />;
 
@@ -33,6 +41,21 @@ export function Login() {
       <main className="card">
         <h1>Log in to Signal</h1>
         <p className="sub">View feedback across every part of your product.</p>
+        {errorMsg && (
+          <div
+            style={{
+              marginTop: 'var(--space-5)',
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+              color: 'var(--danger)',
+              font: 'var(--text-small)',
+              textAlign: 'center',
+            }}
+          >
+            {errorMsg}
+          </div>
+        )}
         <a className="gbtn" href={googleLoginUrl('/app/dashboard')}>
           {GOOGLE_ICON}
           Continue with Google

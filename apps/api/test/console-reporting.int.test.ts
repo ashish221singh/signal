@@ -832,6 +832,56 @@ describe('GET /v1/console/events/overview (real Postgres)', () => {
     expect(names).not.toContain('b_event');
   });
 
+  it('?days window filters by recency; omitted → all-time (F3)', async () => {
+    const wf = await seedWfWithEvent('checkout_completed');
+    // A recent response (now) and an old one (~40 days ago).
+    await seedResponseFor(wf, 'checkout_completed', 5);
+    const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    const [trg] = await t.db
+      .insert(s.triggerLog)
+      .values({
+        accountId,
+        workflowId: wf,
+        userId: 'u',
+        eventName: 'checkout_completed',
+        shownAt: old,
+      })
+      .returning();
+    await t.db.insert(s.responses).values({
+      accountId,
+      triggerId: trg!.id,
+      workflowId: wf,
+      userId: 'u',
+      eventName: 'checkout_completed',
+      ratingValue: 5,
+      deviceOs: 'Android',
+      appVersion: '1',
+      shownAt: old,
+      respondedAt: old,
+    });
+
+    const within = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview?days=30',
+      headers: { cookie: cookieHeader },
+    });
+    const wRow = within
+      .json()
+      .events.find((e: { event_name: string }) => e.event_name === 'checkout_completed');
+    expect(wRow.responses).toBe(1);
+    expect(wRow.triggers).toBe(1);
+
+    const all = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview',
+      headers: { cookie: cookieHeader },
+    });
+    const aRow = all
+      .json()
+      .events.find((e: { event_name: string }) => e.event_name === 'checkout_completed');
+    expect(aRow.responses).toBe(2);
+  });
+
   it('readable via a CLI token carrying responses:read', async () => {
     const checkout = await seedWfWithEvent('checkout_completed');
     await seedTriggerFor(checkout, 'checkout_completed');

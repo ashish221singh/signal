@@ -33,7 +33,10 @@ export function Settings() {
           <h2>Account</h2>
           <p style={{ font: 'var(--text-body)' }}>
             {user?.email}
-            <span style={{ color: 'var(--ink-tertiary)' }}> · Google</span>
+            <span style={{ color: 'var(--ink-tertiary)' }}>
+              {' · '}
+              {user?.provider === 'google' ? 'Google' : 'Password'}
+            </span>
           </p>
         </div>
 

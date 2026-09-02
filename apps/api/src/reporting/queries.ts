@@ -240,16 +240,31 @@ export async function campaignTrend(
  * per response), so an event served by multiple workflows aggregates correctly.
  * All ratios are null-safe; the list is ordered by triggers desc then event name.
  */
-export async function eventsOverview(db: Db, accountId: string): Promise<EventOverviewRow[]> {
+export async function eventsOverview(
+  db: Db,
+  accountId: string,
+  opts: { since?: Date } = {},
+): Promise<EventOverviewRow[]> {
+  // Optional rolling window (F3 dashboard period filter 7/30/90). When `since` is
+  // omitted the roll-up is all-time — the pre-F3 behavior, so existing callers and
+  // tests are unchanged.
+  const since = opts.since;
+
   // Per-event trigger counts (trigger_log carries account_id + event_name).
+  const triggerWhere = since
+    ? and(eq(triggerLog.accountId, accountId), gte(triggerLog.shownAt, since))
+    : eq(triggerLog.accountId, accountId);
   const triggerRows = await db
     .select({ eventName: triggerLog.eventName, count: sql<number>`count(*)::int` })
     .from(triggerLog)
-    .where(eq(triggerLog.accountId, accountId))
+    .where(triggerWhere)
     .groupBy(triggerLog.eventName);
 
   // Per-event response + positive counts. Join each response to its workflow for
   // the positive_threshold; a null threshold contributes 0 positives.
+  const responseWhere = since
+    ? and(eq(responses.accountId, accountId), gte(responses.respondedAt, since))
+    : eq(responses.accountId, accountId);
   const responseRows = await db
     .select({
       eventName: responses.eventName,
@@ -264,7 +279,7 @@ export async function eventsOverview(db: Db, accountId: string): Promise<EventOv
     })
     .from(responses)
     .innerJoin(workflows, eq(responses.workflowId, workflows.id))
-    .where(eq(responses.accountId, accountId))
+    .where(responseWhere)
     .groupBy(responses.eventName);
 
   const triggerByEvent = new Map(triggerRows.map((r) => [r.eventName, r.count]));

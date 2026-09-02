@@ -127,7 +127,13 @@ export function consoleAuthRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (!user) {
         return reply.code(401).send({ error: { code: 'unauthorized', message: 'stale session' } });
       }
-      return reply.send({ id: user.id, email: user.email, name: user.name, role: user.role });
+      return reply.send({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        provider: user.googleSub ? 'google' : 'password',
+      });
     });
   };
 }

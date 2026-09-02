@@ -7,7 +7,19 @@ export interface SessionUser {
   email: string;
   name: string;
   role: 'admin' | 'editor';
+  provider?: 'google' | 'password';
 }
+
+/** One row of the per-event roll-up (GET /v1/console/events/overview). */
+export interface EventRow {
+  event_name: string;
+  triggers: number;
+  responses: number;
+  response_rate: number | null;
+  positive_score: number | null;
+}
+
+export type PeriodDays = 7 | 30 | 90;
 
 class ApiError extends Error {
   constructor(
@@ -51,6 +63,12 @@ export async function getMe(): Promise<SessionUser | null> {
 
 export async function logout(): Promise<void> {
   await req<void>('/v1/console/auth/logout', { method: 'POST' });
+}
+
+/** Per-event feedback roll-up for the dashboard, over a rolling window. */
+export async function getEventsOverview(days: PeriodDays): Promise<EventRow[]> {
+  const { events } = await req<{ events: EventRow[] }>(`/v1/console/events/overview?days=${days}`);
+  return events;
 }
 
 /** Full-page navigation into the Google OAuth flow (returns to `next`). */

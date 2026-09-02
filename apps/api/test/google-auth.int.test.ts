@@ -113,6 +113,7 @@ describe('/v1/console/auth/google (real Postgres)', () => {
     });
     expect(me.statusCode).toBe(200);
     expect(me.json().email).toBe('newuser@example.com');
+    expect(me.json().provider).toBe('google');
 
     // DB: user linked by google_sub, null password; a default key exists.
     const [user] = await t.db
@@ -136,6 +137,17 @@ describe('/v1/console/auth/google (real Postgres)', () => {
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe('/login?error=google_state');
     expect(setCookie(res, 'signal_session')).toBeUndefined();
+  });
+
+  it('failure from an /app flow bounces back to /app/login (not the server login)', async () => {
+    const { cookie } = await start('/app/dashboard');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/auth/google/callback?code=new&state=WRONG',
+      headers: { cookie },
+    });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('/app/login?error=google_state');
   });
 
   it('callback links Google to an existing account by verified email', async () => {

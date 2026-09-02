@@ -11,5 +11,8 @@ export const sessionUserSchema = z.object({
   email: z.email(),
   name: z.string(),
   role: z.enum(['admin', 'editor']),
+  // How the user authenticates (F3). Optional for backward compatibility; `/me`
+  // returns it so the dashboard can show the right account provider.
+  provider: z.enum(['google', 'password']).optional(),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;

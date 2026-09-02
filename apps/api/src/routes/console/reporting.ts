@@ -123,10 +123,20 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
     });
 
     // GET /events/overview — account-wide triggers/responses rolled up per
-    // `event_name` (B4-D5). Distinct path from eventRoutes' `/events`.
-    app.get('/events/overview', read, async (request, reply) => {
-      const events = await eventsOverview(deps.db, request.accountId as string);
-      return reply.send({ events });
-    });
+    // `event_name` (B4-D5). Distinct path from eventRoutes' `/events`. Optional
+    // `?days=7|30|90` (F3 dashboard period filter) applies a rolling window off the
+    // threaded clock; any other/absent value → all-time (the pre-F3 default).
+    app.get<{ Querystring: { days?: string } }>(
+      '/events/overview',
+      read,
+      async (request, reply) => {
+        const days = Number(request.query.days);
+        const since = [7, 30, 90].includes(days)
+          ? new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000)
+          : undefined;
+        const events = await eventsOverview(deps.db, request.accountId as string, { since });
+        return reply.send({ events });
+      },
+    );
   };
 }

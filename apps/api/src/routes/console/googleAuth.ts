@@ -27,9 +27,17 @@ const OAUTH_COOKIE = 'signal_oauth';
 const OAUTH_COOKIE_MAX_AGE_S = 10 * 60;
 
 /** Only same-origin absolute paths are safe redirect targets (no open redirect). */
-function safePath(next: string | undefined, fallback = '/dashboard'): string {
+function safePath(next: string | undefined, fallback = '/app/dashboard'): string {
   if (!next) return fallback;
   return next.startsWith('/') && !next.startsWith('//') ? next : fallback;
+}
+
+/**
+ * The login page to bounce back to on failure — the SPA login for dashboard flows
+ * (`next` under /app), the server-rendered login for device-flow approvals.
+ */
+function loginPathFor(next: string): string {
+  return next.startsWith('/app') ? '/app/login' : '/login';
 }
 
 export function googleAuthRoutes(deps: {
@@ -83,17 +91,18 @@ export function googleAuthRoutes(deps: {
           }
         }
         const next = safePath(stored.next);
+        const loginPath = loginPathFor(next);
 
         // User denied consent, or Google returned an error.
         if (request.query.error) {
-          return reply.redirect('/login?error=google');
+          return reply.redirect(`${loginPath}?error=google`);
         }
         // CSRF: the returned state must match what we stored.
         if (!request.query.state || !stored.state || request.query.state !== stored.state) {
-          return reply.redirect('/login?error=google_state');
+          return reply.redirect(`${loginPath}?error=google_state`);
         }
         if (!request.query.code) {
-          return reply.redirect('/login?error=google');
+          return reply.redirect(`${loginPath}?error=google`);
         }
 
         let profile: Awaited<ReturnType<GoogleExchange>>;
@@ -101,11 +110,11 @@ export function googleAuthRoutes(deps: {
           profile = await exchange(request.query.code);
         } catch (err) {
           request.log.warn({ err }, 'google code exchange failed');
-          return reply.redirect('/login?error=google');
+          return reply.redirect(`${loginPath}?error=google`);
         }
         // Only accept verified emails — we link accounts by email.
         if (!profile.emailVerified) {
-          return reply.redirect('/login?error=google_unverified');
+          return reply.redirect(`${loginPath}?error=google_unverified`);
         }
 
         const { user } = await accounts.findOrCreateGoogleUser({
