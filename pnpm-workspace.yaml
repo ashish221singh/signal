@@ -1,3 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # apps/studio is an uncommitted design-lab scratch, not a build project.
+  - "!apps/studio"

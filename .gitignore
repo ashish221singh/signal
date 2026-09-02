@@ -32,3 +32,6 @@ sdk-android/build/
 sdk-android/**/build/
 .cxx/
 local.properties
+
+# uncommitted design-lab scratch (not part of the build)
+apps/studio/

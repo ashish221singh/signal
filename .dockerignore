@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+.git
+.worktrees
+.github
+**/*.log
+**/.DS_Store
+packages/tokens/src/generated.ts
+apps/*/coverage
+sdk-android
+prototypes
+design/final-version/*.backup.html

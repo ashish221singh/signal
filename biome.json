@@ -8,6 +8,7 @@
       "!**/dist",
       "!**/*.css",
       "!**/*.html",
+      "!apps/studio/**",
       "!packages/tokens/src/generated.ts"
     ]
   },

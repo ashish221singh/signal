@@ -1,0 +1,33 @@
+# Signal — Fly.io deploy (F3). App name must be globally unique; adjust if taken.
+app = "signal-feedback"
+primary_region = "bom"  # Mumbai — closest to field reps in India
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DASHBOARD_DIST = "/repo/apps/dashboard/dist"
+
+# Run DB migrations before each release cuts over.
+[deploy]
+  release_command = "pnpm --filter @signal/api db:migrate"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

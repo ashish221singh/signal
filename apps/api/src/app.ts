@@ -27,6 +27,7 @@ import { reportingRoutes } from './routes/console/reporting.js';
 import { userDataRoutes } from './routes/console/users.js';
 import { workflowRoutes } from './routes/console/workflows.js';
 import { dashboardStaticPlugin } from './routes/dashboardStatic.js';
+import { landingRoutes } from './routes/landing.js';
 import { previewServeRoutes } from './routes/preview.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
@@ -187,6 +188,10 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   const dashboardDist =
     process.env.DASHBOARD_DIST ?? fileURLToPath(new URL('../../dashboard/dist', import.meta.url));
   await app.register(dashboardStaticPlugin(dashboardDist));
+
+  // Marketing landing page at `/` (+ its tokens.css/fonts under /_assets), served
+  // same-origin so the full journey (landing → /app/login → dashboard) is one host.
+  await app.register(landingRoutes());
 
   // CORS (B4-D2). Two console registrations exist (`/v1/console/auth` and the
   // guarded `/v1/console` subtree); both get the SAME credentialed policy so the
