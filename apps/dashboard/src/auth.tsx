@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 /**
  * Auth guard (F3, Clerk). Clerk's <ClerkProvider> (in main.tsx) is the context; here
@@ -15,7 +15,13 @@ function FullPageSpinner() {
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
+  const location = useLocation();
   if (!isLoaded) return <FullPageSpinner />;
-  if (!isSignedIn) return <Navigate to="/login" replace />;
+  if (!isSignedIn) {
+    // Preserve where they were headed (e.g. /cli/approve?user_code=…) so login
+    // returns them there instead of always dumping to the dashboard.
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate to={`/login?redirect=${redirect}`} replace />;
+  }
   return <>{children}</>;
 }

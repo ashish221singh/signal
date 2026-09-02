@@ -49,7 +49,9 @@ export function cliRoutes(deps: {
       return reply.code(201).send({
         device_code: grant.deviceCode,
         user_code: grant.userCode,
-        verification_uri: `${base}/cli/approve?user_code=${encodeURIComponent(grant.userCode)}`,
+        // The Clerk-authed SPA approval page (F4) — binds the CLI to the same account
+        // as the dashboard. (The legacy server-rendered `/cli/approve` still exists.)
+        verification_uri: `${base}/app/cli/approve?user_code=${encodeURIComponent(grant.userCode)}`,
         interval: grant.intervalS,
         expires_in: grant.expiresInS,
       });

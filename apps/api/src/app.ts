@@ -19,6 +19,7 @@ import { publishableKeyAuth } from './plugins/publishableKeyAuth.js';
 import { resolveAuth } from './plugins/resolveAuth.js';
 import { cliRoutes } from './routes/cli.js';
 import { consoleAuthRoutes } from './routes/console/auth.js';
+import { cliApproveRoutes } from './routes/console/cliApprove.js';
 import { deployRoutes } from './routes/console/deploy.js';
 import { eventRoutes } from './routes/console/events.js';
 import { googleAuthRoutes } from './routes/console/googleAuth.js';
@@ -246,6 +247,9 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
       // Key & CLI-token management (B3, Task 6) — no sub-prefix; carries its own
       // `/keys` and `/cli-tokens` paths, distinct from `/workflows`.
       await consoleApi.register(managementRoutes({ db: resolvedDb, tokens: tokenService }));
+      // Clerk-authed CLI device approval (F4) — `/cli/approve`. Shares the one
+      // deviceService instance with the public `/v1/cli/*` routes above.
+      await consoleApi.register(cliApproveRoutes({ devices: deviceService }));
       // config-as-code deploy (B3, Task 7) — `/deploy`, `deploy` scope. Refreshes
       // the SDK cache after apply so published workflows are immediately eligible.
       await consoleApi.register(

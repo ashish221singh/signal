@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth';
+import { CliApprove } from './pages/CliApprove';
 import { Dashboard } from './pages/Dashboard';
 import { EventDetail } from './pages/EventDetail';
 import { Login } from './pages/Login';
@@ -30,6 +31,14 @@ export function App() {
         element={
           <RequireAuth>
             <Settings />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/cli/approve"
+        element={
+          <RequireAuth>
+            <CliApprove />
           </RequireAuth>
         }
       />

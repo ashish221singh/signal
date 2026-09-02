@@ -120,6 +120,48 @@ describe('device flow + interim login (real Postgres)', () => {
     expect(rows[0]?.accountId).toBe(accountId);
   });
 
+  it('approves via the console endpoint (Clerk/SPA path) → token issued', async () => {
+    // The dashboard SPA (Clerk) posts to /v1/console/cli/approve; a cookie session
+    // resolves to the same account + all scopes, so it exercises the same path.
+    const start = await app.inject({ method: 'POST', url: '/v1/cli/device/code' });
+    const grant = start.json();
+    expect(grant.verification_uri).toContain('/app/cli/approve?user_code=');
+
+    const cookie = await login();
+    const approve = await app.inject({
+      method: 'POST',
+      url: '/v1/console/cli/approve',
+      headers: { cookie },
+      payload: { user_code: grant.user_code },
+    });
+    expect(approve.statusCode).toBe(200);
+    expect(approve.json().status).toBe('approved');
+
+    // The CLI's poll (same deviceService instance) picks up the freshly minted token.
+    const got = await app.inject({
+      method: 'POST',
+      url: '/v1/cli/device/token',
+      payload: { device_code: grant.device_code },
+    });
+    expect(got.statusCode).toBe(200);
+    expect(got.json().token).toMatch(/^cli_/);
+
+    // bound to the signed-in account.
+    const rows = await t.db.select().from(s.cliTokens);
+    expect(rows[0]?.accountId).toBe(accountId);
+  });
+
+  it('console approve requires auth (401 without a session)', async () => {
+    const start = await app.inject({ method: 'POST', url: '/v1/cli/device/code' });
+    const grant = start.json();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/console/cli/approve',
+      payload: { user_code: grant.user_code },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('deny → poll returns access_denied', async () => {
     const start = await app.inject({ method: 'POST', url: '/v1/cli/device/code' });
     const grant = start.json();

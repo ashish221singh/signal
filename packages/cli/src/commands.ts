@@ -1,7 +1,25 @@
+import { spawn } from 'node:child_process';
 import type { DeployItemResult } from '@signal/contracts';
 import type { CliClient } from './client.js';
 import { defaultApiUrl, readConfig, updateConfig } from './config.js';
 import { loadDeployConfig } from './loadConfigFile.js';
+
+/** Best-effort open a URL in the user's browser (macOS/Linux/Windows). Never throws.
+ *  No-op when not attached to an interactive terminal (tests, pipes, CI) or when
+ *  SIGNAL_NO_BROWSER=1 — the printed link is always the fallback. */
+function openBrowser(url: string): void {
+  if (process.env.SIGNAL_NO_BROWSER === '1' || !process.stdout.isTTY) return;
+  const cmd =
+    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  try {
+    spawn(cmd, args, { stdio: 'ignore', detached: true })
+      .on('error', () => {})
+      .unref();
+  } catch {
+    /* headless / no browser — the printed link is the fallback */
+  }
+}
 
 /**
  * CLI command implementations (B3-D9), decoupled from commander so they are directly
@@ -32,8 +50,10 @@ export async function requireToken(): Promise<{ apiUrl: string; token: string }>
 export async function loginDevice(deps: CommandDeps, apiUrl = defaultApiUrl()): Promise<void> {
   const client = deps.makeClient(apiUrl);
   const grant = await client.startDevice();
-  deps.out(`To authorize this CLI, open:\n  ${grant.verification_uri}`);
+  deps.out('Opening your browser to authorize this CLI…');
+  deps.out(`If it doesn’t open, visit:\n  ${grant.verification_uri}`);
   deps.out(`and confirm the code:  ${grant.user_code}`);
+  openBrowser(grant.verification_uri);
 
   const sleep = deps.sleep ?? defaultSleep;
   const maxPolls = deps.maxPolls ?? Math.ceil(grant.expires_in / grant.interval);

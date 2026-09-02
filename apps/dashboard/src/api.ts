@@ -93,6 +93,17 @@ export function getEventResponses(eventName: string, limit = 20): Promise<Respon
   );
 }
 
+/** Approve (or deny) a CLI device-flow grant, binding it to THIS Clerk account. */
+export function approveCliDevice(
+  userCode: string,
+  decision: 'approve' | 'deny' = 'approve',
+): Promise<{ status: 'approved' | 'denied' | 'invalid' }> {
+  return req('/v1/console/cli/approve', {
+    method: 'POST',
+    body: JSON.stringify({ user_code: userCode, decision }),
+  });
+}
+
 /** Mint a CLI token for this account (shown once) to connect the terminal. */
 export async function createCliToken(): Promise<string> {
   const res = await req<{ token: string }>('/v1/console/cli-tokens', {
