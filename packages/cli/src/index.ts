@@ -8,6 +8,7 @@ import {
   deploy,
   loginDevice,
   loginPassword,
+  loginToken,
   whoami,
   workflowsList,
 } from './commands.js';
@@ -40,14 +41,17 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
 
   program
     .command('login')
-    .description('Log in via the device flow (or --password for headless/CI)')
+    .description('Log in — paste a dashboard token (--token), device flow, or --password')
+    .option('--token <cli_token>', 'save a CLI token generated in your dashboard Settings')
     .option('--password', 'use interim email+password login instead of the device flow')
     .option('--email <email>', 'email (with --password)')
     .option('--password-value <password>', 'password (with --password)')
     .action(async (opts) => {
       const apiUrl = program.opts().apiUrl as string;
       try {
-        if (opts.password) {
+        if (opts.token) {
+          await loginToken(commandDeps, opts.token, apiUrl);
+        } else if (opts.password) {
           if (!opts.email || !opts.passwordValue) {
             throw new Error('--email and --password-value are required with --password');
           }

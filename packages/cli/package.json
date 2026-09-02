@@ -1,6 +1,6 @@
 {
   "name": "@ashish221/signal-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Signal CLI — set up in-app feedback from your terminal. `npx @signal/cli init`.",
   "license": "MIT",

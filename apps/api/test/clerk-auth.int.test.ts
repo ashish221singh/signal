@@ -46,6 +46,7 @@ describe('Clerk dashboard auth (real Postgres)', () => {
       .select()
       .from(s.consoleUsers)
       .where(eq(s.consoleUsers.clerkUserId, 'clerk_user_abc'));
+    if (!user) throw new Error('expected a clerk-mapped user');
     expect(user.email).toBe('clerk@example.com');
     expect(user.passwordHash).toBeNull();
     // default publishable key issued for the new account

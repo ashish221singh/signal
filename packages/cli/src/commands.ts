@@ -74,6 +74,23 @@ export async function loginPassword(
   deps.out('Logged in. Token saved to ~/.signal/config.json');
 }
 
+/**
+ * `signal login --token <cli_…>` (F3) — save a CLI token minted from the dashboard.
+ * The dashboard (Clerk-authed) generates it under your account; this bridges the CLI
+ * to that account without a separate device-flow/password login.
+ */
+export async function loginToken(
+  deps: CommandDeps,
+  token: string,
+  apiUrl = defaultApiUrl(),
+): Promise<void> {
+  if (!token.startsWith('cli_')) {
+    throw new Error('that does not look like a CLI token (expected it to start with `cli_`)');
+  }
+  await updateConfig({ api_url: apiUrl, token });
+  deps.out('Logged in. Token saved to ~/.signal/config.json');
+}
+
 /** `signal whoami` — show the stored login (account is implied by the token). */
 export async function whoami(deps: CommandDeps): Promise<void> {
   const config = await readConfig();

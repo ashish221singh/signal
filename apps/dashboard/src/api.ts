@@ -92,3 +92,15 @@ export function getEventResponses(eventName: string, limit = 20): Promise<Respon
     `/v1/console/events/${encodeURIComponent(eventName)}/responses?limit=${limit}`,
   );
 }
+
+/** Mint a CLI token for this account (shown once) to connect the terminal. */
+export async function createCliToken(): Promise<string> {
+  const res = await req<{ token: string }>('/v1/console/cli-tokens', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'dashboard',
+      scopes: ['workflows:read', 'workflows:write', 'responses:read', 'deploy'],
+    }),
+  });
+  return res.token;
+}
