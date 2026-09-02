@@ -1,67 +1,298 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en" class="theme-light">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>signal — feedback, at the speed you ship</title>
-<meta name="description" content="You shipped it. But did it land?">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="tokens.css">
-<style>
-  *{box-sizing:border-box}
-  :root{
-    --term-bg:#0E0D0B;
-    --line-faint:rgba(255,255,255,.06);
-    --path:var(--info);
-  }
-  html,body{margin:0}
-  body{
-    min-height:100vh;color:var(--ink);
-    font:500 15px/1.6 var(--font-mono);
-    background:
-      radial-gradient(120% 90% at 50% -20%,rgba(247,130,0,.08),transparent 55%),
-      var(--term-bg);
-    -webkit-font-smoothing:antialiased;
-  }
-  a{color:inherit;text-decoration:none}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signal — a satisfaction score for every part of your product</title>
+  <meta name="description" content="One command adds one-tap CSAT feedback to any flow in your web or Android app. No dashboards to wire, no SDK to configure." />
+  <link rel="stylesheet" href="../../packages/tokens/tokens.css" />
+  <style>
+    /* ====================================================================
+       Signal landing — pure-white, Apple/Framer minimal. Light theme only.
+       Type: Schibsted Grotesk (display) · Inter (body) · JetBrains Mono (code).
+       ==================================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ---------- subtle minimal header ---------- */
-  .bar{position:sticky;top:0;z-index:20;
-    background:color-mix(in srgb,var(--term-bg) 82%,transparent);backdrop-filter:blur(8px);
-    border-bottom:1px solid var(--line-faint)}
-  .bar .in{max-width:1120px;margin:0 auto;height:56px;padding:0 28px;
-    display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .logo{display:flex;align-items:center;gap:9px}
-  .logo svg{width:19px;height:19px;color:var(--ink)}
-  .logo .wm{font:600 16px/1 var(--font-mono);letter-spacing:-.02em}
-  .tag{font:500 14px/1 var(--font-mono);color:var(--ink);white-space:nowrap}
-  .tag .em{color:var(--action)}
+    :root.theme-light {
+      /* Force a truly white canvas — quieter than the token hero wash. */
+      --bg: #FFFFFF;
+    }
 
-  main{max-width:1120px;margin:0 auto;padding:0 28px}
+    html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-  @media (max-width:640px){
-    .bar .in,main{padding-left:20px;padding-right:20px}
-    .tag{font-size:12px;white-space:normal;text-align:right;line-height:1.25}
-  }
-</style>
+    body {
+      min-height: 100dvh;
+      background: var(--bg);
+      color: var(--ink);
+      font: var(--text-body);
+      display: flex;
+      flex-direction: column;
+      /* whisper of warmth pooled at the base — barely there */
+      background-image: radial-gradient(120% 80% at 50% 118%, rgba(247,130,0,.05), transparent 60%);
+      background-attachment: fixed;
+    }
+
+    /* ---- Nav ---------------------------------------------------------- */
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-6) clamp(var(--space-6), 5vw, var(--space-16));
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .wordmark {
+      font: 500 19px/1 var(--font-mono);
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: baseline;
+    }
+    .wordmark .cursor {
+      display: inline-block;
+      width: 8px; height: 1.05em;
+      margin-left: 3px;
+      background: var(--action);
+      transform: translateY(1px);
+      animation: blink 1.15s steps(1) infinite;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+    .login-link {
+      font: 500 14px/1 var(--font-sans);
+      color: var(--ink-secondary);
+      text-decoration: none;
+      padding: 9px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-full);
+      background: var(--surface);
+      transition: color var(--motion-base) var(--ease-out),
+                  border-color var(--motion-base) var(--ease-out),
+                  transform var(--motion-fast) var(--ease-out);
+    }
+    .login-link:hover {
+      color: var(--ink);
+      border-color: var(--line-strong);
+      transform: translateY(-1px);
+    }
+
+    /* ---- Hero --------------------------------------------------------- */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: clamp(var(--space-12), 9vh, var(--space-24)) var(--space-6) var(--space-16);
+    }
+
+    .eyebrow {
+      font: var(--text-label);
+      letter-spacing: var(--tracking-label);
+      text-transform: uppercase;
+      color: var(--ink-tertiary);
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-bottom: var(--space-6);
+    }
+    .eyebrow .dot {
+      width: 6px; height: 6px; border-radius: var(--radius-full);
+      background: var(--action);
+      box-shadow: 0 0 0 4px rgba(247,130,0,.14);
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: clamp(30px, 4.4vw, 50px);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      max-width: 22ch;
+      text-wrap: balance;
+      color: var(--ink);
+    }
+    h1 .accent { color: var(--action); }
+
+    .subhead {
+      font: var(--text-body-lg);
+      color: var(--ink-secondary);
+      max-width: 46ch;
+      margin: var(--space-6) auto 0;
+      text-wrap: balance;
+    }
+
+    /* ---- The code block (the one call to action) ---------------------- */
+    .code {
+      margin-top: var(--space-10);
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 6px 6px 6px var(--space-6);
+      box-shadow: var(--shadow-2);
+      transition: border-color var(--motion-base) var(--ease-out),
+                  box-shadow var(--motion-base) var(--ease-out),
+                  transform var(--motion-base) var(--ease-out);
+    }
+    .code:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+      box-shadow: 0 18px 44px rgba(25,24,21,.12);
+    }
+    .code code {
+      font: 500 15px/1 var(--font-mono);
+      color: var(--ink);
+      white-space: nowrap;
+      letter-spacing: -0.01em;
+    }
+    .code .prompt { color: var(--ink-tertiary); margin-right: var(--space-3); user-select: none; }
+    .copy-btn {
+      font: 500 13px/1 var(--font-sans);
+      color: var(--action-ink);
+      background: var(--action);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 11px 16px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: background var(--motion-fast) var(--ease-out),
+                  transform var(--motion-fast) var(--ease-out);
+    }
+    .copy-btn:hover { background: var(--action-hover); }
+    .copy-btn:active { transform: scale(.96); }
+    .copy-btn.copied { background: var(--success); }
+    .copy-btn svg { width: 14px; height: 14px; }
+
+    /* ---- Platform labels ---------------------------------------------- */
+    .platforms {
+      margin-top: var(--space-8);
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      font: var(--text-label);
+      letter-spacing: var(--tracking-label);
+      text-transform: uppercase;
+      color: var(--ink-tertiary);
+    }
+    .platforms span { display: inline-flex; align-items: center; }
+    .platforms .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--line-strong); }
+
+    /* ---- Footer ------------------------------------------------------- */
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-6) clamp(var(--space-6), 5vw, var(--space-16));
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      border-top: 1px solid var(--line);
+      font: var(--text-small);
+      color: var(--ink-tertiary);
+    }
+    footer nav { display: flex; gap: var(--space-6); }
+    footer a { color: var(--ink-tertiary); text-decoration: none; transition: color var(--motion-base) var(--ease-out); }
+    footer a:hover { color: var(--ink); }
+
+    /* ---- Entrance choreography (one orchestrated load) ---------------- */
+    .reveal { opacity: 0; transform: translateY(14px); animation: rise var(--motion-slow) var(--ease-out) forwards; }
+    @keyframes rise { to { opacity: 1; transform: none; } }
+    .d1 { animation-delay: .05s; } .d2 { animation-delay: .13s; }
+    .d3 { animation-delay: .23s; } .d4 { animation-delay: .34s; }
+    .d5 { animation-delay: .46s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { animation: none; opacity: 1; transform: none; }
+      .wordmark .cursor { animation: none; }
+    }
+
+    @media (max-width: 520px) {
+      .code { flex-direction: column; align-items: stretch; padding: var(--space-4); gap: var(--space-3); }
+      .code code { text-align: center; white-space: normal; }
+      .copy-btn { justify-content: center; padding: 13px; }
+      footer { flex-direction: column; gap: var(--space-3); text-align: center; }
+    }
+  </style>
 </head>
 <body>
+  <header class="nav reveal d1">
+    <a href="/" class="wordmark">signal<span class="cursor" aria-hidden="true"></span></a>
+    <a href="/login" class="login-link">Log in</a>
+  </header>
 
-<header class="bar">
-  <div class="in">
-    <a class="logo" href="#" aria-label="signal home">
-      <svg viewBox="0 0 96 96" aria-hidden="true"><path fill="currentColor" d="M20 0 H76 Q96 0 96 20 V24 H30 Q24 24 24 30 Q24 36 30 36 H96 V76 Q96 96 76 96 H20 Q0 96 0 76 V72 H66 Q72 72 72 66 Q72 60 66 60 H0 V20 Q0 0 20 0 Z"/></svg>
-      <span class="wm">signal</span>
-    </a>
-    <span class="tag">You shipped it. But did it <span class="em">land?</span></span>
-  </div>
-</header>
+  <main>
+    <h1 class="reveal d2">A satisfaction score for<br />every part of your <span class="accent">product</span>.</h1>
 
-<main>
-  <!-- content will be added below -->
-</main>
+    <p class="subhead reveal d3">
+      One command adds one-tap feedback to any flow in your app.
+      No dashboards to wire, no SDK to configure.
+    </p>
 
+    <div class="code reveal d4" role="group" aria-label="Setup command">
+      <code><span class="prompt" aria-hidden="true">$</span>npx @signal/cli init</code>
+      <button class="copy-btn" id="copyBtn" type="button" aria-label="Copy setup command">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span id="copyLabel">Copy</span>
+      </button>
+    </div>
+
+    <div class="platforms reveal d5">
+      <span>Web</span><i class="sep"></i>
+      <span>Android</span><i class="sep"></i>
+      <span>Hosted link</span>
+    </div>
+  </main>
+
+  <footer class="reveal d5">
+    <span>© 2026 Signal</span>
+    <nav>
+      <a href="/docs">Docs</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/login">Log in</a>
+    </nav>
+  </footer>
+
+  <script>
+    (function () {
+      const btn = document.getElementById('copyBtn');
+      const label = document.getElementById('copyLabel');
+      const command = 'npx @signal/cli init';
+      const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+      const copySvg = btn.querySelector('svg').outerHTML;
+      let resetTimer;
+
+      btn.addEventListener('click', async function () {
+        try {
+          await navigator.clipboard.writeText(command);
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = command; document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+        }
+        btn.classList.add('copied');
+        btn.querySelector('svg').outerHTML = checkSvg;
+        label.textContent = 'Copied';
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(function () {
+          btn.classList.remove('copied');
+          btn.querySelector('svg').outerHTML = copySvg;
+          label.textContent = 'Copy';
+        }, 1900);
+      });
+    })();
+  </script>
 </body>
 </html>
