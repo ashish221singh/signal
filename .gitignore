@@ -16,6 +16,9 @@ packages/tokens/src/generated.ts
 # test artifacts
 coverage/
 
+# git worktrees (isolated workspaces)
+.worktrees/
+
 # OS / editor noise
 .DS_Store
 *.log
