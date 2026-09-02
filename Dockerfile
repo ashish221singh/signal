@@ -31,4 +31,6 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DASHBOARD_DIST=/repo/apps/dashboard/dist
 EXPOSE 3000
-CMD ["pnpm", "--filter", "@signal/api", "start"]
+# Run DB migrations (idempotent, with connect-retry for the platform's private
+# network) then start the API. The DB is only reachable from inside the platform.
+CMD ["sh", "-c", "pnpm --filter @signal/api exec tsx src/scripts/migrate.ts && pnpm --filter @signal/api start"]
