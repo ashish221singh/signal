@@ -209,5 +209,13 @@ export function setupGuideText(): string {
     'Behaviour to explain to the user: if someone ignores the ask it returns after the',
     'ask_frequency window; once they respond they are never asked again (until you',
     'publish a new workflow). Each user is tracked independently.',
+    '',
+    'After publishing, wire the code (you are a coding agent — do this yourself):',
+    '1. Run `npx @ashish221/signal-cli init` in the project. It installs the Web SDK',
+    '   and adds Signal.init(...) with the account publishable key auto-fetched.',
+    '2. Add `Signal.track("<event_name>")` at the moment the event happens (the same',
+    '   event_name you gave create_workflow, e.g. after checkout completes).',
+    'Then tell the user to trigger that event once to see the feedback ask appear, and',
+    'that responses will show in their Signal dashboard.',
   ].join('\n');
 }

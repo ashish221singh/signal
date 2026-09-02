@@ -1,7 +1,7 @@
 import { useClerk, useUser } from '@clerk/clerk-react';
 import { useState } from 'react';
 import { createCliToken } from '../api';
-import { CopyCommand } from '../components/CopyCommand';
+import { SetupTabs } from '../components/SetupTabs';
 import { Shell } from '../components/Shell';
 
 const CLI = '@ashish221/signal-cli';
@@ -46,9 +46,8 @@ export function Settings() {
         <h1 className="page-title">Settings</h1>
 
         <div className="section">
-          <h2>Your setup command</h2>
-          <CopyCommand />
-          <p className="hint">Run this in any project to connect it to Signal.</p>
+          <h2>Add feedback to your app</h2>
+          <SetupTabs align="start" />
         </div>
 
         <div className="section">

@@ -13,6 +13,7 @@ import {
   workflowsList,
 } from './commands.js';
 import { defaultApiUrl } from './config.js';
+import { AGENT_TARGETS, runConnect } from './connect.js';
 import { runInit } from './init.js';
 import { type AskFn, runSetup } from './setup.js';
 
@@ -100,6 +101,30 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
         const apiUrl = program.opts().apiUrl as string;
         const key = publishableKey ?? (await autoResolveKey(commandDeps, apiUrl));
         await runInit(opts.dir ?? process.cwd(), key, commandDeps.out);
+      } catch (err) {
+        fail(err);
+      }
+    });
+
+  program
+    .command('connect')
+    .description('Wire the Signal MCP into your coding agent so it can drive setup by chat')
+    .option(
+      '--agent <agent>',
+      `which coding agent to wire up (${Object.keys(AGENT_TARGETS).join(', ')})`,
+      'claude',
+    )
+    .option('--dir <dir>', 'the project directory (defaults to the current directory)')
+    .option('--print', 'just print the MCP config to paste manually (no files written)')
+    .action(async (opts: { agent: string; dir?: string; print?: boolean }) => {
+      try {
+        const apiUrl = program.opts().apiUrl as string;
+        await runConnect(commandDeps, {
+          dir: opts.dir ?? process.cwd(),
+          agent: opts.agent,
+          apiUrl,
+          print: opts.print,
+        });
       } catch (err) {
         fail(err);
       }

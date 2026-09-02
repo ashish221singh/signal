@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { type EventRow, getEventsOverview, type PeriodDays } from '../api';
-import { CopyCommand } from '../components/CopyCommand';
+import { SetupTabs } from '../components/SetupTabs';
 import { Shell } from '../components/Shell';
 
 const PERIODS: PeriodDays[] = [7, 30, 90];
@@ -83,9 +83,10 @@ export function Dashboard() {
           </div>
         ) : !hasData ? (
           <EmptyLike title="No feedback yet">
-            Run this in your project to connect it. Responses will appear here as they come in.
-            <div style={{ marginTop: 'var(--space-5)' }}>
-              <CopyCommand />
+            Add feedback to your app in one command — pick how you work. Responses will appear here
+            as they come in.
+            <div style={{ marginTop: 'var(--space-6)' }}>
+              <SetupTabs align="center" />
             </div>
           </EmptyLike>
         ) : (

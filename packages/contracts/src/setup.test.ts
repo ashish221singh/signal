@@ -58,4 +58,10 @@ describe('setupGuideText', () => {
     expect(text).toMatch(/never asked again/i);
     expect(text).toMatch(/required/);
   });
+
+  it('tells the agent to wire the SDK and Signal.track after publishing', () => {
+    const text = setupGuideText();
+    expect(text).toContain('signal-cli init');
+    expect(text).toMatch(/Signal\.track/);
+  });
 });

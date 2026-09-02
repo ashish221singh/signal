@@ -186,6 +186,21 @@
     .platforms span { display: inline-flex; align-items: center; }
     .platforms .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--line-strong); }
 
+    /* ---- Agent hint (secondary onboarding path) ---------------------- */
+    .agent-hint {
+      margin-top: var(--space-5);
+      font: var(--text-small);
+      color: var(--ink-tertiary);
+      text-align: center;
+    }
+    .agent-hint code {
+      font-family: var(--font-mono, ui-monospace, monospace);
+      color: var(--ink-secondary);
+      background: var(--surface-sunken, rgba(0,0,0,.04));
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+
     /* ---- Footer ------------------------------------------------------- */
     footer {
       display: flex;
@@ -254,6 +269,11 @@
       <span>Android</span><i class="sep"></i>
       <span>Hosted link</span>
     </div>
+
+    <p class="agent-hint reveal d5">
+      Using a coding agent? Run <code>npx @ashish221/signal-cli connect</code> and just
+      ask it to “set up Signal feedback.”
+    </p>
   </main>
 
   <footer class="reveal d5">
