@@ -81,58 +81,60 @@ describe('CORS (real Postgres)', () => {
   });
 
   describe('sdk surface', () => {
-    it("reflects an origin that is on the account's allow-list", async () => {
-      const accountId = await seedAccount(t.db);
-      await seedApiKey(t.db, accountId, APP_KEY, { allowedOrigins: [SDK_ORIGIN] });
+    // A browser CORS preflight (OPTIONS) never carries the custom X-Signal-App-Key
+    // header. The preflight is therefore permissive (reflects the origin); the
+    // per-key origin allow-list is enforced on the ACTUAL request instead.
+    it('preflight WITHOUT the app key still passes (the real-browser case)', async () => {
       const res = await app.inject({
         method: 'OPTIONS',
         url: '/v1/sdk/eligibility',
         headers: {
           origin: SDK_ORIGIN,
-          'x-signal-app-key': APP_KEY,
           'access-control-request-method': 'GET',
+          'access-control-request-headers': 'x-signal-app-key',
         },
       });
       expect(res.headers['access-control-allow-origin']).toBe(SDK_ORIGIN);
+      expect((res.headers['access-control-allow-headers'] ?? '').toLowerCase()).toContain(
+        'x-signal-app-key',
+      );
     });
 
-    it("does NOT reflect an origin absent from the account's allow-list", async () => {
+    it('actual request reflects an origin on the allow-list', async () => {
       const accountId = await seedAccount(t.db);
       await seedApiKey(t.db, accountId, APP_KEY, { allowedOrigins: [SDK_ORIGIN] });
       const res = await app.inject({
-        method: 'OPTIONS',
-        url: '/v1/sdk/eligibility',
-        headers: {
-          origin: OTHER_ORIGIN,
-          'x-signal-app-key': APP_KEY,
-          'access-control-request-method': 'GET',
-        },
+        method: 'GET',
+        url: '/v1/sdk/eligibility?event_name=demo&user_id=u1',
+        headers: { origin: SDK_ORIGIN, 'x-signal-app-key': APP_KEY },
       });
+      expect(res.statusCode).not.toBe(403);
+      expect(res.headers['access-control-allow-origin']).toBe(SDK_ORIGIN);
+    });
+
+    it('actual request from an origin absent from the allow-list is rejected (403, no ACAO)', async () => {
+      const accountId = await seedAccount(t.db);
+      await seedApiKey(t.db, accountId, APP_KEY, { allowedOrigins: [SDK_ORIGIN] });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/v1/sdk/eligibility?event_name=demo&user_id=u1',
+        headers: { origin: OTHER_ORIGIN, 'x-signal-app-key': APP_KEY },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe('origin_not_allowed');
       expect(res.headers['access-control-allow-origin']).toBeUndefined();
     });
 
-    it('an empty account allow-list reflects ANY origin (no browser restriction)', async () => {
+    it('an empty account allow-list reflects ANY origin on the actual request', async () => {
       const accountId = await seedAccount(t.db);
       await seedApiKey(t.db, accountId, APP_KEY, { allowedOrigins: [] });
       const res = await app.inject({
-        method: 'OPTIONS',
-        url: '/v1/sdk/eligibility',
-        headers: {
-          origin: OTHER_ORIGIN,
-          'x-signal-app-key': APP_KEY,
-          'access-control-request-method': 'GET',
-        },
+        method: 'GET',
+        url: '/v1/sdk/eligibility?event_name=demo&user_id=u1',
+        headers: { origin: OTHER_ORIGIN, 'x-signal-app-key': APP_KEY },
       });
+      expect(res.statusCode).not.toBe(403);
       expect(res.headers['access-control-allow-origin']).toBe(OTHER_ORIGIN);
-    });
-
-    it('emits no CORS header when the app key is missing', async () => {
-      const res = await app.inject({
-        method: 'OPTIONS',
-        url: '/v1/sdk/eligibility',
-        headers: { origin: SDK_ORIGIN, 'access-control-request-method': 'GET' },
-      });
-      expect(res.headers['access-control-allow-origin']).toBeUndefined();
     });
   });
 

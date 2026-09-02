@@ -256,18 +256,29 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   await app.register(
     async (sdk) => {
-      // CORS (B4-D2): the SDK ingest surface reflects an allowed `Origin` per the
-      // calling account's `allowed_origins` (B2). The delegator reads the request
-      // so it can resolve the account from the `X-Signal-App-Key` header; when the
-      // origin is not allow-listed (or the key/origin is absent) NO CORS headers
-      // are emitted. Native SDKs send no Origin and are unaffected. An empty
-      // allow-list means "any origin" (mirroring publishableKeyAuth's rule).
+      // CORS (B4-D2, F3-fix): the SDK ingest surface reflects an allowed `Origin`
+      // per the calling account's `allowed_origins` (B2). Native SDKs send no Origin
+      // and are unaffected; an empty allow-list means "any origin".
+      //
+      // A browser CORS *preflight* (OPTIONS) never carries the custom
+      // `X-Signal-App-Key` header, so the key can't be resolved at preflight. We
+      // therefore ALLOW the preflight and reflect its origin — the ACTUAL request
+      // still enforces the key (publishableKeyAuth) AND the per-key origin
+      // allow-list, so nothing is weakened. Without this, real cross-origin requests
+      // (a customer site → the Signal API) fail preflight and never send. Tests use
+      // `app.inject`, which performs no real preflight, which hid this.
       const sdkCorsDelegate: FastifyCorsOptionsDelegatePromise = async (req) => {
-        const key = req.headers['x-signal-app-key'];
         const origin = req.headers.origin;
-        if (typeof origin !== 'string' || typeof key !== 'string') {
-          return { origin: false };
+        if (typeof origin !== 'string') return { origin: false };
+        if (req.method === 'OPTIONS') {
+          return {
+            origin,
+            credentials: false,
+            allowedHeaders: ['X-Signal-App-Key', 'Content-Type'],
+          };
         }
+        const key = req.headers['x-signal-app-key'];
+        if (typeof key !== 'string') return { origin: false };
         const resolved = await accountsService.resolveKey(key);
         if (!resolved) return { origin: false };
         const allowed =
