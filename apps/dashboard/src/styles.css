@@ -1,0 +1,106 @@
+@import '@signal/tokens/tokens.css';
+
+/* ==========================================================================
+   Signal dashboard — pure-white, Apple/Framer-minimal, light theme only.
+   Reuses @signal/tokens (same system as the landing page). Hand CSS, no
+   Tailwind — the reporting UI is calm tables + a few quiet numbers.
+   ========================================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root.theme-light { --bg: #FFFFFF; }
+
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { background: var(--bg); color: var(--ink); font: var(--text-body); }
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; }
+
+/* ---- App shell ----------------------------------------------------------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px; padding: 0 clamp(var(--space-5), 4vw, var(--space-10));
+  border-bottom: 1px solid var(--line); position: sticky; top: 0;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); z-index: 10;
+}
+.topbar .brand { display: inline-flex; align-items: baseline; }
+.wordmark { font: 500 18px/1 var(--font-mono); letter-spacing: -0.02em; color: var(--ink); }
+.wordmark .cursor {
+  display: inline-block; width: 7px; height: 1em; margin-left: 3px;
+  background: var(--action); transform: translateY(1px);
+}
+.topbar nav { display: flex; align-items: center; gap: var(--space-2); margin-left: var(--space-8); flex: 1; }
+.navlink {
+  font: 500 14px/1 var(--font-sans); color: var(--ink-secondary);
+  padding: 8px 12px; border-radius: var(--radius-md);
+  transition: color var(--motion-base) var(--ease-out), background var(--motion-base) var(--ease-out);
+}
+.navlink:hover { color: var(--ink); background: var(--surface-2); }
+.navlink.active { color: var(--ink); background: var(--surface-2); }
+
+.iconbtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 14px/1 var(--font-sans); color: var(--ink-secondary);
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius-full);
+  background: var(--surface);
+  transition: color var(--motion-base) var(--ease-out), border-color var(--motion-base) var(--ease-out);
+}
+.iconbtn:hover { color: var(--ink); border-color: var(--line-strong); }
+
+.page { max-width: 1080px; margin: 0 auto; padding: clamp(var(--space-8), 5vw, var(--space-16)) clamp(var(--space-5), 4vw, var(--space-10)); }
+.page-title { font: 600 26px/1.1 var(--font-display); letter-spacing: -0.02em; }
+
+/* ---- Centered card (login / loading / empty) ----------------------------- */
+.center { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.card {
+  width: 100%; max-width: 400px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-xl);
+  padding: clamp(var(--space-8), 5vw, var(--space-12)); box-shadow: var(--shadow-2);
+}
+.card h1 { font: 600 24px/1.15 var(--font-display); letter-spacing: -0.02em; text-align: center; }
+.card .sub { color: var(--ink-secondary); font: var(--text-small); text-align: center; margin-top: var(--space-2); }
+
+.gbtn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; margin-top: var(--space-8); padding: 12px 16px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--ink); font: 600 15px/1 var(--font-sans);
+  transition: background var(--motion-base) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+.gbtn:hover { background: var(--surface-2); }
+.gbtn:active { transform: scale(0.99); }
+.gbtn svg { width: 18px; height: 18px; }
+
+.muted { color: var(--ink-tertiary); font: var(--text-small); text-align: center; margin-top: var(--space-6); }
+
+.spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--action);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Code chip (settings / empty state) ---------------------------------- */
+.codechip {
+  display: inline-flex; align-items: center; gap: var(--space-4);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-md);
+  padding: 6px 6px 6px var(--space-5);
+}
+.codechip code { font: 500 14px/1 var(--font-mono); color: var(--ink); }
+.codechip .prompt { color: var(--ink-tertiary); margin-right: var(--space-2); user-select: none; }
+.copybtn {
+  font: 500 13px/1 var(--font-sans); color: var(--action-ink); background: var(--action);
+  border: none; border-radius: var(--radius-sm); padding: 9px 14px;
+}
+.copybtn.copied { background: var(--success); }
+
+/* ---- Settings ------------------------------------------------------------ */
+.section { border-top: 1px solid var(--line); padding: var(--space-8) 0; }
+.section:first-of-type { border-top: none; }
+.section h2 { font: var(--text-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-tertiary); margin-bottom: var(--space-4); }
+.section .hint { color: var(--ink-secondary); font: var(--text-small); margin-top: var(--space-3); }
+.danger {
+  font: 500 14px/1 var(--font-sans); color: var(--danger);
+  padding: 10px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface);
+}
+.danger:hover { border-color: var(--danger); }

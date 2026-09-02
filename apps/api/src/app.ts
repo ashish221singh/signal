@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { HeadBucketCommand } from '@aws-sdk/client-s3';
 import cookie from '@fastify/cookie';
 import cors, { type FastifyCorsOptionsDelegatePromise } from '@fastify/cors';
@@ -25,6 +26,7 @@ import { previewRoutes } from './routes/console/preview.js';
 import { reportingRoutes } from './routes/console/reporting.js';
 import { userDataRoutes } from './routes/console/users.js';
 import { workflowRoutes } from './routes/console/workflows.js';
+import { dashboardStaticPlugin } from './routes/dashboardStatic.js';
 import { previewServeRoutes } from './routes/preview.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { uploadRoutes } from './routes/uploads.js';
@@ -177,6 +179,14 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   // standalone harness). The signed token is the grant; an expired/invalid one
   // renders a friendly 404. The minting route lives in the guarded console scope.
   await app.register(previewServeRoutes({ db: resolvedDb, clock, env }));
+
+  // Dashboard SPA (@signal/dashboard) served same-origin under `/app` (F3). Path
+  // defaults to the built `apps/dashboard/dist` beside this package; overridable
+  // via DASHBOARD_DIST. Skipped (with a warning) when the dist is absent — e.g. the
+  // API test suite, where the frontend is never built — so the API still boots.
+  const dashboardDist =
+    process.env.DASHBOARD_DIST ?? fileURLToPath(new URL('../../dashboard/dist', import.meta.url));
+  await app.register(dashboardStaticPlugin(dashboardDist));
 
   // CORS (B4-D2). Two console registrations exist (`/v1/console/auth` and the
   // guarded `/v1/console` subtree); both get the SAME credentialed policy so the
