@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { type EventRow, getEventsOverview, type PeriodDays } from '../api';
 import { CopyCommand } from '../components/CopyCommand';
 import { Shell } from '../components/Shell';
@@ -29,6 +30,7 @@ function aggregate(rows: EventRow[]) {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodDays>(30);
   const [rows, setRows] = useState<EventRow[] | undefined>(undefined);
   const [error, setError] = useState(false);
@@ -105,7 +107,11 @@ export function Dashboard() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.event_name}>
+                  <tr
+                    key={r.event_name}
+                    className="clickable"
+                    onClick={() => navigate(`/events/${encodeURIComponent(r.event_name)}`)}
+                  >
                     <td>{r.event_name}</td>
                     <td>{r.responses.toLocaleString()}</td>
                     <td>

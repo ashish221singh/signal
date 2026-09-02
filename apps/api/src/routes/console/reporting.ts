@@ -9,6 +9,8 @@ import {
   campaignResponses,
   campaignTrend,
   dashboardSummary,
+  eventReasons,
+  eventResponses,
   eventsOverview,
 } from '../../reporting/queries.js';
 
@@ -136,6 +138,58 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
           : undefined;
         const events = await eventsOverview(deps.db, request.accountId as string, { since });
         return reply.send({ events });
+      },
+    );
+
+    // GET /events/:eventName/reasons — per-event drill-down (F3): ranked reason chips
+    // aggregated across the account's workflows for that event. Unknown event → 404.
+    app.get<{ Params: { eventName: string } }>(
+      '/events/:eventName/reasons',
+      read,
+      async (request, reply) => {
+        const reasons = await eventReasons(
+          deps.db,
+          request.accountId as string,
+          request.params.eventName,
+        );
+        if (!reasons) {
+          return reply
+            .code(404)
+            .send({ error: { code: 'event_not_found', message: 'no such event' } });
+        }
+        return reply.send(reasons);
+      },
+    );
+
+    // GET /events/:eventName/responses — per-event response feed (F3), cursor-paginated,
+    // filterable by score band. Bad query → 422; unknown event → 404.
+    app.get<{ Params: { eventName: string } }>(
+      '/events/:eventName/responses',
+      read,
+      async (request, reply) => {
+        const parsed = responseFeedQuerySchema.safeParse(request.query);
+        if (!parsed.success) {
+          return reply.code(422).send({
+            error: { code: 'invalid_query', message: parsed.error.issues[0]?.message ?? 'invalid' },
+          });
+        }
+        const feed = await eventResponses(
+          deps.db,
+          request.accountId as string,
+          request.params.eventName,
+          {
+            minRating: parsed.data.min_rating,
+            maxRating: parsed.data.max_rating,
+            cursor: parsed.data.cursor,
+            limit: parsed.data.limit,
+          },
+        );
+        if (!feed) {
+          return reply
+            .code(404)
+            .send({ error: { code: 'event_not_found', message: 'no such event' } });
+        }
+        return reply.send(feed);
       },
     );
   };

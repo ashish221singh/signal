@@ -134,6 +134,37 @@ button { font: inherit; cursor: pointer; }
 .pill.good { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
 .pill.warn { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 
+.table tbody tr.clickable { cursor: pointer; }
+
+/* ---- Event detail (drill-down) ------------------------------------------- */
+.backlink { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-secondary);
+  font: var(--text-small); margin-bottom: var(--space-4); }
+.backlink:hover { color: var(--ink); }
+.tabs { display: inline-flex; gap: var(--space-2); border-bottom: 1px solid var(--line);
+  margin-top: var(--space-6); }
+.tabs button {
+  font: 500 14px/1 var(--font-sans); color: var(--ink-secondary); background: none; border: none;
+  padding: 10px 4px; margin-right: var(--space-5); border-bottom: 2px solid transparent;
+  transition: color var(--motion-base) var(--ease-out), border-color var(--motion-base) var(--ease-out);
+}
+.tabs button.on { color: var(--ink); border-bottom-color: var(--action); }
+
+.reason { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2) var(--space-4);
+  align-items: center; padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.reason .label { font: 500 15px/1.3 var(--font-sans); color: var(--ink); }
+.reason .count { font: var(--text-small); color: var(--ink-tertiary); text-align: right; }
+.reason .bar { grid-column: 1 / -1; height: 6px; border-radius: var(--radius-full);
+  background: var(--surface-2); overflow: hidden; }
+.reason .bar > span { display: block; height: 100%; background: var(--action); border-radius: var(--radius-full); }
+
+.resp { padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.resp .top { display: flex; align-items: center; gap: var(--space-3); }
+.resp .rating { font: 500 14px/1 var(--font-mono); color: var(--ink); }
+.resp .chip { font: var(--text-small); background: var(--surface-2); color: var(--ink-secondary);
+  padding: 2px 8px; border-radius: var(--radius-full); }
+.resp .meta { margin-left: auto; font: var(--text-small); color: var(--ink-tertiary); }
+.resp .text { color: var(--ink-secondary); font: var(--text-body); margin-top: var(--space-2); }
+
 @media (max-width: 640px) {
   .stats { grid-template-columns: 1fr; }
   .page { overflow-x: auto; }

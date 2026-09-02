@@ -107,5 +107,11 @@ export async function runSetup(
   const published = await client.publishWorkflow(token, created.id);
   const status = published.status ?? 'active';
   deps.out(`✓ workflow ${created.id} for "${patch.event_name}" is ${status}`);
+  // Non-agent users wire the event themselves — print the exact one line to add.
+  // (An AI agent using the MCP tools inserts this call into the code directly.)
+  deps.out('');
+  deps.out('Add this where the moment happens in your code:');
+  deps.out(`  Signal.track('${patch.event_name}');`);
+  deps.out('Responses will show up on your dashboard at /app/dashboard.');
   return { id: created.id, status };
 }

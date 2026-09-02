@@ -882,6 +882,65 @@ describe('GET /v1/console/events/overview (real Postgres)', () => {
     expect(aRow.responses).toBe(2);
   });
 
+  it('per-event drill-down: reasons ranked + responses feed (F3)', async () => {
+    const wf = await seedWfWithEvent('checkout_completed');
+    const seedChip = async (chip: string | null, rating: number) => {
+      const tid = await seedTriggerFor(wf, 'checkout_completed');
+      await t.db.insert(s.responses).values({
+        accountId,
+        triggerId: tid,
+        workflowId: wf,
+        userId: 'u',
+        eventName: 'checkout_completed',
+        ratingValue: rating,
+        chipSelected: chip,
+        deviceOs: 'Android',
+        appVersion: '1',
+        shownAt: new Date(),
+        respondedAt: new Date(),
+      });
+    };
+    await seedChip('Slow', 2);
+    await seedChip('Slow', 2);
+    await seedChip('Slow', 2);
+    await seedChip('Confusing', 1);
+    await seedChip(null, 5);
+
+    const reasons = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/checkout_completed/reasons',
+      headers: { cookie: cookieHeader },
+    });
+    expect(reasons.statusCode).toBe(200);
+    const rb = reasons.json();
+    expect(rb.total_chip_responses).toBe(4);
+    expect(rb.chips[0].chip).toBe('Slow');
+    expect(rb.chips[0].count).toBe(3);
+
+    const feed = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/checkout_completed/responses?limit=3',
+      headers: { cookie: cookieHeader },
+    });
+    expect(feed.statusCode).toBe(200);
+    expect(feed.json().items.length).toBe(3);
+  });
+
+  it('per-event drill-down: unknown event → 404', async () => {
+    const reasons = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/nope/reasons',
+      headers: { cookie: cookieHeader },
+    });
+    const feed = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/nope/responses?limit=10',
+      headers: { cookie: cookieHeader },
+    });
+    expect(reasons.statusCode).toBe(404);
+    expect(feed.statusCode).toBe(404);
+  });
+
   it('readable via a CLI token carrying responses:read', async () => {
     const checkout = await seedWfWithEvent('checkout_completed');
     await seedTriggerFor(checkout, 'checkout_completed');

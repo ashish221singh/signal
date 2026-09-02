@@ -124,3 +124,26 @@ export async function workflowsList(deps: CommandDeps): Promise<void> {
     deps.out(`${w.status.padEnd(8)} ${w.event_name ?? '(no event)'}  ${w.id}`);
   }
 }
+
+/**
+ * Resolve the account's publishable key for `signal init` when none is passed (F3),
+ * so `npx @signal/cli init` is a true one-liner. Logs in via the device flow if
+ * needed, then picks the default live key (falling back to any live/non-revoked key).
+ */
+export async function autoResolveKey(deps: CommandDeps, apiUrl = defaultApiUrl()): Promise<string> {
+  let config = await readConfig();
+  if (!config?.token) {
+    deps.out('Not logged in — starting login first.\n');
+    await loginDevice(deps, apiUrl);
+    config = await readConfig();
+  }
+  if (!config?.token) throw new Error('login is required to fetch your publishable key');
+
+  const client = deps.makeClient(config.api_url ?? apiUrl);
+  const { keys } = await client.listKeys(config.token);
+  const live = keys.filter((k) => !k.revoked_at && k.environment === 'live');
+  const chosen =
+    live.find((k) => k.label === 'default') ?? live[0] ?? keys.find((k) => !k.revoked_at);
+  if (!chosen) throw new Error('no publishable key found for your account');
+  return chosen.key;
+}

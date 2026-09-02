@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, RequireAuth } from './auth';
 import { Dashboard } from './pages/Dashboard';
+import { EventDetail } from './pages/EventDetail';
 import { Login } from './pages/Login';
 import { Settings } from './pages/Settings';
 
@@ -14,6 +15,14 @@ export function App() {
           element={
             <RequireAuth>
               <Dashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/events/:eventName"
+          element={
+            <RequireAuth>
+              <EventDetail />
             </RequireAuth>
           }
         />

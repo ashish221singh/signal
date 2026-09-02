@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
 import { CliClient } from './client.js';
 import {
+  autoResolveKey,
   type CommandDeps,
   deploy,
   loginDevice,
@@ -85,12 +86,16 @@ export function buildProgram(commandDeps: CommandDeps = deps): Command {
 
   program
     .command('init')
-    .description('Install the Web SDK and wire Signal.init(publishableKey) into a web project')
-    .argument('<publishableKey>', 'your account publishable key (pk_…)')
+    .description('Install the Web SDK and wire Signal.init into a web project')
+    .argument('[publishableKey]', 'your account publishable key (pk_…); auto-fetched if omitted')
     .option('--dir <dir>', 'the project directory (defaults to the current directory)')
-    .action(async (publishableKey: string, opts: { dir?: string }) => {
+    .action(async (publishableKey: string | undefined, opts: { dir?: string }) => {
       try {
-        await runInit(opts.dir ?? process.cwd(), publishableKey, commandDeps.out);
+        // No key given → log in (device flow) if needed and fetch the account's
+        // default key, so `npx @signal/cli init` is a true one-liner (F3).
+        const apiUrl = program.opts().apiUrl as string;
+        const key = publishableKey ?? (await autoResolveKey(commandDeps, apiUrl));
+        await runInit(opts.dir ?? process.cwd(), key, commandDeps.out);
       } catch (err) {
         fail(err);
       }

@@ -314,6 +314,108 @@ export async function eventsOverview(
 }
 
 /**
+ * Whether an `event_name` is configured in the account (a workflow references it).
+ * Gates the per-event drill-downs → 404 for an unknown event (F3).
+ */
+async function eventExists(db: Db, accountId: string, eventName: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(and(eq(workflows.accountId, accountId), eq(workflows.eventName, eventName)))
+    .limit(1);
+  return Boolean(row);
+}
+
+/**
+ * Per-EVENT reasons roll-up (F3 drill-down) — ranked non-null chip selections with
+ * shares, aggregated across every response for `event_name` in the account (an event
+ * may be served by more than one workflow). Null if the event isn't configured.
+ */
+export async function eventReasons(
+  db: Db,
+  accountId: string,
+  eventName: string,
+): Promise<Reasons | null> {
+  if (!(await eventExists(db, accountId, eventName))) return null;
+
+  const rows = await db
+    .select({ chip: responses.chipSelected, count: sql<number>`count(*)::int` })
+    .from(responses)
+    .where(
+      and(
+        eq(responses.accountId, accountId),
+        eq(responses.eventName, eventName),
+        isNotNull(responses.chipSelected),
+      ),
+    )
+    .groupBy(responses.chipSelected)
+    .orderBy(desc(sql`count(*)`));
+
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  return {
+    campaign_id: eventName,
+    total_chip_responses: total,
+    chips: rows.map((r) => ({
+      chip: r.chip as string,
+      count: r.count,
+      share: total === 0 ? 0 : r.count / total,
+    })),
+  };
+}
+
+/**
+ * Per-EVENT responses feed (F3 drill-down) — cursor-paginated, newest-first, across
+ * all responses for `event_name` in the account, optionally filtered by an inclusive
+ * score band. Null if the event isn't configured.
+ */
+export async function eventResponses(
+  db: Db,
+  accountId: string,
+  eventName: string,
+  opts: { minRating?: number; maxRating?: number; cursor?: string; limit: number },
+): Promise<{ items: ResponseFeedItem[]; next_cursor: string | null } | null> {
+  if (!(await eventExists(db, accountId, eventName))) return null;
+
+  const conds = [eq(responses.accountId, accountId), eq(responses.eventName, eventName)];
+  if (opts.minRating !== undefined) conds.push(gte(responses.ratingValue, opts.minRating));
+  if (opts.maxRating !== undefined) conds.push(lte(responses.ratingValue, opts.maxRating));
+
+  const cur = opts.cursor ? decodeCursor(opts.cursor) : null;
+  if (cur) {
+    conds.push(
+      sql`(${responses.respondedAt}, ${responses.id}) < (${cur.ts.toISOString()}::timestamptz, ${cur.id}::uuid)`,
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(responses)
+    .where(and(...conds))
+    .orderBy(desc(responses.respondedAt), desc(responses.id))
+    .limit(opts.limit + 1);
+
+  const page = rows.slice(0, opts.limit);
+  const last = page[page.length - 1];
+  const next = rows.length > opts.limit && last ? encodeCursor(last.respondedAt, last.id) : null;
+
+  return {
+    items: page.map((r) => ({
+      id: r.id,
+      rating_value: r.ratingValue,
+      chip_selected: r.chipSelected,
+      other_text: r.otherText,
+      other_image_url: r.otherImageUrl,
+      location: r.location,
+      device_os: r.deviceOs,
+      app_version: r.appVersion,
+      shown_at: r.shownAt.toISOString(),
+      responded_at: r.respondedAt.toISOString(),
+    })),
+    next_cursor: next,
+  };
+}
+
+/**
  * Dashboard summary reporting query (M2, Task 17), scoped to `accountId` (B1-D8) —
  * KPIs, the attention strip, and the campaign-health list, all restricted to the
  * account's own campaigns.

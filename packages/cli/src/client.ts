@@ -112,6 +112,13 @@ export class CliClient {
   listCliTokens(token: string): Promise<{ tokens: { name: string; scopes: string[] }[] }> {
     return this.req('GET', '/v1/console/cli-tokens', { token });
   }
+
+  /** List the account's publishable keys (for `signal init` to auto-pick one). */
+  listKeys(token: string): Promise<{
+    keys: { key: string; label: string; environment: string; revoked_at: string | null }[];
+  }> {
+    return this.req('GET', '/v1/console/keys', { token });
+  }
 }
 
 function safeJson(text: string): unknown {
