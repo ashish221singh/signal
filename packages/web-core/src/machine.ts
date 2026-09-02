@@ -21,6 +21,8 @@ export interface MachineConfig {
   positive_threshold: number;
   rating_min: number;
   rating_max: number;
+  /** Reason chips offered in the negative branch (empty ⇒ no chips). */
+  chips: string[];
   other_requires_text: boolean;
   other_allows_image: boolean;
   positive_action: Action;
@@ -32,6 +34,8 @@ export interface MachineContext {
   positive: boolean;
   comment: string;
   imageUrl: string | null;
+  /** The reason chip the user selected (single-select), if any. */
+  chip: string | null;
   /** Set once submit resolves; drives the done view. */
   resolved: ResolvedAction | null;
   /** True while a submit is in flight (guards double-submit). */
@@ -46,9 +50,10 @@ export function isPositive(rating: number, threshold: number): boolean {
   return rating >= threshold;
 }
 
-/** The negative branch has nothing to collect ⇒ skip `detail` (F1-D12). */
+/** The negative branch has nothing to collect ⇒ skip `detail` (F1-D12). Reason
+ *  chips also count as something to collect (chips render in the detail step). */
 export function negativeHasCapture(cfg: MachineConfig): boolean {
-  return cfg.other_requires_text || cfg.other_allows_image;
+  return cfg.other_requires_text || cfg.other_allows_image || cfg.chips.length > 0;
 }
 
 function resolveAction(action: Action): ResolvedAction {
@@ -75,6 +80,7 @@ export class SheetMachine {
     positive: false,
     comment: '',
     imageUrl: null,
+    chip: null,
     resolved: null,
     submitting: false,
     submitError: false,
@@ -109,6 +115,11 @@ export class SheetMachine {
 
   setComment(text: string): void {
     this.ctx.comment = text;
+  }
+
+  /** Select/clear the reason chip (single-select; passing the current chip clears it). */
+  setChip(chip: string | null): void {
+    this.ctx.chip = chip;
   }
 
   setImageUrl(url: string | null): void {

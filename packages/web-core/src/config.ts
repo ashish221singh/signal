@@ -29,6 +29,27 @@ function isValidAction(v: unknown): v is Action {
   return t === 'none' || t === 'thanks' || t === 'redirect' || t === 'store_review';
 }
 
+/** Max reason chips rendered; keeps the sheet compact if a config over-specifies. */
+export const MAX_CHIPS = 8;
+/** Per-chip label cap (defensive — trims a pathological label). */
+const CHIP_LABEL_MAX = 48;
+
+/** Normalise the raw `chips_on_negative` into a clean, de-duped, capped label list. */
+function normalizeChips(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const label = item.trim().slice(0, CHIP_LABEL_MAX);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+    if (out.length >= MAX_CHIPS) break;
+  }
+  return out;
+}
+
 /**
  * Validate + normalise the raw config. Clamps `positive_threshold` into the
  * rating range; maps an unknown rating type to the emoji fallback (render what we
@@ -74,6 +95,11 @@ export function normalizeConfig(raw: WorkflowConfig): ConfigResult {
     rating_max,
   );
 
+  // Reason chips for the negative branch (F1 chips). Tolerant: keep only non-empty
+  // trimmed strings, de-duplicate, and cap the count so a malformed/huge list can't
+  // blow out the sheet. An absent/invalid field ⇒ no chips (feature simply off).
+  const chips = normalizeChips(raw.chips_on_negative);
+
   const config: NormalizedConfig = {
     trigger_id: raw.trigger_id,
     header: raw.header,
@@ -81,6 +107,7 @@ export function normalizeConfig(raw: WorkflowConfig): ConfigResult {
     positive_threshold,
     rating_min,
     rating_max,
+    chips,
     other_requires_text: raw.other_requires_text === true,
     other_allows_image: raw.other_allows_image === true,
     positive_action: raw.positive_action,

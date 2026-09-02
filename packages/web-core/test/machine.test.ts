@@ -17,6 +17,7 @@ function cfg(over: Partial<MachineConfig> = {}): MachineConfig {
     positive_threshold: 3,
     rating_min: 1,
     rating_max: 3,
+    chips: [],
     other_requires_text: false,
     other_allows_image: false,
     positive_action: none,
@@ -32,10 +33,32 @@ describe('guards', () => {
     expect(isPositive(1, 3)).toBe(false);
   });
 
-  it('negativeHasCapture reflects text/image config', () => {
+  it('negativeHasCapture reflects text/image/chips config', () => {
     expect(negativeHasCapture(cfg())).toBe(false);
     expect(negativeHasCapture(cfg({ other_requires_text: true }))).toBe(true);
     expect(negativeHasCapture(cfg({ other_allows_image: true }))).toBe(true);
+    // Reason chips alone are enough to show the detail step.
+    expect(negativeHasCapture(cfg({ chips: ['Too slow'] }))).toBe(true);
+  });
+});
+
+describe('reason chips', () => {
+  it('a chips-only negative branch routes to detail and records the selection', () => {
+    const m = new SheetMachine(cfg({ chips: ['Too slow', 'Confusing'] }));
+    m.selectRating(1);
+    expect(m.advanceFromRating()).toBe('detail');
+    m.setChip('Too slow');
+    expect(m.ctx.chip).toBe('Too slow');
+    // no required comment ⇒ can submit with just a chip
+    expect(m.canSubmitDetail()).toBe(true);
+    expect(m.advanceFromDetail()).toBe('submitting');
+  });
+
+  it('setChip(null) clears the selection', () => {
+    const m = new SheetMachine(cfg({ chips: ['A'] }));
+    m.setChip('A');
+    m.setChip(null);
+    expect(m.ctx.chip).toBeNull();
   });
 });
 

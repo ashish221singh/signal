@@ -209,6 +209,28 @@ export const componentCss = `
 }
 
 /* --- detail step --- */
+/* Reason chips — wrap-flowing pill buttons; the selected one fills orange. */
+.sig-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.sig-chip {
+  font: 500 13.5px/1 var(--font-sans);
+  color: #3A3934;
+  background: #F7F7F6;
+  border: 1px solid #E7E6E2;
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              color var(--motion-fast) var(--ease-out),
+              background var(--motion-fast) var(--ease-out);
+}
+.sig-chip:hover { border-color: #F78200; color: #191815; background: #FFF5EB; }
+.sig-chip:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; }
+.sig-chip-on,
+.sig-chip[aria-pressed="true"] {
+  color: #FFFFFF;
+  background: #F78200;
+  border-color: #F78200;
+}
 .sig-field { margin-top: 20px; }
 .sig-textarea {
   width: 100%;

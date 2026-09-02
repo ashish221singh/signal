@@ -27,6 +27,24 @@ describe('normalizeConfig — fail closed', () => {
     expect(r.ok).toBe(true);
   });
 
+  it('normalizes chips: trims, drops empties, de-dupes, caps at 8', () => {
+    const many = Array.from({ length: 12 }, (_, i) => `chip ${i}`);
+    const r = normalizeConfig(
+      base({ chips_on_negative: ['  Slow  ', 'Slow', '', '   ', 'Confusing', ...many] }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.config.chips.slice(0, 3)).toEqual(['Slow', 'Confusing', 'chip 0']);
+    expect(r.config.chips).toHaveLength(8);
+    expect(r.config.chips).not.toContain('');
+  });
+
+  it('treats a missing/invalid chips field as no chips', () => {
+    const r = normalizeConfig(base({ chips_on_negative: undefined as unknown as string[] }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.config.chips).toEqual([]);
+  });
+
   it('rejects missing header/question', () => {
     const r = normalizeConfig(base({ header: '' }));
     expect(r.ok).toBe(false);

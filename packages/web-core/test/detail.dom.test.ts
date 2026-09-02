@@ -60,6 +60,42 @@ describe('negative detail step (DOM)', () => {
     expect(submit?.disabled).toBe(false);
   });
 
+  it('renders reason chips and rides the selection on the answer', async () => {
+    const host = goNegative(makeHost(), {
+      chips_on_negative: ['Too slow', 'Confusing', 'Missing data'],
+    });
+    await pickNegative();
+    const chips = qa<HTMLButtonElement>('.sig-chip');
+    expect(chips.map((c) => c.textContent)).toEqual(['Too slow', 'Confusing', 'Missing data']);
+
+    // No required comment ⇒ can submit with just a chip.
+    const submit = q<HTMLButtonElement>('.sig-btn-primary');
+    expect(submit?.disabled).toBe(false);
+
+    chips[1]?.click(); // "Confusing"
+    expect(chips[1]?.getAttribute('aria-pressed')).toBe('true');
+    submit?.click();
+    await tick();
+    const answer = host.submitted[0] as { chip_selected?: string };
+    expect(answer.chip_selected).toBe('Confusing');
+  });
+
+  it('chips are single-select; re-tapping the selected chip clears it', async () => {
+    const host = goNegative(makeHost(), { chips_on_negative: ['A', 'B'] });
+    await pickNegative();
+    const chips = qa<HTMLButtonElement>('.sig-chip');
+    chips[0]?.click();
+    chips[1]?.click(); // switching selection clears A
+    expect(chips[0]?.getAttribute('aria-pressed')).toBe('false');
+    expect(chips[1]?.getAttribute('aria-pressed')).toBe('true');
+    chips[1]?.click(); // re-tap clears B
+    expect(chips[1]?.getAttribute('aria-pressed')).toBe('false');
+    q<HTMLButtonElement>('.sig-btn-primary')?.click();
+    await tick();
+    const answer = host.submitted[0] as { chip_selected?: string };
+    expect(answer.chip_selected).toBeUndefined();
+  });
+
   it('photo attach calls host.requestUpload, shows a thumbnail, and rides the answer', async () => {
     const host = goNegative(makeHost(), { other_allows_image: true });
     await pickNegative();

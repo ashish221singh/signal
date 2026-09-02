@@ -249,6 +249,12 @@ export class SheetView {
     const branch = document.createElement('div');
     branch.className = 'sig-branch';
 
+    // Reason chips (F1 chips) — single-select buttons at the top of the branch, if
+    // the workflow configured any. Selecting is optional; a comment can still be added.
+    if (this.cfg.chips.length > 0) {
+      branch.appendChild(this.buildChips());
+    }
+
     let errorEl: HTMLDivElement | null = null;
 
     // Comment — the negative branch always offers a comment in v1.
@@ -309,6 +315,39 @@ export class SheetView {
 
   private syncDetailSubmit(btn: HTMLButtonElement): void {
     btn.disabled = this.uploading || !this.machine.canSubmitDetail();
+  }
+
+  /** The single-select reason chips for the negative branch. Tapping a selected
+   *  chip clears it; tapping another swaps the selection (only one at a time). */
+  private buildChips(): HTMLDivElement {
+    const group = document.createElement('div');
+    group.className = 'sig-chips';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Pick a reason');
+
+    for (const label of this.cfg.chips) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'sig-chip';
+      chip.setAttribute('aria-pressed', 'false');
+      chip.textContent = label;
+      chip.addEventListener('click', () => {
+        const wasSelected = chip.getAttribute('aria-pressed') === 'true';
+        for (const b of group.querySelectorAll<HTMLButtonElement>('.sig-chip')) {
+          b.setAttribute('aria-pressed', 'false');
+          b.classList.remove('sig-chip-on');
+        }
+        if (wasSelected) {
+          this.machine.setChip(null);
+        } else {
+          chip.setAttribute('aria-pressed', 'true');
+          chip.classList.add('sig-chip-on');
+          this.machine.setChip(label);
+        }
+      });
+      group.appendChild(chip);
+    }
+    return group;
   }
 
   private buildPhotoField(): HTMLDivElement {
@@ -529,6 +568,7 @@ export class SheetView {
     const comment = ctx.comment.trim();
     if (comment) answer.other_text = comment;
     if (ctx.imageUrl) answer.other_image_url = ctx.imageUrl;
+    if (ctx.chip) answer.chip_selected = ctx.chip;
     return answer;
   }
 

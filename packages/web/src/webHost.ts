@@ -50,6 +50,7 @@ export function createWebHost(ctx: WebHostContext): SheetHost {
         rating_value: answer.rating_value,
         other_text: answer.other_text ?? null,
         other_image_url: answer.other_image_url ?? null,
+        chip_selected: answer.chip_selected ?? null,
         device_os: DEVICE_OS,
         app_version: APP_VERSION,
         session_age_days: ctx.sessionAgeDays ?? null,

@@ -31,4 +31,6 @@ export interface Answer {
   other_text?: string;
   /** Stored image URL returned by host.requestUpload, if the user attached one. */
   other_image_url?: string;
+  /** The reason chip the user tapped in the negative branch, if any. */
+  chip_selected?: string;
 }
