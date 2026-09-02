@@ -1,21 +1,15 @@
-import { useNavigate } from 'react-router-dom';
-import { logout } from '../api';
-import { useAuth } from '../auth';
+import { useClerk, useUser } from '@clerk/clerk-react';
 import { CopyCommand } from '../components/CopyCommand';
 import { Shell } from '../components/Shell';
 
-/** Settings (F3 Phase 5 shell): setup command to reuse, account identity, log out. */
+/** Settings (F3, Clerk): setup command to reuse, account identity, log out. */
 export function Settings() {
-  const { user, setUser } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const email = user?.primaryEmailAddress?.emailAddress;
 
-  async function onLogout() {
-    try {
-      await logout();
-    } finally {
-      setUser(null);
-      navigate('/login', { replace: true });
-    }
+  function onLogout() {
+    void signOut({ redirectUrl: '/app/login' });
   }
 
   return (
@@ -32,11 +26,8 @@ export function Settings() {
         <div className="section">
           <h2>Account</h2>
           <p style={{ font: 'var(--text-body)' }}>
-            {user?.email}
-            <span style={{ color: 'var(--ink-tertiary)' }}>
-              {' · '}
-              {user?.provider === 'google' ? 'Google' : 'Password'}
-            </span>
+            {email}
+            <span style={{ color: 'var(--ink-tertiary)' }}> · Clerk</span>
           </p>
         </div>
 

@@ -1,19 +1,12 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { logout } from '../api';
-import { useAuth } from '../auth';
+import { useClerk } from '@clerk/clerk-react';
+import { NavLink } from 'react-router-dom';
 
 /** Authenticated app frame: hairline top bar with wordmark, nav, and log out. */
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { setUser } = useAuth();
-  const navigate = useNavigate();
+  const { signOut } = useClerk();
 
-  async function onLogout() {
-    try {
-      await logout();
-    } finally {
-      setUser(null);
-      navigate('/login', { replace: true });
-    }
+  function onLogout() {
+    void signOut({ redirectUrl: '/app/login' });
   }
 
   return (

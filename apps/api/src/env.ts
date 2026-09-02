@@ -52,6 +52,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CALLBACK_URL: z.url().optional(),
+  // Clerk dashboard login (F3). When set, the API verifies Clerk session JWTs
+  // (Bearer) on /v1/console/* and maps them to Signal accounts. Unset → disabled.
+  CLERK_SECRET_KEY: z.string().optional(),
   DATABASE_URL: z.url().optional(),
   SESSION_SECRET: z.string().min(16).optional(),
   S3_ENDPOINT: z.url().optional(),

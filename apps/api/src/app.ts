@@ -8,6 +8,7 @@ import { SIGNAL_API_VERSION } from '@signal/contracts';
 import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyError } from 'fastify';
 import { AccountsService } from './accounts/service.js';
+import { type ClerkAuth, makeClerk } from './auth/clerk.js';
 import type { GoogleExchange } from './auth/google.js';
 import { DeviceService } from './cli/deviceService.js';
 import { type Clock, systemClock } from './clock.js';
@@ -54,6 +55,9 @@ export interface AppDeps {
   // Google OAuth code→profile exchange (F3). Tests inject a stub so the callback
   // never touches Google; production uses the default network implementation.
   googleExchange?: GoogleExchange;
+  // Clerk auth (F3). Tests inject a stub so token verification never touches Clerk;
+  // production builds it from CLERK_SECRET_KEY.
+  clerk?: ClerkAuth;
 }
 
 export async function buildApp(env: Env, deps: AppDeps = {}) {
@@ -88,6 +92,9 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
 
   const eligibility = new EligibilityService(resolvedDb, cache, clock);
   const accountsService = new AccountsService(resolvedDb);
+  // Clerk dashboard auth (F3): active when CLERK_SECRET_KEY is set (or a test stub is
+  // injected). When absent, the Clerk Bearer path in resolveAuth is disabled.
+  const clerk = deps.clerk ?? (env.CLERK_SECRET_KEY ? makeClerk(env.CLERK_SECRET_KEY) : undefined);
   const tokenService = new TokenService(resolvedDb, clock);
   const deviceService = new DeviceService(resolvedDb, tokenService, clock);
 
@@ -227,7 +234,9 @@ export async function buildApp(env: Env, deps: AppDeps = {}) {
   await app.register(
     async (consoleApi) => {
       await consoleApi.register(cors, consoleCors);
-      await consoleApi.register(resolveAuth({ db: resolvedDb, tokens: tokenService }));
+      await consoleApi.register(
+        resolveAuth({ db: resolvedDb, tokens: tokenService, clerk, accounts: accountsService }),
+      );
       await consoleApi.register(workflowRoutes({ db: resolvedDb, clock }), {
         prefix: '/workflows',
       });

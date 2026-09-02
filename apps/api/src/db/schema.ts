@@ -263,6 +263,9 @@ export const consoleUsers = pgTable('console_users', {
   // Google" (F3). Unique when present; null for password-only users. We find-or-create
   // by google_sub, falling back to linking an existing account by verified email.
   googleSub: text('google_sub').unique(),
+  // Clerk user id (F3, Clerk dashboard login). Unique when present. Same find-or-create
+  // (by clerk_user_id → link-by-email → create) as the Google path.
+  clerkUserId: text('clerk_user_id').unique(),
   name: text('name').notNull(),
   role: consoleUserRoleEnum('role').notNull().default('admin'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

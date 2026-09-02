@@ -7,6 +7,8 @@ import type {
   preHandlerHookHandler,
 } from 'fastify';
 import fp from 'fastify-plugin';
+import type { AccountsService } from '../accounts/service.js';
+import type { ClerkAuth } from '../auth/clerk.js';
 import { readSession } from '../auth/session.js';
 import type { Db } from '../db/client.js';
 import { consoleUsers } from '../db/schema.js';
@@ -45,23 +47,71 @@ declare module 'fastify' {
 
 const BEARER_PREFIX = 'Bearer ';
 
-export function resolveAuth(deps: { db: Db; tokens: TokenService }): FastifyPluginAsync {
+export function resolveAuth(deps: {
+  db: Db;
+  tokens: TokenService;
+  clerk?: ClerkAuth;
+  accounts?: AccountsService;
+}): FastifyPluginAsync {
   return fp(async (app) => {
     app.addHook('onRequest', async (request, reply) => {
       const authHeader = request.headers.authorization;
 
-      // 1) Bearer CLI token path.
       if (typeof authHeader === 'string' && authHeader.startsWith(BEARER_PREFIX)) {
         const token = authHeader.slice(BEARER_PREFIX.length).trim();
-        const resolved = await deps.tokens.verify(token);
-        if (!resolved) {
-          return reply
-            .code(401)
-            .send({ error: { code: 'unauthorized', message: 'invalid or expired token' } });
+
+        // 1a) CLI token (`cli_…`) ⇒ the token's scopes.
+        if (token.startsWith('cli_')) {
+          const resolved = await deps.tokens.verify(token);
+          if (!resolved) {
+            return reply
+              .code(401)
+              .send({ error: { code: 'unauthorized', message: 'invalid or expired token' } });
+          }
+          request.auth = { accountId: resolved.accountId, scopes: resolved.scopes, via: 'token' };
+          request.accountId = resolved.accountId;
+          return;
         }
-        request.auth = { accountId: resolved.accountId, scopes: resolved.scopes, via: 'token' };
-        request.accountId = resolved.accountId;
-        return;
+
+        // 1b) Clerk session JWT (the dashboard) ⇒ all scopes. Verify → map the Clerk
+        // user to a Signal account (find-or-create, fetching email from Clerk once).
+        if (deps.clerk && deps.accounts) {
+          const clerkUserId = await deps.clerk.verify(token);
+          if (!clerkUserId) {
+            return reply
+              .code(401)
+              .send({ error: { code: 'unauthorized', message: 'invalid session' } });
+          }
+          let user = (
+            await deps.db
+              .select({ id: consoleUsers.id, accountId: consoleUsers.accountId })
+              .from(consoleUsers)
+              .where(eq(consoleUsers.clerkUserId, clerkUserId))
+              .limit(1)
+          )[0];
+          if (!user) {
+            const profile = await deps.clerk.getUser(clerkUserId);
+            if (!profile) {
+              return reply
+                .code(401)
+                .send({ error: { code: 'unauthorized', message: 'clerk profile unavailable' } });
+            }
+            const created = await deps.accounts.findOrCreateClerkUser({
+              clerkUserId,
+              email: profile.email,
+              name: profile.name,
+            });
+            user = { id: created.user.id, accountId: created.accountId };
+          }
+          request.consoleUserId = user.id;
+          request.accountId = user.accountId;
+          request.auth = { accountId: user.accountId, scopes: [...ALL_CLI_SCOPES], via: 'session' };
+          return;
+        }
+
+        return reply
+          .code(401)
+          .send({ error: { code: 'unauthorized', message: 'invalid or expired token' } });
       }
 
       // 2) Console session path ⇒ all scopes.

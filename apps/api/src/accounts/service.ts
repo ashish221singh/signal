@@ -134,6 +134,66 @@ export class AccountsService {
     });
   }
 
+  /**
+   * Find-or-create a console user from a verified Clerk identity (F3). Same resolution
+   * as Google: match by `clerk_user_id` → else link an existing account by email → else
+   * create a fresh account + admin user (no password) + default publishable key.
+   */
+  async findOrCreateClerkUser(input: {
+    clerkUserId: string;
+    email: string;
+    name: string;
+  }): Promise<{ user: typeof consoleUsers.$inferSelect; accountId: string; created: boolean }> {
+    const [byClerk] = await this.db
+      .select()
+      .from(consoleUsers)
+      .where(eq(consoleUsers.clerkUserId, input.clerkUserId))
+      .limit(1);
+    if (byClerk) return { user: byClerk, accountId: byClerk.accountId, created: false };
+
+    const [byEmail] = await this.db
+      .select()
+      .from(consoleUsers)
+      .where(eq(consoleUsers.email, input.email))
+      .limit(1);
+    if (byEmail) {
+      const [linked] = await this.db
+        .update(consoleUsers)
+        .set({ clerkUserId: input.clerkUserId })
+        .where(eq(consoleUsers.id, byEmail.id))
+        .returning();
+      const user = linked ?? byEmail;
+      return { user, accountId: user.accountId, created: false };
+    }
+
+    const key = generateKey('live');
+    return await this.db.transaction(async (tx) => {
+      const [account] = await tx
+        .insert(accounts)
+        .values({ name: input.name || input.email })
+        .returning();
+      if (!account) throw new Error('account insert returned no row');
+
+      const [user] = await tx
+        .insert(consoleUsers)
+        .values({
+          accountId: account.id,
+          email: input.email,
+          passwordHash: null,
+          clerkUserId: input.clerkUserId,
+          name: input.name || input.email,
+          role: 'admin',
+        })
+        .returning();
+      if (!user) throw new Error('console user insert returned no row');
+
+      await tx
+        .insert(apiKeys)
+        .values({ accountId: account.id, key, label: 'default', environment: 'live' });
+      return { user, accountId: account.id, created: true };
+    });
+  }
+
   /** Create a bare account (bootstrap/seed use). */
   async createAccount(name: string): Promise<typeof accounts.$inferSelect> {
     const [account] = await this.db.insert(accounts).values({ name }).returning();
