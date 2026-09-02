@@ -157,9 +157,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.5.4)
-      '@signal/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       zod:
         specifier: ^4.0.0
         version: 4.5.4
@@ -167,6 +164,12 @@ importers:
       '@signal/api':
         specifier: workspace:*
         version: link:../../apps/api
+      '@signal/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(postcss@8.5.26)(tsx@4.23.13)(typescript@6.0.3)(yaml@2.9.0)
       tsx:
         specifier: ^4.23.0
         version: 4.23.13

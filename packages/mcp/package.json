@@ -1,25 +1,31 @@
 {
-  "name": "@signal/mcp",
+  "name": "@ashish221/signal-mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "description": "Signal MCP server — let your coding agent set up in-app feedback (create/publish workflows, wire Signal.track).",
+  "license": "MIT",
   "bin": {
-    "signal-mcp": "./src/index.ts"
+    "signal-mcp": "./dist/index.js"
   },
-  "exports": {
-    ".": "./src/index.ts"
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "build": "tsup",
     "start": "tsx src/index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@signal/contracts": "workspace:*",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@signal/api": "workspace:*",
+    "@signal/contracts": "workspace:*",
+    "tsup": "^8.5.1",
     "tsx": "^4.23.0"
   }
 }

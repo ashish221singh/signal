@@ -1,17 +1,19 @@
-#!/usr/bin/env node
+// The `#!/usr/bin/env node` shebang is added by tsup's banner at build time.
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SignalApiClient } from './client.js';
 import { buildMcpServer } from './server.js';
 
 /**
- * `@signal/mcp` entrypoint (B3-D8). Runnable via `npx @signal/mcp`. A thin stdio
- * MCP server that authenticates with a CLI token and drives the console HTTP API —
- * no DB import. Config via env:
- *   SIGNAL_API_URL   base URL of the Signal API (default http://localhost:3000)
+ * Signal MCP entrypoint (B3-D8). Runnable via `npx @ashish221/signal-mcp`. A thin
+ * stdio MCP server that authenticates with a CLI token and drives the console HTTP
+ * API — no DB import. Config via env:
+ *   SIGNAL_API_URL   base URL of the Signal API (default: the hosted Signal API)
  *   SIGNAL_TOKEN     a CLI token (cli_…) with the needed scopes (required)
  */
+const DEFAULT_API_URL = 'https://signal-api-production-eca5.up.railway.app';
+
 async function main(): Promise<void> {
-  const apiUrl = process.env.SIGNAL_API_URL ?? 'http://localhost:3000';
+  const apiUrl = process.env.SIGNAL_API_URL ?? DEFAULT_API_URL;
   const token = process.env.SIGNAL_TOKEN;
   if (!token) {
     process.stderr.write('SIGNAL_TOKEN is required (a cli_… token). Aborting.\n');
