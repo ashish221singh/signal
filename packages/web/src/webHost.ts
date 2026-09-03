@@ -21,6 +21,9 @@ export interface WebHostContext {
   outbox: Outbox;
   /** The subject id (host userId or the persisted anon id) for suppression. */
   userId: string;
+  /** Optional end-user display traits (F5), forwarded with the response. */
+  userName?: string;
+  userEmail?: string;
   /** The originating event name, for local suppression on close. */
   eventName: string;
   /** The server trigger_id from the eligibility config, for the dismiss report. */
@@ -51,6 +54,8 @@ export function createWebHost(ctx: WebHostContext): SheetHost {
         other_text: answer.other_text ?? null,
         other_image_url: answer.other_image_url ?? null,
         chip_selected: answer.chip_selected ?? null,
+        user_name: ctx.userName ?? null,
+        user_email: ctx.userEmail ?? null,
         device_os: DEVICE_OS,
         app_version: APP_VERSION,
         session_age_days: ctx.sessionAgeDays ?? null,

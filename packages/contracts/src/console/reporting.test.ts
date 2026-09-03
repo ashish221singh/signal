@@ -138,6 +138,9 @@ describe('responseFeedSchema', () => {
     chip_selected: 'Too slow',
     other_text: null,
     other_image_url: null,
+    user_id: 'usr_123',
+    user_name: 'John Doe',
+    user_email: 'john@acme.com',
     location: { lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' },
     device_os: 'android',
     app_version: '1.2.3',
@@ -153,7 +156,9 @@ describe('responseFeedSchema', () => {
   it('accepts null location / cursor / optional nullable fields', () => {
     expect(
       responseFeedSchema.safeParse({
-        items: [{ ...item, chip_selected: null, location: null }],
+        items: [
+          { ...item, chip_selected: null, location: null, user_name: null, user_email: null },
+        ],
         next_cursor: null,
       }).success,
     ).toBe(true);

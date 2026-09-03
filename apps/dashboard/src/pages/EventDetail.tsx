@@ -85,6 +85,13 @@ export function EventDetail() {
           ) : (
             feed.items.map((r) => (
               <div className="resp" key={r.id}>
+                <div className="who">
+                  <span className="who-name">{r.user_name ?? r.user_email ?? 'Anonymous'}</span>
+                  <span className="who-id">
+                    {r.user_name && r.user_email ? `${r.user_email} · ` : ''}
+                    {r.user_id}
+                  </span>
+                </div>
                 <div className="top">
                   <span className="rating">★ {r.rating_value}</span>
                   {r.chip_selected && <span className="chip">{r.chip_selected}</span>}

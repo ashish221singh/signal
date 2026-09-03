@@ -1,6 +1,6 @@
 {
   "name": "@ashish221/signal-web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Signal Web SDK — one-tap in-app feedback (CSAT). Signal.init + Signal.track.",
   "license": "MIT",

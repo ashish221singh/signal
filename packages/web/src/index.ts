@@ -23,11 +23,25 @@ import { Outbox } from './outbox.js';
 import { isSuppressed } from './suppression.js';
 import { createWebHost } from './webHost.js';
 
+/**
+ * Human-readable identity for the current end-user (F5). These are YOUR OWN user's
+ * traits, shown next to their feedback in your dashboard. The stable key is the
+ * `userId` (also your own id); name/email are optional display fields.
+ */
+export interface UserTraits {
+  /** The user's display name, e.g. "John Doe". */
+  name?: string;
+  /** The user's email, e.g. "john@acme.com". */
+  email?: string;
+}
+
 export interface InitOptions {
   /** The Signal API base URL. Defaults to the same origin the page is served from. */
   apiUrl?: string;
-  /** A stable host user id. When omitted, a persisted anonymous id is used (F2-D9). */
+  /** A stable host user id — YOUR id, from YOUR system. Omit ⇒ anonymous id (F2-D9). */
   userId?: string;
+  /** Optional name/email for the user id above (shown in your dashboard, F5). */
+  traits?: UserTraits;
   /** Injectable for tests (fetch + clock). */
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -36,6 +50,8 @@ export interface InitOptions {
 export interface TrackOptions {
   /** Overrides the init-time userId for this event only. */
   userId?: string;
+  /** Overrides the init/identify traits for this event only (F5). */
+  traits?: UserTraits;
   /** Free-text metadata (never a targeting key), e.g. a screen name for debugging. */
   context?: string;
   /** Feeds the optional min-session-age gate. */
@@ -46,6 +62,8 @@ interface Instance {
   publishableKey: string;
   apiUrl: string;
   userId?: string;
+  /** Current end-user traits (name/email) from init/identify (F5). */
+  traits?: UserTraits;
   fetchImpl?: typeof fetch;
   now: () => number;
   outbox: Outbox;
@@ -84,6 +102,7 @@ export const Signal = {
       instance.publishableKey = publishableKey;
       instance.apiUrl = apiUrl;
       instance.userId = options.userId ?? instance.userId;
+      instance.traits = options.traits ?? instance.traits;
       instance.fetchImpl = options.fetchImpl ?? instance.fetchImpl;
       debug('init called again — updated existing instance (idempotent)');
       return;
@@ -98,6 +117,7 @@ export const Signal = {
       publishableKey,
       apiUrl,
       userId: options.userId,
+      traits: options.traits,
       fetchImpl: options.fetchImpl,
       now,
       outbox,
@@ -105,6 +125,22 @@ export const Signal = {
     };
     // Flush anything left over from a previous load (killed-before-flush, F2-D18).
     void outbox.flush();
+  },
+
+  /**
+   * Associate the current end-user with YOUR own id and optional name/email (F5).
+   * Call once after login (or on boot for a returning user); every subsequent
+   * track/response is attributed to this identity. A no-op + one dev warning if
+   * called before init. Passing new traits merges over any existing ones.
+   */
+  identify(userId: string, traits: UserTraits = {}): void {
+    const inst = instance;
+    if (!inst) {
+      warnOnce('Signal.identify() called before Signal.init() — ignoring.');
+      return;
+    }
+    inst.userId = userId;
+    inst.traits = { ...inst.traits, ...traits };
   },
 
   /**
@@ -126,6 +162,8 @@ export const Signal = {
     }
 
     const userId = options.userId ?? inst.userId ?? getAnonId();
+    // Resolve the display traits for this event (per-track override ▸ instance).
+    const traits = options.traits ?? inst.traits;
 
     // Local suppression short-circuit (F2-D11): skip the network entirely.
     if (isSuppressed(userId, eventName)) {
@@ -158,6 +196,8 @@ export const Signal = {
         publishableKey: inst.publishableKey,
         outbox: inst.outbox,
         userId,
+        userName: traits?.name,
+        userEmail: traits?.email,
         eventName,
         triggerId: config.trigger_id,
         shownAt,

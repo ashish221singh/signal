@@ -171,6 +171,9 @@ button { font: inherit; cursor: pointer; }
 .reason .bar > span { display: block; height: 100%; background: var(--action); border-radius: var(--radius-full); }
 
 .resp { padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.resp .who { display: flex; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-2); }
+.resp .who-name { font: 600 14px/1.2 var(--font-sans); color: var(--ink); }
+.resp .who-id { font: 400 12px/1.2 var(--font-mono); color: var(--ink-tertiary); }
 .resp .top { display: flex; align-items: center; gap: var(--space-3); }
 .resp .rating { font: 500 14px/1 var(--font-mono); color: var(--ink); }
 .resp .chip { font: var(--text-small); background: var(--surface-2); color: var(--ink-secondary);

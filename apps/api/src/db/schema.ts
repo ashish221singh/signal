@@ -223,6 +223,10 @@ export const responses = pgTable(
       .notNull()
       .references(() => workflows.id),
     userId: text('user_id').notNull(),
+    // End-user traits (F5): the client's own display name/email, captured at
+    // response time from Signal.identify()/init. `userId` above is the client's id.
+    userName: text('user_name'),
+    userEmail: text('user_email'),
     eventName: text('event_name').notNull(),
     context: text('context'),
     ratingValue: integer('rating_value').notNull(),

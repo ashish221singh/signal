@@ -79,6 +79,15 @@ describe('Signal lifecycle (init/track)', () => {
     expect(userIds[1]).toBe(anon);
   });
 
+  it('identify() sets the client user id used for subsequent tracks (F5)', async () => {
+    const { fetch, calls } = makeFetch([eligibilityRoute(204)]);
+    Signal.init(KEY, { apiUrl: API, fetchImpl: fetch });
+    Signal.identify('usr_777', { name: 'Jane', email: 'jane@acme.com' });
+    await Signal.track('evt');
+    const elig = calls.find((c) => c.url.includes('/eligibility'));
+    expect(new URL(elig?.url ?? '').searchParams.get('user_id')).toBe('usr_777');
+  });
+
   it('a host-supplied userId supersedes the anon id', async () => {
     const { fetch, calls } = makeFetch([eligibilityRoute(204)]);
     Signal.init(KEY, { apiUrl: API, fetchImpl: fetch, userId: 'user-42' });

@@ -103,6 +103,10 @@ export const responseFeedItemSchema = z.object({
   chip_selected: z.string().nullable(),
   other_text: z.string().nullable(),
   other_image_url: z.string().nullable(),
+  // End-user identity (F5) — the client's own id, plus optional name/email traits.
+  user_id: z.string(),
+  user_name: z.string().nullable(),
+  user_email: z.string().nullable(),
   location: z
     .object({
       lat: z.number(),

@@ -591,6 +591,24 @@ describe('GET /v1/console/workflows/:id/responses (real Postgres)', () => {
     expect(item.other_text).toBe('it was laggy');
     expect(item.location).toEqual({ lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' });
   });
+
+  it('surfaces the end-user id + name/email on an item (F5)', async () => {
+    const id = await seedActiveWorkflow(t.db, accountId);
+    await seedResponseAt(t.db, id, 4, new Date('2026-07-01T00:00:00.000Z'), {
+      userId: 'usr_123',
+      userName: 'John Doe',
+      userEmail: 'john@acme.com',
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/console/workflows/${id}/responses`,
+      headers: { cookie: cookieHeader },
+    });
+    const [item] = res.json().items;
+    expect(item.user_id).toBe('usr_123');
+    expect(item.user_name).toBe('John Doe');
+    expect(item.user_email).toBe('john@acme.com');
+  });
 });
 
 describe('GET /v1/console/workflows/:id/trend (real Postgres)', () => {

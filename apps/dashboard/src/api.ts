@@ -72,6 +72,10 @@ export interface ResponseItem {
   rating_value: number;
   chip_selected: string | null;
   other_text: string | null;
+  /** The client's own end-user id (F5). Anonymous responses carry a generated id. */
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
   device_os: string | null;
   app_version: string | null;
   responded_at: string;

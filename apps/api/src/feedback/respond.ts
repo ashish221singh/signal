@@ -47,6 +47,10 @@ export async function recordResponse(
         triggerId: trigger.id,
         workflowId: trigger.workflowId,
         userId: trigger.userId,
+        // End-user traits (F5): the client's own name/email, forwarded with the
+        // response. `userId` above stays the client's stable id (from the trigger).
+        userName: body.user_name ?? null,
+        userEmail: body.user_email ?? null,
         eventName: trigger.eventName,
         context: trigger.context,
         ratingValue: body.rating_value,

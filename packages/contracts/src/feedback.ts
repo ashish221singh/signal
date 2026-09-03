@@ -17,6 +17,11 @@ export const responseBodySchema = z.object({
   chip_selected: z.string().nullish(),
   other_text: z.string().max(2000).nullish(),
   other_image_url: z.url().nullish(),
+  // End-user identity (F5): the client's OWN user name/email, forwarded via
+  // Signal.identify()/init traits — human-readable, captured at response time.
+  // The stable user id lives on the trigger; these are optional (anonymous ok).
+  user_name: z.string().max(200).nullish(),
+  user_email: z.string().max(320).nullish(),
   location: locationSchema.nullish(),
   device_os: z.string().min(1),
   app_version: z.string().min(1),

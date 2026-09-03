@@ -167,6 +167,10 @@ export async function campaignResponses(
       chip_selected: r.chipSelected,
       other_text: r.otherText,
       other_image_url: r.otherImageUrl,
+      // End-user identity (F5): the client's own id + optional name/email traits.
+      user_id: r.userId,
+      user_name: r.userName,
+      user_email: r.userEmail,
       location: r.location,
       device_os: r.deviceOs,
       app_version: r.appVersion,
@@ -405,6 +409,10 @@ export async function eventResponses(
       chip_selected: r.chipSelected,
       other_text: r.otherText,
       other_image_url: r.otherImageUrl,
+      // End-user identity (F5): the client's own id + optional name/email traits.
+      user_id: r.userId,
+      user_name: r.userName,
+      user_email: r.userEmail,
       location: r.location,
       device_os: r.deviceOs,
       app_version: r.appVersion,
