@@ -117,6 +117,10 @@ export const responseFeedItemSchema = z.object({
     .nullable(),
   device_os: z.string(),
   app_version: z.string(),
+  // Full response context (F5): how old the session was, and the free-text context
+  // the host passed to track(). Both nullable (not always provided).
+  session_age_days: z.int().nullable(),
+  context: z.string().nullable(),
   shown_at: z.string(),
   responded_at: z.string(),
 });
@@ -169,6 +173,8 @@ export const eventOverviewRowSchema = z.object({
   event_name: z.string(),
   triggers: z.int(),
   responses: z.int(),
+  /** Distinct end-users who responded to this event in the window (F5). */
+  unique_users: z.int(),
   response_rate: z.number().nullable(),
   positive_score: z.number().nullable(),
 });
@@ -176,5 +182,8 @@ export type EventOverviewRow = z.infer<typeof eventOverviewRowSchema>;
 
 export const eventsOverviewSchema = z.object({
   events: z.array(eventOverviewRowSchema),
+  /** Distinct end-users across ALL events in the window (F5) — not summable from
+   *  per-event counts, so computed server-side over the whole window. */
+  unique_users: z.int(),
 });
 export type EventsOverview = z.infer<typeof eventsOverviewSchema>;

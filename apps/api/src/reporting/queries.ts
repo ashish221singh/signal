@@ -174,6 +174,8 @@ export async function campaignResponses(
       location: r.location,
       device_os: r.deviceOs,
       app_version: r.appVersion,
+      session_age_days: r.sessionAgeDays,
+      context: r.context,
       shown_at: r.shownAt.toISOString(),
       responded_at: r.respondedAt.toISOString(),
     })),
@@ -273,6 +275,7 @@ export async function eventsOverview(
     .select({
       eventName: responses.eventName,
       total: sql<number>`count(*)::int`,
+      uniqueUsers: sql<number>`count(distinct ${responses.userId})::int`,
       positive: sql<number>`count(*) filter (
         where ${workflows.positiveThreshold} is not null
           and ${responses.ratingValue} >= ${workflows.positiveThreshold}
@@ -290,7 +293,12 @@ export async function eventsOverview(
   const responseByEvent = new Map(
     responseRows.map((r) => [
       r.eventName,
-      { total: r.total, positive: r.positive, withThreshold: r.withThreshold },
+      {
+        total: r.total,
+        uniqueUsers: r.uniqueUsers,
+        positive: r.positive,
+        withThreshold: r.withThreshold,
+      },
     ]),
   );
 
@@ -299,7 +307,12 @@ export async function eventsOverview(
   const rows: EventOverviewRow[] = [];
   for (const eventName of eventNames) {
     const triggers = triggerByEvent.get(eventName) ?? 0;
-    const resp = responseByEvent.get(eventName) ?? { total: 0, positive: 0, withThreshold: 0 };
+    const resp = responseByEvent.get(eventName) ?? {
+      total: 0,
+      uniqueUsers: 0,
+      positive: 0,
+      withThreshold: 0,
+    };
     const response_rate = triggers === 0 ? null : resp.total / triggers;
     // positive_score is over responses covered by a workflow with a threshold; if
     // no responses had a threshold, it can't be computed (null).
@@ -308,6 +321,7 @@ export async function eventsOverview(
       event_name: eventName,
       triggers,
       responses: resp.total,
+      unique_users: resp.uniqueUsers,
       response_rate,
       positive_score,
     });
@@ -315,6 +329,26 @@ export async function eventsOverview(
 
   rows.sort((a, b) => b.triggers - a.triggers || a.event_name.localeCompare(b.event_name));
   return rows;
+}
+
+/**
+ * Distinct end-users who responded in the window (F5). Not the sum of per-event
+ * uniques — a user can respond to multiple events — so it's a single account-wide
+ * `count(distinct user_id)` over the same response window as `eventsOverview`.
+ */
+export async function distinctUsers(
+  db: Db,
+  accountId: string,
+  opts: { since?: Date } = {},
+): Promise<number> {
+  const where = opts.since
+    ? and(eq(responses.accountId, accountId), gte(responses.respondedAt, opts.since))
+    : eq(responses.accountId, accountId);
+  const [row] = await db
+    .select({ count: sql<number>`count(distinct ${responses.userId})::int` })
+    .from(responses)
+    .where(where);
+  return row?.count ?? 0;
 }
 
 /**
@@ -416,6 +450,8 @@ export async function eventResponses(
       location: r.location,
       device_os: r.deviceOs,
       app_version: r.appVersion,
+      session_age_days: r.sessionAgeDays,
+      context: r.context,
       shown_at: r.shownAt.toISOString(),
       responded_at: r.respondedAt.toISOString(),
     })),

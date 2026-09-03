@@ -765,13 +765,14 @@ describe('GET /v1/console/events/overview (real Postgres)', () => {
     workflowId: string,
     eventName: string,
     ratingValue: number,
+    userId = 'u',
   ): Promise<void> {
     const triggerId = await seedTriggerFor(workflowId, eventName);
     await t.db.insert(s.responses).values({
       accountId,
       triggerId,
       workflowId,
-      userId: 'u',
+      userId,
       eventName,
       ratingValue,
       deviceOs: 'Android',
@@ -820,6 +821,31 @@ describe('GET /v1/console/events/overview (real Postgres)', () => {
     expect(byName.app_opened.positive_score).toBeNull();
     // Ordered by triggers desc → checkout_completed first.
     expect(body.events[0].event_name).toBe('checkout_completed');
+  });
+
+  it('counts unique users per event and account-wide (distinct, not summed) (F5)', async () => {
+    const checkout = await seedWfWithEvent('checkout_completed', { positiveThreshold: 4 });
+    // 3 checkout responses from 2 distinct users (u1 twice, u2 once).
+    await seedResponseFor(checkout, 'checkout_completed', 5, 'u1');
+    await seedResponseFor(checkout, 'checkout_completed', 4, 'u1');
+    await seedResponseFor(checkout, 'checkout_completed', 2, 'u2');
+    // u1 also responds to a second event — account-wide distinct stays 2, not 3.
+    const opened = await seedWfWithEvent('app_opened');
+    await seedResponseFor(opened, 'app_opened', 3, 'u1');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/console/events/overview',
+      headers: { cookie: cookieHeader },
+    });
+    const body = res.json();
+    const byName = Object.fromEntries(
+      body.events.map((e: { event_name: string }) => [e.event_name, e]),
+    );
+    expect(byName.checkout_completed.unique_users).toBe(2);
+    expect(byName.app_opened.unique_users).toBe(1);
+    // Account-wide: distinct users across everything = {u1, u2} = 2 (NOT 2+1=3).
+    expect(body.unique_users).toBe(2);
   });
 
   it("isolation: only the caller account's events appear", async () => {

@@ -144,6 +144,8 @@ describe('responseFeedSchema', () => {
     location: { lat: 12.9, lng: 77.6, state: 'KA', country: 'IN' },
     device_os: 'android',
     app_version: '1.2.3',
+    session_age_days: 12,
+    context: 'checkout',
     shown_at: '2026-07-08T10:00:00Z',
     responded_at: '2026-07-08T10:00:05Z',
   };
@@ -222,6 +224,7 @@ describe('eventsOverviewSchema', () => {
           event_name: 'checkout_completed',
           triggers: 10,
           responses: 4,
+          unique_users: 3,
           response_rate: 0.4,
           positive_score: 0.75,
         },
@@ -229,10 +232,12 @@ describe('eventsOverviewSchema', () => {
           event_name: 'app_opened',
           triggers: 0,
           responses: 0,
+          unique_users: 0,
           response_rate: null,
           positive_score: null,
         },
       ],
+      unique_users: 3,
     });
     expect(ok.success).toBe(true);
   });
@@ -245,10 +250,12 @@ describe('eventsOverviewSchema', () => {
             event_name: 'x',
             triggers: 1.5,
             responses: 0,
+            unique_users: 0,
             response_rate: null,
             positive_score: null,
           },
         ],
+        unique_users: 0,
       }).success,
     ).toBe(false);
   });

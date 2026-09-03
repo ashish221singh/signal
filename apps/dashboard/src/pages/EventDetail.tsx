@@ -1,12 +1,33 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { type EventReasons, getEventReasons, getEventResponses, type ResponseFeed } from '../api';
+import {
+  type EventReasons,
+  getEventReasons,
+  getEventResponses,
+  type ResponseFeed,
+  type ResponseItem,
+} from '../api';
 import { Shell } from '../components/Shell';
 
 type Tab = 'reasons' | 'responses';
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 const timeAgo = (iso: string): string => new Date(iso).toLocaleString();
+
+/** The full "everything we know about this response" line under each item (F5). */
+function metaLine(r: ResponseItem): string {
+  const loc = r.location ? [r.location.state, r.location.country].filter(Boolean).join(', ') : null;
+  return [
+    r.device_os,
+    r.app_version && `v${r.app_version}`,
+    loc,
+    r.session_age_days != null && `${r.session_age_days}d session`,
+    r.context && `context: ${r.context}`,
+    `responded ${new Date(r.responded_at).toLocaleString()}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 export function EventDetail() {
   const { eventName = '' } = useParams();
@@ -95,15 +116,15 @@ export function EventDetail() {
                 <div className="top">
                   <span className="rating">★ {r.rating_value}</span>
                   {r.chip_selected && <span className="chip">{r.chip_selected}</span>}
-                  <span className="meta">
-                    {[r.device_os, r.app_version && `v${r.app_version}`]
-                      .filter(Boolean)
-                      .join(' · ')}
-                    {' · '}
-                    {timeAgo(r.responded_at)}
-                  </span>
+                  <span className="meta">{timeAgo(r.responded_at)}</span>
                 </div>
                 {r.other_text && <div className="text">“{r.other_text}”</div>}
+                {r.other_image_url && (
+                  <a className="respimg" href={r.other_image_url} target="_blank" rel="noreferrer">
+                    📷 View attached photo
+                  </a>
+                )}
+                <div className="respmeta">{metaLine(r)}</div>
               </div>
             ))
           )}

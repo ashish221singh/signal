@@ -9,6 +9,7 @@ import {
   campaignResponses,
   campaignTrend,
   dashboardSummary,
+  distinctUsers,
   eventReasons,
   eventResponses,
   eventsOverview,
@@ -136,8 +137,11 @@ export function reportingRoutes(deps: { db: Db; clock?: Clock }): FastifyPluginA
         const since = [7, 30, 90].includes(days)
           ? new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000)
           : undefined;
-        const events = await eventsOverview(deps.db, request.accountId as string, { since });
-        return reply.send({ events });
+        const [events, unique_users] = await Promise.all([
+          eventsOverview(deps.db, request.accountId as string, { since }),
+          distinctUsers(deps.db, request.accountId as string, { since }),
+        ]);
+        return reply.send({ events, unique_users });
       },
     );
 

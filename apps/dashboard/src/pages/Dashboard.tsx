@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { type EventRow, getEventsOverview, type PeriodDays } from '../api';
+import { type EventRow, type EventsOverview, getEventsOverview, type PeriodDays } from '../api';
 import { SetupTabs } from '../components/SetupTabs';
 import { Shell } from '../components/Shell';
 
@@ -32,21 +32,22 @@ function aggregate(rows: EventRow[]) {
 export function Dashboard() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodDays>(30);
-  const [rows, setRows] = useState<EventRow[] | undefined>(undefined);
+  const [data, setData] = useState<EventsOverview | undefined>(undefined);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    setRows(undefined);
+    setData(undefined);
     setError(false);
     getEventsOverview(period)
-      .then((r) => alive && setRows(r))
+      .then((r) => alive && setData(r))
       .catch(() => alive && setError(true));
     return () => {
       alive = false;
     };
   }, [period]);
 
+  const rows = data?.events;
   const hasData = rows !== undefined && rows.length > 0;
   const agg = hasData ? aggregate(rows) : null;
 
@@ -77,7 +78,7 @@ export function Dashboard() {
           <EmptyLike title="Couldn't load feedback">
             Something went wrong fetching your data. Refresh to try again.
           </EmptyLike>
-        ) : rows === undefined ? (
+        ) : data === undefined ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-24)' }}>
             <div className="spinner" role="status" aria-label="Loading" />
           </div>
@@ -93,6 +94,7 @@ export function Dashboard() {
           <>
             <div className="stats">
               <Stat k="Responses" v={agg?.responses.toLocaleString() ?? '0'} />
+              <Stat k="Unique users" v={(data.unique_users ?? 0).toLocaleString()} />
               <Stat k="Positive" v={pct(agg?.positive ?? null)} pos />
               <Stat k="Response rate" v={pct(agg?.responseRate ?? null)} />
             </div>
@@ -102,6 +104,7 @@ export function Dashboard() {
                 <tr>
                   <th>Event</th>
                   <th>Responses</th>
+                  <th>Users</th>
                   <th>Positive</th>
                   <th>Response rate</th>
                 </tr>
@@ -115,6 +118,7 @@ export function Dashboard() {
                   >
                     <td>{r.event_name}</td>
                     <td>{r.responses.toLocaleString()}</td>
+                    <td>{r.unique_users.toLocaleString()}</td>
                     <td>
                       {r.positive_score === null ? (
                         <span className="muted-cell">—</span>

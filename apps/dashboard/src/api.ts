@@ -13,8 +13,15 @@ export interface EventRow {
   event_name: string;
   triggers: number;
   responses: number;
+  unique_users: number;
   response_rate: number | null;
   positive_score: number | null;
+}
+
+/** The events overview payload: per-event rows + the window's distinct-user total. */
+export interface EventsOverview {
+  events: EventRow[];
+  unique_users: number;
 }
 
 export type PeriodDays = 7 | 30 | 90;
@@ -52,10 +59,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Per-event feedback roll-up for the dashboard, over a rolling window. */
-export async function getEventsOverview(days: PeriodDays): Promise<EventRow[]> {
-  const { events } = await req<{ events: EventRow[] }>(`/v1/console/events/overview?days=${days}`);
-  return events;
+/** Per-event feedback roll-up for the dashboard (rows + window distinct-user total). */
+export function getEventsOverview(days: PeriodDays): Promise<EventsOverview> {
+  return req<EventsOverview>(`/v1/console/events/overview?days=${days}`);
 }
 
 export interface ReasonChip {
@@ -67,17 +73,28 @@ export interface EventReasons {
   total_chip_responses: number;
   chips: ReasonChip[];
 }
+export interface ResponseLocation {
+  lat: number;
+  lng: number;
+  state?: string;
+  country?: string;
+}
 export interface ResponseItem {
   id: string;
   rating_value: number;
   chip_selected: string | null;
   other_text: string | null;
+  other_image_url: string | null;
   /** The client's own end-user id (F5). Anonymous responses carry a generated id. */
   user_id: string;
   user_name: string | null;
   user_email: string | null;
+  location: ResponseLocation | null;
   device_os: string | null;
   app_version: string | null;
+  session_age_days: number | null;
+  context: string | null;
+  shown_at: string;
   responded_at: string;
 }
 export interface ResponseFeed {
