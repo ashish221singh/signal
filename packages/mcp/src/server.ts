@@ -19,7 +19,13 @@ export function buildMcpServer(client: SignalApiClient): McpServer {
       instructions:
         'Manage Signal CSAT/CES workflows: create/update/publish/pause workflows, ' +
         'set targeting rules, discover events, and read reporting. All actions are ' +
-        'scoped to the account of the SIGNAL_TOKEN.',
+        'scoped to the account of the SIGNAL_TOKEN. ' +
+        'BOUNDARY: Signal is a hosted service consumed via its PUBLISHED npm SDK ' +
+        '(@ashish221/signal-web). Never build, link, vendor, or edit the Signal SDK/' +
+        'source, and never drop a local build into the user’s project — install the ' +
+        'registry version only. If the published SDK seems stale, tell the user it ' +
+        'needs a Signal-side release; do not patch it yourself. Only edit the user’s ' +
+        'own app code.',
     },
   );
 

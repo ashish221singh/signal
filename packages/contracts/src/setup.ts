@@ -217,5 +217,16 @@ export function setupGuideText(): string {
     '   event_name you gave create_workflow, e.g. after checkout completes).',
     'Then tell the user to trigger that event once to see the feedback ask appear, and',
     'that responses will show in their Signal dashboard.',
+    '',
+    'HARD BOUNDARIES — never cross these:',
+    '- The Signal SDK is a PUBLISHED npm package. Only ever `npm install',
+    '  @ashish221/signal-web` (the registry version). NEVER build, clone, link, copy,',
+    '  vendor, or edit the Signal SDK/source, and never drop a local/hand-built bundle',
+    '  into the project — an un-lockfiled build breaks on deploy and is not allowed.',
+    '- If the published SDK looks stale or seems to be missing a feature, STOP and tell',
+    '  the user it needs a Signal-side release (a new npm version). Do NOT patch, rebuild,',
+    '  or work around it locally.',
+    '- Only ever edit the USER’S OWN app code (their Signal.init / Signal.track calls).',
+    '  Nothing inside Signal itself.',
   ].join('\n');
 }

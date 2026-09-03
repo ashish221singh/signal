@@ -1,6 +1,6 @@
 {
   "name": "@ashish221/signal-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Signal MCP server — let your coding agent set up in-app feedback (create/publish workflows, wire Signal.track).",
   "license": "MIT",

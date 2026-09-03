@@ -64,4 +64,11 @@ describe('setupGuideText', () => {
     expect(text).toContain('signal-cli init');
     expect(text).toMatch(/Signal\.track/);
   });
+
+  it('forbids building/vendoring the SDK — install the published npm package only', () => {
+    const text = setupGuideText();
+    expect(text).toMatch(/HARD BOUNDARIES/);
+    expect(text).toMatch(/never build|Never build/i);
+    expect(text).toMatch(/@ashish221\/signal-web/);
+  });
 });
